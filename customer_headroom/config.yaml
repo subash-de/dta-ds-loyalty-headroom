@@ -1,0 +1,9 @@
+experiment_name: v1
+
+sections:
+  prod:
+    enable_x: true
+
+  dev:
+    enable_x: false
+
