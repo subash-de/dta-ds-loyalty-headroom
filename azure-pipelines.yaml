@@ -42,8 +42,8 @@ stages:
       
       databricks:
         enable: true
-        lab_workspace: # enterprise / marketing / loyalty
-        folder_name: dummy
+        lab_workspace: loyalty # enterprise / marketing / loyalty
+        folder_name: headroom
         clean: false
       
         enable_tests: false
