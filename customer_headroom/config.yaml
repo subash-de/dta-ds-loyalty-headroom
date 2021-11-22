@@ -1,9 +1,59 @@
 experiment_name: v1
 
 sections:
-  prod:
-    enable_x: true
+  prod: &prod
+    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/development/v0.1/
+    upcoming_campaign: &upcoming_campaign "202112"
+    verions:
+      data: &vdata v0.0.0
+      model: &vmodel v0.0.0
+      prediction: &vprediction v0.0.0
+    steps: [build_dataset, fit_rec, predict]
+    date_format: &date_format '%Y%m%d'
+    build_dataset:
+      # input
+      cust_input_path: &cust_input_path [*directory, "top_custs_sample"]
+      start_date: 20200701
+      end_date: 20210731
+      l1_ids: ["GM"]
+      lx: &lx "l2"
+      lx_ids: &lx_ids ["01", "02", "03", "04", "05", "07"]
+      date_format: *date_format
+      # output
+      write_mode: errorifexists # overwrite
+      etl_data_path: &etl_data_path [*directory, "data", *upcoming_campaign, *vdata, "purch_hist"]
+    fit_rec:
+      # input
+      etl_data_path: *etl_data_path
+      user_id: &user_id "cust_id"
+      item_id: &item_id "l2_id"
+      feature_col: &feature_col "number_of_transactions"
+      lognorm: &lognorm True
+      method: &method "SVD"
+      line_format: "user item rating"
+      rating_scale: (-10, 0)
+      min_lim: 0
+      max_lim: 200
+      # output
+      write_mode: errorifexists # overwrite
+      data_processor_path: &data_processor_path [*directory, "model", *upcoming_campaign, *vmodel, "data_processor"]
+      rec_path: &rec_path [*directory, "model", *upcoming_campaign, *vmodel, *method]
+    predict:
+      # input
+      pred_data_path: *etl_data_path
+      data_processor_path: *data_processor_path
+      rec_path: *rec_path
+      feature_col: *feature_col
+      pred_key: *lx
+      pred_items: *lx_ids
 
-  dev:
-    enable_x: false
+      # output
+      write_mode: errorifexists # overwrite
+      pred_path: &pred_path [*directory, "prediction", *upcoming_campaign, *vprediction, "predictions"]
+    offline_eval:
+      # input
+      all_data_path: *rec_path
+
+
+  dev: *prod
 
