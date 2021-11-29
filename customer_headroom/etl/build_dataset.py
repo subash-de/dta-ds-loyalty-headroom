@@ -1,8 +1,7 @@
-from pyspark.sql import functions as F, types as T, Window as W, DataFrame
+from pyspark.sql import functions as F, DataFrame
 from typing import Optional, Union, Iterable
 from datetime import datetime
 # from great_expectations.dataset.sparkdf_dataset import SparkDFDataset
-import re
 
 class BaseManager(object):
 

@@ -4,10 +4,12 @@
 # COMMAND ----------
 
 import os
+from functools import reduce, partial
 from customer_headroom.etl.build_dataset import TransactionsManager
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
+from customer_headroom.evaluation.model_selection import Evaluator
 from dtaml.logging import get_logger
 from cdsutils.io_utils import file_exists, save_object, load_object
 from pyspark.sql import DataFrame, functions as F
@@ -15,6 +17,7 @@ import seaborn as sns
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
+
 
 # COMMAND ----------
 
@@ -26,6 +29,7 @@ def write(obj, path, write_mode):
             obj.repartition(1).write.parquet(path, mode=write_mode)
         else:
             save_object(obj, path)
+
 
 # COMMAND ----------
 
@@ -153,6 +157,61 @@ if "predict" in config.steps:
 
     predictions = spark.read.parquet(pred_path)
     logger.info(f"predictions | row count: {predictions.count()}; column count: {len(predictions.columns)}")
+
+# COMMAND ----------
+
+if "offline_eval" in config.steps:
+    logger.info("Begin Offline Evaluation")
+    config_ev = config["offline_eval"]
+    pred_data_path = os.path.join(*config_ev["eval_data_path"])
+    data_processor_path = os.path.join(*config_ev["data_processor_path"])
+    user_key = config_ev["user_key"]
+    pred_key = f'{config_ev["pred_key"]}_id'
+    method = config_ev["method"]
+    methods = config_ev["methods"]
+
+    data_processor = load_object(data_processor_path)
+    data = (spark.read.parquet(pred_data_path)
+            .select(user_key, pred_key, data_processor.feature_col)
+            ).toPandas()
+
+    all_methods = list(set(methods).union({method}))
+    for m in all_methods:
+        logger.info(f"Run Offline Evaluation for Method: {m.upper()}")
+        algo_fn = partial(
+            build_recommender,
+            method=m
+        )
+
+        evaluator = Evaluator(
+            algorithm=algo_fn,
+            data_processor=data_processor,
+            user_key=user_key,
+            pred_key=pred_key,
+            pred_items=config_ev["pred_items"],
+            dev_size=config_ev["dev_size"],
+            test_size=config_ev["test_size"],
+            split_col=config_ev["split_col"],
+            sample=config_ev["sample"],
+            random_state=config_ev["random_state"]
+        )
+
+        if config_ev["kfold"]:
+            eval_summary = evaluator.evaluate_kfold(data,
+                                                    n_splits=config_ev["n_splits"],
+                                                    shuffle=config_ev["shuffle"],
+                                                    run_tag=str(m)
+                                                    )
+        else:
+            eval_summary = evaluator.evaluate(data, run_tag=str(m))
+        eval_summaries[m] = eval_summary
+        full_eval_summary = reduce(DataFrame.union, eval_summaries.values)
+
+# COMMAND ----------
+
+if "offline_eval" in config.steps:
+    # metrics summary
+    display(full_eval_summary)
 
 # COMMAND ----------
 

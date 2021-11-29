@@ -8,15 +8,21 @@ sections:
       data: &vdata v0.0.0
       model: &vmodel v0.0.0
       prediction: &vprediction v0.0.0
-    steps: [build_dataset, fit_rec, predict]
+    steps: [build_dataset, fit_rec, predict, offline_eval]
     date_format: &date_format '%Y%m%d'
+    columns:
+      user_id: &user_id "cust_id"
+      item_id: &item_id "l2_id"
+      l1_ids: &l1_ids ["GM"]
+      lx: &lx "l2"
+      feature_col: &feature_col "number_of_transactions"
     build_dataset:
       # input
       cust_input_path: &cust_input_path [*directory, "top_custs_sample"]
       start_date: 20200701
       end_date: 20210731
-      l1_ids: ["GM"]
-      lx: &lx "l2"
+      l1_ids: *l1_ids
+      lx: *lx
       lx_ids: &lx_ids ["01", "02", "03", "04", "05", "07"]
       date_format: *date_format
       # output
@@ -25,9 +31,9 @@ sections:
     fit_rec:
       # input
       etl_data_path: *etl_data_path
-      user_id: &user_id "cust_id"
-      item_id: &item_id "l2_id"
-      feature_col: &feature_col "number_of_transactions"
+      user_id: *user_id
+      item_id: *item_id
+      feature_col: *feature_col
       lognorm: &lognorm True
       method: &method "SVD"
       line_format: "user item rating"
@@ -52,7 +58,23 @@ sections:
       pred_path: &pred_path [*directory, "prediction", *upcoming_campaign, *vprediction, "predictions"]
     offline_eval:
       # input
-      all_data_path: *rec_path
+      eval_data_path: *etl_data_path
+      data_processor_path: *data_processor_path
+      method: *method
+      # ["svd", "svdpp", "nmf", "knn", "knn_zscore", "knn_mean"]
+      methods: ["svd", "svdpp", "nmf"]
+      sample: None
+      dev_size: 0.1
+      test_size: 0.1
+      split_col: *user_id
+      random_state: 42
+      user_key: *user_id
+      pred_key: *lx
+      pred_items: *lx_ids
+      kfold: True
+      n_splits: 5
+      shuffle: True
+
 
 
   dev: *prod

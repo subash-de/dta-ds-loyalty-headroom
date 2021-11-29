@@ -1,17 +1,15 @@
-from typing import Any, Optional
-import pandas as pd
-from surprise import SVD
-from surprise import Dataset
-import surprise.dataset as surprise_ds
-from surprise.model_selection import cross_validate
-from surprise.reader import Reader
-
-from scipy import stats
-from sklearn import metrics
+from typing import Any
+import surprise
+# from surprise import Dataset
+# from surprise.model_selection import cross_validate
+# from surprise.reader import Reader
+#
+# from scipy import stats
+# from sklearn import metrics
 
 
 def build_recommender(
-        X: surprise_ds.DatasetAutoFolds,
+        X: Any,
         method: str,
         build_trainset: bool = True
 ) -> Any:
@@ -22,7 +20,17 @@ def build_recommender(
     """
 
     if method.lower() == "svd":
-        algorithm = SVD()
+        algorithm = surprise.SVD()
+    elif method.lower() == "svdpp":
+        algorithm = surprise.SVDpp()
+    elif method.lower() == "nmf":
+        algorithm = surprise.NMF()
+    elif method.lower() == "knn":
+        algorithm = surprise.KNNBasic()
+    elif method.lower() == "knn_zscore":
+        algorithm = surprise.KNNWithZScore()
+    elif method.lower() == "knn_mean":
+        algorithm = surprise.KNNWithMeans()
     else:
         algorithm = None
     if algorithm:

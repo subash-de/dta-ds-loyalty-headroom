@@ -1,4 +1,4 @@
-from typing import Iterable, Any, Optional, Tuple
+from typing import Optional
 import numpy as np
 import pandas as pd
 import surprise.dataset as surprise_ds
@@ -61,13 +61,12 @@ class DataProcessor(object):
                                      min_col=self.min_col,
                                      max_col=self.max_col)
 
-        data_ = data[[self.user_id, self.item_id, self.value_col]]
+        data_ = data.loc[:, [self.user_id, self.item_id, self.value_col]]
 
-        self.rating_scale = (min(data_[self.value_col]), max(data_[self.value_col]))
+        self.rating_scale = (min(data_.loc[:, self.value_col]), max(data_.loc[:, self.value_col]))
         self.reader = Reader(line_format=self.line_format, rating_scale=self.rating_scale)
         rec_data = Dataset.load_from_df(data_, self.reader)
         return rec_data
-
 
     @staticmethod
     def _lognorm_col(df: pd.DataFrame,
@@ -79,11 +78,11 @@ class DataProcessor(object):
         StaticMethod for calculating the lognorm of a desired column.
         """
         if not min_col:
-            min_col = 0.9 * df[col].min()
+            min_col = 0.9 * df.loc[:, col].min()
         if not max_col:
-            max_col = 1.1 * df[col].max()
+            max_col = 1.1 * df.loc[:, col].max()
         #
-        df[col] = df[col].astype("double")
-        df[f"{col}_norm"] = (df[col] - min_col) / (max_col - min_col)
-        df[f"{col}_lognorm"] = np.log(df[f"{col}_norm"])
+        df.loc[:, col] = df.loc[:, col].astype("float64")
+        df.loc[:, f"{col}_norm"] = (df.loc[:, col] - min_col) / (max_col - min_col)
+        df.loc[:, f"{col}_lognorm"] = df.loc[:, f"{col}_norm"].apply(lambda x: np.log(x))
         return df
