@@ -2,30 +2,70 @@ experiment_name: v1
 
 sections:
   prod: &prod
-    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/development/v0.1/
+    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_run/v0.3/
+    prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_run/prod_input/"
     upcoming_campaign: &upcoming_campaign "202112"
     verions:
       data: &vdata v0.0.0
       model: &vmodel v0.0.0
       prediction: &vprediction v0.0.0
-    steps: [build_dataset, fit_rec, predict, offline_eval]
+    steps: [segmentation, build_dataset, fit_rec, predict, offline_eval]
     date_format: &date_format '%Y%m%d'
+    dates:
+      start_date: &start_date 20210101
+      end_date: &end_date 20211201
+      etl_date: &etl_date 20211201
     columns:
       user_id: &user_id "cust_id"
       item_id: &item_id "l2_id"
-      l1_ids: &l1_ids ["GM"]
+      l1_ids: &l1_ids ["FD"]
+      # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "number_of_transactions"
+      feature_col: &feature_col "total_spend" #"number_of_transactions"
+      # Segmentation columns
+      seg_num_cols: &seg_num_cols ["age_to_use", "FD_spend", "GM_spend", "FD_items",  "GM_items", "FD_baskets", "GM_baskets" ]
+      seg_cat_cols: &seg_cat_cols ["experian_hh_composition"]
+    segmentation:
+      # input
+      etl_date: *etl_date
+      lookback_days: 365
+      l1_id: "FD"
+      user_id: *user_id
+      cust_path: [*prod_input, "202112", "customers"]
+      num_cols: *seg_num_cols
+      cat_cols: *seg_cat_cols
+      frac_lim: 0.1
+      fail_limit: 3
+      k_search_min: 2
+      k_search_max: 8
+      pca_k: 3
+      data_lower_lim: 500
+      verbose: True
+      # output
+      write_mode: errorifexists # overwrite
+      partitionByList: &partitionByList ["experian_hh_composition", "segmentation"]
+      seg_data_path: &seg_data_path [*directory, "data", *upcoming_campaign, *vdata, "segmentations"]
+      custs_data_seg_path: &custs_data_seg_path [*directory, "data", *upcoming_campaign, *vdata, "cust_segment"]
+    use_segments:
+      all: True
+      # seg_list e.g. [{'experian_hh_composition': 'Cat_U', 'segmentation': 1}, ...]
+      seg_list: {}
+      custs_data_seg_path: *custs_data_seg_path
+      partitionByList: *partitionByList
     build_dataset:
       # input
-      cust_input_path: &cust_input_path [*directory, "top_custs_sample"]
-      start_date: 20200701
-      end_date: 20210731
+      cust_input_path: *custs_data_seg_path
+      start_date: *start_date
+      end_date: *end_date
+      user_id: *user_id
       l1_ids: *l1_ids
       lx: *lx
-      lx_ids: &lx_ids ["01", "02", "03", "04", "05", "07"]
+      lx_ids: &lx_ids ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
+      # "EX08" - Non Trading
+      # ["01", "02", "03", "04", "05", "07"]
       date_format: *date_format
       # output
+      partitionByList: *partitionByList
       write_mode: errorifexists # overwrite
       etl_data_path: &etl_data_path [*directory, "data", *upcoming_campaign, *vdata, "purch_hist"]
     fit_rec:
@@ -39,7 +79,9 @@ sections:
       line_format: "user item rating"
       rating_scale: (-10, 0)
       min_lim: 0
-      max_lim: 200
+      max_lim: 500
+      cat_cols: *seg_cat_cols
+      partitionByList: *partitionByList
       # output
       write_mode: errorifexists # overwrite
       data_processor_path: &data_processor_path [*directory, "model", *upcoming_campaign, *vmodel, "data_processor"]
@@ -52,7 +94,8 @@ sections:
       feature_col: *feature_col
       pred_key: *lx
       pred_items: *lx_ids
-
+      cat_cols: *seg_cat_cols
+      partitionByList: *partitionByList
       # output
       write_mode: errorifexists # overwrite
       pred_path: &pred_path [*directory, "prediction", *upcoming_campaign, *vprediction, "predictions"]

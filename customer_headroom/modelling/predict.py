@@ -109,7 +109,7 @@ class Predictor(object):
         """
         data_headroom = (data.join(pred_data, on=[self.user_key, self.pred_key], how="left")
                          .fillna(0, subset=[self.feature_col])
-                         .withColumn("headroom", F.col(self.feature_col) - F.col(predict_col))
+                         .withColumn("headroom", F.col(predict_col) - F.col(self.feature_col))
                          .withColumn("headroom_item_rank", F.dense_rank().over(W.partitionBy(self.pred_key)
                                                                                .orderBy(F.col("headroom"))))
                          )

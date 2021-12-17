@@ -37,11 +37,12 @@ class DataProcessor(object):
         Often taking the lognorm of a column is better suited for recommendation algorithims since the values
         resemble a normal distributions more closely. This is enabled with lognorm=True when DataProcessor is initiated.
         """
+        data.loc[:, self.feature_col] = data.loc[:, self.feature_col].astype(float)
         if self.lognorm:
             self.value_col = f"{self.feature_col}_lognorm"
-            min_scale = (1 - self.scale_tol) * data[self.feature_col].min()
+            min_scale = (1 - self.scale_tol) * data.loc[:, self.feature_col].min()
             self.min_col = min(i for i in [min_scale, self.min_lim] if i is not None)
-            max_scale = (1 + self.scale_tol) * data[self.feature_col].max()
+            max_scale = (1 + self.scale_tol) * data.loc[:, self.feature_col].max()
             self.max_col = max(i for i in [max_scale, self.max_lim] if i is not None)
         else:
             self.value_col = self.feature_col
