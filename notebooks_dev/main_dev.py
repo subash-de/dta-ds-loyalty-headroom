@@ -104,7 +104,7 @@ if "segmentation" in config.steps:
     custs_etl_data_seg = seg_manager.get(data=seg_data_read)
 
     logger.info(f"Writing custs_etl_data_seg to {custs_data_seg_path}")
-    custs_etl_data_seg.write.partitionBy(*partitionByList).parquet(custs_data_seg_path, mode=onfig_sg["write_mode"])
+    custs_etl_data_seg.write.partitionBy(*partitionByList).parquet(custs_data_seg_path, mode=config_sg["write_mode"])
 
 # COMMAND ----------
 
@@ -262,7 +262,7 @@ if "predict" in config.steps:
 
         for obj, path in ((predictions, pred_path),):
             logger.info(f"{seg}: Saving obj={obj}, path={path}")
-            write(obj, path, write_mode=config_fr["write_mode"])
+            write(obj, path, write_mode=config_pd["write_mode"])
 
         predictions = spark.read.parquet(pred_path)
         logger.info(f"predictions {seg} | row count: {predictions.count()}; column count: {len(predictions.columns)}")

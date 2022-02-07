@@ -3,19 +3,6 @@
 
 # COMMAND ----------
 
-devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
-pip_url = f"https://{devops_token}@pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"  # .format(token=devops_token)
-%pip install --extra-index-url "{pip_url}" "customer-headroom==0.1.2a42402 dtaml cdsutils==0.0.8.2021061002"
-
-# COMMAND ----------
-
-from customer_headroom.config import load_config
-
-config = load_config('dev')
-print(f'Config used is: \n{config.dumps()}')
-
-# COMMAND ----------
-
 import os
 from functools import partial
 import pandas as pd
@@ -262,7 +249,7 @@ if "predict" in config.steps:
 
         for obj, path in ((predictions, pred_path),):
             logger.info(f"{seg}: Saving obj={obj}, path={path}")
-            write(obj, path, write_mode=config_fr["write_mode"])
+            write(obj, path, write_mode=config_pd["write_mode"])
 
         predictions = spark.read.parquet(pred_path)
         logger.info(f"predictions {seg} | row count: {predictions.count()}; column count: {len(predictions.columns)}")
