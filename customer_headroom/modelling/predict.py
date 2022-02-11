@@ -107,10 +107,24 @@ class Predictor(object):
         Find Headroom, Actual - Predicted [Metric e.g. number_of_transactions] in category.
         Also provide the headroom rank, 1 being the most opportunity for headroom in category.
         """
-        data_headroom = (data.join(pred_data, on=[self.user_key, self.pred_key], how="left")
+        data_headroom = (pred_data.join(data, on=[self.user_key, self.pred_key], how="left")
                          .fillna(0, subset=[self.feature_col])
                          .withColumn("headroom", F.col(predict_col) - F.col(self.feature_col))
                          .withColumn("headroom_item_rank", F.dense_rank().over(W.partitionBy(self.pred_key)
                                                                                .orderBy(F.col("headroom"))))
                          )
-        return data_headroom
+
+        data_headroom_full = (data_headroom
+                              .withColumn("positive_headroom", F.when(F.col("headroom")>0, F.col("headroom"))
+                                          .otherwise(F.lit(0)))
+                              .groupby(self.user_key)
+                              .agg(F.sum("headroom").alias("sum_headroom"),
+                                   F.mean("headroom").alias("ave_headroom"),
+                                   F.sum("positive_headroom").alias("sum_positive_headroom"),
+                                   F.mean("positive_headroom").alias("ave_positive_headroom"),
+                                   )
+                              )
+
+        data_headroom_combined = data_headroom.join(data_headroom_full, on=self.user_key)
+
+        return data_headroom_combined

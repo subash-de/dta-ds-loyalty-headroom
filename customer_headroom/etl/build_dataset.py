@@ -168,10 +168,39 @@ class TransactionsManager(BaseManager):
                                    .agg(F.countDistinct(f"{self.lx}_name").alias(f"count_of_{self.lx}"))
                                    )
 
+        customer_lx_trans_baskets = (customer_lx_transactions
+                                     .filter(F.col(self.user_key).isNotNull())
+                                     .groupby([self.user_key, f"{self.lx}_id", "basket_id"])
+                                     .agg(F.sum("sales_amt").alias("total_spend_basket"),
+                                          F.count("basket_id").alias("items_per_basket"))
+                                     .groupby([self.user_key, f"{self.lx}_id"])
+                                     .agg(F.mean("total_spend_basket").alias("average_basket_value"),
+                                          F.expr('percentile_approx(total_spend_basket, 0.5)').alias("median_basket_value"),
+                                          F.max("total_spend_basket").alias("max_basket_value"),
+                                          F.mean("items_per_basket").alias("average_items_per_basket"),
+                                          )
+                                     )
+
+        customer_lx_trans_baskets_full = (customer_lx_transactions
+                                     .filter(F.col(self.user_key).isNotNull())
+                                     .groupby([self.user_key, "basket_id"])
+                                     .agg(F.sum("sales_amt").alias("total_spend_basket_full"),
+                                          F.count("basket_id").alias("items_per_basket_full"))
+                                     .groupby([self.user_key])
+                                     .agg(F.mean("total_spend_basket_full").alias("average_basket_value_full"),
+                                          F.expr('percentile_approx(total_spend_basket_full, 0.5)')
+                                          .alias("median_basket_full_value"),
+                                          F.max("total_spend_basket_full").alias("max_basket_full_value"),
+                                          F.mean("items_per_basket_full").alias("average_items_per_basket_full"),
+                                          )
+                                     )
+
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
+                                         .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
                                          .join(customer_lx_trans_sum, on=[self.user_key])
                                          .join(customer_lx_trans_count, on=[self.user_key])
                                          .join(customer_lx_trans_count_basket, on=[self.user_key])
+                                         .join(customer_lx_trans_baskets_full, on=[self.user_key])
                                          )
         return customer_lx_trans_grouped_all
 

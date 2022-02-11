@@ -5,7 +5,7 @@
 
 devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
 pip_url = f"https://{devops_token}@pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"  # .format(token=devops_token)
-% pip install --extra-index-url "{pip_url}" "customer-headroom==0.1.5a45070 dtaml cdsutils==0.0.8.2021061002"
+%pip install --extra-index-url "{pip_url}" customer-headroom==0.1.5a51472 dtaml cdsutils==0.0.8.2021061002
 
 # COMMAND ----------
 
@@ -220,14 +220,19 @@ if "fit_rec" in config.steps:
         write(data_process_manager, os.path.join(data_processor_path), write_mode=config_fr["write_mode"])
         logger.info(f"{seg}: Build Recommender")
 
-        rec_algo = build_recommender(
+        rec_algo, fit_params = build_recommender(
             X=rec_data,
-            method=config_fr["method"]
+            method=config_fr["method"],
+            params=config_fr["params"],
+            param_grid=config_fr["param_grid"]
         )
 
         rec_path = os.path.join(*(config_fr['rec_path'] + seg_ext))
+        param_path = os.path.join(*(config_fr['param_path'] + seg_ext))
         logger.info(f"{seg}: Saving Recommender obj={rec_algo}, path={rec_path}")
         write(rec_algo, rec_path, write_mode=config_fr["write_mode"])
+        logger.info(f"{seg}: Saving Fit Parameters obj={fit_params}, path={param_path}")
+        write(fit_params, param_path, write_mode=config_fr["write_mode"])
 
 # COMMAND ----------
 

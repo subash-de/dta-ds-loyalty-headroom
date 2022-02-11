@@ -1,18 +1,27 @@
-from typing import Any
+from typing import Any, Optional, Dict
 import surprise
-# from surprise import Dataset
-# from surprise.model_selection import cross_validate
-# from surprise.reader import Reader
-#
-# from scipy import stats
-# from sklearn import metrics
+from surprise.model_selection import KFold
+from surprise.model_selection import GridSearchCV
+
+
+def update_parameters(algo: any,
+                      param_dict: Dict[str, Any]
+                      ) -> Any:
+    for (k, v) in param_dict.items():
+        algo.__setattr__(k, v)
+    return algo
 
 
 def build_recommender(
         X: Any,
         method: str,
-        build_trainset: bool = True
-) -> Any:
+        build_trainset: bool = True,
+        measure: str = 'rmse',
+        n_splits: int = 3,
+        shuffle: bool = True,
+        random_state: int = 42,
+        params: Optional[Dict[str, Any]] = None,
+        param_grid: Optional[Dict[str, Any]] = None) -> Any:
     """
     Build Surprise Recommender
 
@@ -20,25 +29,42 @@ def build_recommender(
     """
 
     if method.lower() == "svd":
-        algorithm = surprise.SVD()
+        algo_type = surprise.SVD
     elif method.lower() == "svdpp":
-        algorithm = surprise.SVDpp()
+        algo_type = surprise.SVDpp
     elif method.lower() == "nmf":
-        algorithm = surprise.NMF()
+        algo_type = surprise.NMF
     elif method.lower() == "knn":
-        algorithm = surprise.KNNBasic()
+        algo_type = surprise.KNNBasic
     elif method.lower() == "knn_zscore":
-        algorithm = surprise.KNNWithZScore()
+        algo_type = surprise.KNNWithZScore
     elif method.lower() == "knn_mean":
-        algorithm = surprise.KNNWithMeans()
+        algo_type = surprise.KNNWithMeans
     else:
-        algorithm = None
-    if algorithm:
+        algo_type = None
+
+    if algo_type:
+        algorithm = algo_type()
+
+        if param_grid and ((params is None) or (params == "None")):
+            # Find optimal parameters for this group.
+            kf = KFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
+            gs = GridSearchCV(algo_type, param_grid, measures=[measure], cv=kf)
+            gs.fit(X)
+            params = gs.best_params[measure]
+            algorithm = update_parameters(algorithm, params)
+        elif params and not ((params is None) or (params == "None")):
+            # Use provided parameters.
+            algorithm = update_parameters(algorithm, params)
+
         if build_trainset:
+            # Build the training dataset
             X = X.build_full_trainset()
+
         algorithm.fit(
             X
         )
-        return algorithm
+        params_used = algorithm.__dict__
+        return algorithm, params_used
     else:
         raise NotImplementedError()

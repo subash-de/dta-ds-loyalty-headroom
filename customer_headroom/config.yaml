@@ -2,13 +2,13 @@ experiment_name: v1
 
 sections:
   prod: &prod
-    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_run/v0.3/
+    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/test_run/v0.5/
     prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_run/prod_input/"
     upcoming_campaign: &upcoming_campaign "202112"
     verions:
-      data: &vdata v0.0.0
-      model: &vmodel v0.0.0
-      prediction: &vprediction v0.0.0
+      data: &vdata v0.0.1
+      model: &vmodel v0.0.1
+      prediction: &vprediction v0.0.1
     steps: [segmentation, build_dataset, fit_rec, predict, offline_eval]
     date_format: &date_format '%Y%m%d'
     dates:
@@ -21,7 +21,8 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "total_spend" #"number_of_transactions"
+      feature_col: &feature_col "average_basket_value"
+      #"total_spend" #"number_of_transactions"
       # Segmentation columns
       seg_num_cols: &seg_num_cols ["age_to_use", "FD_spend", "GM_spend", "FD_items",  "GM_items", "FD_baskets", "GM_baskets" ]
       seg_cat_cols: &seg_cat_cols ["experian_hh_composition"]
@@ -82,9 +83,14 @@ sections:
       max_lim: 500
       cat_cols: *seg_cat_cols
       partitionByList: *partitionByList
+      params: None
+#      {'n_factors': 100, 'n_epochs': 20, 'biased': True, 'init_mean': 0, 'init_std_dev': 0.1, 'lr_bu': 0.005,
+#       'lr_bi': 0.005, 'lr_pu': 0.005, 'lr_qi': 0.005, 'reg_bu': 0.02, 'reg_bi': 0.02, 'reg_pu': 0.02,'reg_qi': 0.02}
+      param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
       # output
       write_mode: errorifexists # overwrite
       data_processor_path: &data_processor_path [*directory, "model", *upcoming_campaign, *vmodel, "data_processor"]
+      param_path: &param_path [*directory, "params", *upcoming_campaign, *vmodel, *method]
       rec_path: &rec_path [*directory, "model", *upcoming_campaign, *vmodel, *method]
     predict:
       # input
@@ -103,6 +109,7 @@ sections:
       # input
       eval_data_path: *etl_data_path
       data_processor_path: *data_processor_path
+      method: *method
       method: *method
       # ["svd", "svdpp", "nmf", "knn", "knn_zscore", "knn_mean"]
       methods: ["svd", "svdpp", "nmf"]
