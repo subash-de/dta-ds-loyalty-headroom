@@ -5,7 +5,7 @@
 
 devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
 pip_url = f"https://{devops_token}@pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"  # .format(token=devops_token)
-%pip install --extra-index-url "{pip_url}" customer-headroom==0.1.5a51472 dtaml cdsutils==0.0.8.2021061002
+%pip install --extra-index-url "{pip_url}" dtaml cdsutils==0.0.8.2021061002 customer-headroom==0.1.7a57544
 
 # COMMAND ----------
 
@@ -13,6 +13,11 @@ from customer_headroom.config import load_config
 
 config = load_config('dev')
 print(f'Config used is: \n{config.dumps()}')
+
+# COMMAND ----------
+
+# segmentation
+# config.steps =  ["build_dataset", "fit_rec", "predict", "offline_eval"]
 
 # COMMAND ----------
 
@@ -160,6 +165,7 @@ if "build_dataset" in config.steps:
         lx=config_bd["lx"],
         lx_ids=config_bd["lx_ids"],
         user_key=config_bd["user_id"],
+        window_days=config_bd["window_days"],
     )
     all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=custs)
     etl_data_path = os.path.join(*config_bd["etl_data_path"])

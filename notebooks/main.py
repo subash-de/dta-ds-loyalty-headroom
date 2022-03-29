@@ -147,6 +147,7 @@ if "build_dataset" in config.steps:
         lx=config_bd["lx"],
         lx_ids=config_bd["lx_ids"],
         user_key=config_bd["user_id"],
+        window_days=config_bd["window_days"],
     )
     all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=custs)
     etl_data_path = os.path.join(*config_bd["etl_data_path"])
@@ -207,14 +208,19 @@ if "fit_rec" in config.steps:
         write(data_process_manager, os.path.join(data_processor_path), write_mode=config_fr["write_mode"])
         logger.info(f"{seg}: Build Recommender")
 
-        rec_algo = build_recommender(
+        rec_algo, fit_params = build_recommender(
             X=rec_data,
-            method=config_fr["method"]
+            method=config_fr["method"],
+            params=config_fr["params"],
+            param_grid=config_fr["param_grid"]
         )
 
         rec_path = os.path.join(*(config_fr['rec_path'] + seg_ext))
+        param_path = os.path.join(*(config_fr['param_path'] + seg_ext))
         logger.info(f"{seg}: Saving Recommender obj={rec_algo}, path={rec_path}")
         write(rec_algo, rec_path, write_mode=config_fr["write_mode"])
+        logger.info(f"{seg}: Saving Fit Parameters obj={fit_params}, path={param_path}")
+        write(fit_params, param_path, write_mode=config_fr["write_mode"])
 
 # COMMAND ----------
 

@@ -1,27 +1,28 @@
-experiment_name: v1
+experiment_name: v3
 
 sections:
   prod: &prod
     directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/test_run/v0.5/
     prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_run/prod_input/"
-    upcoming_campaign: &upcoming_campaign "202112"
+    upcoming_campaign: &upcoming_campaign "202203"
     verions:
-      data: &vdata v0.0.1
-      model: &vmodel v0.0.1
-      prediction: &vprediction v0.0.1
+      data: &vdata v0.0.4
+      model: &vmodel v0.0.4
+      prediction: &vprediction v0.0.3
     steps: [segmentation, build_dataset, fit_rec, predict, offline_eval]
     date_format: &date_format '%Y%m%d'
     dates:
-      start_date: &start_date 20210101
-      end_date: &end_date 20211201
-      etl_date: &etl_date 20211201
+      start_date: &start_date 20210317
+      end_date: &end_date 20220317
+      etl_date: &etl_date 20220317
     columns:
       user_id: &user_id "cust_id"
       item_id: &item_id "l2_id"
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "average_basket_value"
+      feature_col: &feature_col "mean_spend_timespan"
+      # "average_basket_value"
       #"total_spend" #"number_of_transactions"
       # Segmentation columns
       seg_num_cols: &seg_num_cols ["age_to_use", "FD_spend", "GM_spend", "FD_items",  "GM_items", "FD_baskets", "GM_baskets" ]
@@ -32,7 +33,7 @@ sections:
       lookback_days: 365
       l1_id: "FD"
       user_id: *user_id
-      cust_path: [*prod_input, "202112", "customers"]
+      cust_path: [*prod_input, *upcoming_campaign, "customers"]
       num_cols: *seg_num_cols
       cat_cols: *seg_cat_cols
       frac_lim: 0.1
@@ -109,7 +110,6 @@ sections:
       # input
       eval_data_path: *etl_data_path
       data_processor_path: *data_processor_path
-      method: *method
       method: *method
       # ["svd", "svdpp", "nmf", "knn", "knn_zscore", "knn_mean"]
       methods: ["svd", "svdpp", "nmf"]

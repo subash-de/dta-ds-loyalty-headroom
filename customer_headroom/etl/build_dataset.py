@@ -1,4 +1,4 @@
-from pyspark.sql import functions as F, DataFrame
+from pyspark.sql import functions as F, DataFrame, Window as W, types as T
 from typing import Optional, Union, Iterable, Dict, List
 from datetime import datetime
 
@@ -43,7 +43,8 @@ class TransactionsManager(BaseManager):
             # In store purchases only
             channels: List[str] = ["POS"],
             # No BWS, {"lx_id": [list, of, products, at lx, level]}
-            exclude_items: Dict[str, str] = {"l3_id": ["MM14"]}
+            exclude_items: Dict[str, str] = {"l3_id": ["MM14"]},
+            window_days: Optional[int] = None
     ):
         self.start_date = start_date
         self.end_date = end_date
@@ -54,6 +55,7 @@ class TransactionsManager(BaseManager):
         self.date_format = date_format
         self.channels = channels
         self.exclude_items = exclude_items
+        self.window_days = window_days
 
     def get(self,
             trx_line: DataFrame,
@@ -82,6 +84,13 @@ class TransactionsManager(BaseManager):
         cust_lx_trx = self.get_customer_transactions(trx_line, lu_article)
         cust_lx_trx_metrics = self.get_transaction_metrics(cust_lx_trx)
 
+        if self.window_days is not None:
+            trx_timespan = self.add_timespan_spend(cust_lx_trx)
+            cust_lx_trx_metrics = (cust_lx_trx_metrics
+                                   .join(trx_timespan, on=self.user_key, how="left")
+                                   .fillna(0, subset=["mean_spend_timespan"])
+                                   )
+
         if cust_seg is not None:
             # Join on segmentation columns
             cust_lx_trx_metrics = cust_lx_trx_metrics.join(cust_seg
@@ -108,13 +117,44 @@ class TransactionsManager(BaseManager):
         # Get LX hierarchy products
         customer_transactions = (trx_line
                                  .select(self.user_key, "cust_age", "cust_gender", "article_id",
-                                         "basket_id", "sales_amt").filter(trx_line.SALES_AMT > 0.04)
+                                         "basket_id", "sales_amt", "date")
+                                 .filter(F.col("SALES_AMT") > 0.5)
                                  )
         # Find article ids of specific LX items
-        lx_all = lu_article.filter(lu_article[f"{self.lx}_id"].isin(list(self.lx_ids)))
+        lx_all = (lu_article
+                  .filter(lu_article[f"{self.lx}_id"].isin(list(self.lx_ids)))
+                  .select(["article_id"] +
+                          [f"l{i}_id" for i in range(1, 7)] +
+                          [f"l{i}_name" for i in range(1, 7)]
+                          )
+                  )
         # Find Customer Transactions who have purchased specific LX items
         customer_lx_transactions = customer_transactions.join(lx_all, ["article_id"])
         return customer_lx_transactions
+
+    def add_timespan_spend(self,
+                           cust_lx_trx: DataFrame
+                           ) -> DataFrame:
+
+        @F.udf(T.IntegerType())
+        def days_back(date):
+            days_diff = (datetime.strptime(str(self.end_date), self.date_format) -
+                         datetime.strptime(str(date), self.date_format)).days
+            return days_diff
+
+        WinSpan = (W
+                   .partitionBy(F.col("cust_id"))
+                   .orderBy(F.col("day_diff").cast('long'))
+                   .rangeBetween(-self.window_days, 0)
+                   )
+
+        trx_timespan = (cust_lx_trx
+                        .withColumn("day_diff", days_back("date"))
+                        .withColumn("spend_timespan", F.sum('sales_amt').over(WinSpan))
+                        .groupby("cust_id")
+                        .agg(F.mean("spend_timespan").cast(T.DoubleType()).alias("mean_spend_timespan"))
+                        )
+        return trx_timespan
 
     def get_transaction_metrics(self,
                                 customer_lx_transactions: DataFrame
@@ -136,11 +176,16 @@ class TransactionsManager(BaseManager):
                                      .filter(F.col(self.user_key).isNotNull())
                                      .groupby([self.user_key, f"{self.lx}_id"])
                                      #                                      .pivot(f"{self.lx}_id")
-                                     .agg(F.count(f"{self.lx}_name").alias("number_of_transactions"),
-                                          F.sum("sales_amt").alias("total_spend"),
-                                          F.count("article_id").alias("items"),
-                                          F.countDistinct("basket_id").alias("visits"),
-                                          (F.sum("sales_amt") / F.count("article_id")).alias("spend_per_item")
+                                     .agg(F.count(f"{self.lx}_name")
+                                          .cast(T.IntegerType()).alias("number_of_transactions"),
+                                          F.sum("sales_amt")
+                                          .cast(T.DoubleType()).alias("total_spend"),
+                                          F.count("article_id")
+                                          .cast(T.IntegerType()).alias("items"),
+                                          F.countDistinct("basket_id")
+                                          .cast(T.IntegerType()).alias("visits"),
+                                          (F.sum("sales_amt") / F.count("article_id"))
+                                          .cast(T.DoubleType()).alias("spend_per_item")
                                           )
                                      )
 
@@ -171,27 +216,32 @@ class TransactionsManager(BaseManager):
         customer_lx_trans_baskets = (customer_lx_transactions
                                      .filter(F.col(self.user_key).isNotNull())
                                      .groupby([self.user_key, f"{self.lx}_id", "basket_id"])
-                                     .agg(F.sum("sales_amt").alias("total_spend_basket"),
-                                          F.count("basket_id").alias("items_per_basket"))
+                                     .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"),
+                                          F.count("basket_id").cast(T.IntegerType()).alias("items_per_basket"))
                                      .groupby([self.user_key, f"{self.lx}_id"])
-                                     .agg(F.mean("total_spend_basket").alias("average_basket_value"),
-                                          F.expr('percentile_approx(total_spend_basket, 0.5)').alias("median_basket_value"),
-                                          F.max("total_spend_basket").alias("max_basket_value"),
-                                          F.mean("items_per_basket").alias("average_items_per_basket"),
+                                     .agg(F.mean("total_spend_basket")
+                                          .cast(T.DoubleType()).alias("average_basket_value"),
+                                          F.expr('percentile_approx(total_spend_basket, 0.5)')
+                                          .cast(T.DoubleType()).alias("median_basket_value"),
+                                          F.max("total_spend_basket").cast(T.DoubleType()).alias("max_basket_value"),
+                                          F.mean("items_per_basket").cast(T.IntegerType()).alias("average_items_per_basket"),
                                           )
                                      )
 
         customer_lx_trans_baskets_full = (customer_lx_transactions
                                      .filter(F.col(self.user_key).isNotNull())
                                      .groupby([self.user_key, "basket_id"])
-                                     .agg(F.sum("sales_amt").alias("total_spend_basket_full"),
-                                          F.count("basket_id").alias("items_per_basket_full"))
+                                     .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket_full"),
+                                          F.count("basket_id").cast(T.DoubleType()).alias("items_per_basket_full"))
                                      .groupby([self.user_key])
-                                     .agg(F.mean("total_spend_basket_full").alias("average_basket_value_full"),
+                                     .agg(F.mean("total_spend_basket_full").cast(T.DoubleType())
+                                          .alias("average_basket_value_full"),
                                           F.expr('percentile_approx(total_spend_basket_full, 0.5)')
-                                          .alias("median_basket_full_value"),
-                                          F.max("total_spend_basket_full").alias("max_basket_full_value"),
-                                          F.mean("items_per_basket_full").alias("average_items_per_basket_full"),
+                                          .cast(T.DoubleType()).alias("median_basket_full_value"),
+                                          F.max("total_spend_basket_full").cast(T.DoubleType())
+                                          .alias("max_basket_full_value"),
+                                          F.mean("items_per_basket_full").cast(T.DoubleType())
+                                          .alias("average_items_per_basket_full"),
                                           )
                                      )
 
