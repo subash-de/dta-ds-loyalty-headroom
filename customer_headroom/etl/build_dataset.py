@@ -193,10 +193,11 @@ class TransactionsManager(BaseManager):
         customer_lx_trans_sum = (customer_lx_transactions
                                  .filter(F.col(self.user_key).isNotNull())
                                  .groupby([self.user_key])
-                                 .agg(F.count(f"{self.lx}_name").alias("total_number_of_transactions"),
-                                      F.sum("sales_amt").alias("total_spend_amount"),
-                                      F.countDistinct("basket_id").alias("total_visits"),
-                                      F.count("article_id").alias("total_items")
+                                 .agg(F.count(f"{self.lx}_name").cast(T.IntegerType())
+                                      .alias("total_number_of_transactions"),
+                                      F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_amount"),
+                                      F.countDistinct("basket_id").cast(T.IntegerType()).alias("total_visits"),
+                                      F.count("article_id").cast(T.IntegerType()).alias("total_items")
                                       )
                                  )
 
@@ -204,7 +205,7 @@ class TransactionsManager(BaseManager):
         customer_lx_trans_count_basket = (customer_lx_transactions
                                           .filter(F.col(self.user_key).isNotNull())
                                           .groupby([self.user_key])
-                                          .agg(F.countDistinct("basket_id").alias("sum_baskets"))
+                                          .agg(F.countDistinct("basket_id").cast(T.IntegerType()).alias("sum_baskets"))
                                           )
 
         customer_lx_trans_count = (customer_lx_transactions

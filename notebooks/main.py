@@ -177,50 +177,64 @@ if "build_dataset" in config.steps:
 
 # COMMAND ----------
 
+def run_fit_rec(seg, config):
+    etl_data_path = os.path.join(*config["etl_data_path"])
+    partitionByList = config["partitionByList"]
+    seg_ext = [f"{k}={seg[k]}" for k in partitionByList]
+    seg_data_path = os.path.join(*([f"{etl_data_path}"] + seg_ext))
+    seg_data_df = spark.read.parquet(seg_data_path)
+    max_size = config["max_train_size"]
+    if max_size:
+        # Randomly order and limit to max size of training segment
+        seg_data_df = seg_data_df.orderBy(F.rand()).limit(max_size)
+
+    seg_data = seg_data_df.toPandas()
+
+    # build surprise preprocessed data
+    data_process_manager = DataProcessor(
+        feature_col=config["feature_col"],
+        item_id=config["item_id"],
+        user_id=config["user_id"],
+        lognorm=config["lognorm"],
+        line_format=config["line_format"],
+        min_lim=config["min_lim"],
+        max_lim=config["max_lim"]
+    )
+
+    seg_data[config["feature_col"]] = seg_data[config["feature_col"]].astype(float)
+    rec_data = data_process_manager.get(seg_data)
+    logger.info(f"{seg}: Recommender Data Created")
+
+    data_processor_path = os.path.join(*(config['data_processor_path'] + seg_ext))
+    logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, path={data_processor_path}")
+    write(data_process_manager, os.path.join(data_processor_path), write_mode=config["write_mode"])
+    logger.info(f"{seg}: Build Recommender")
+
+    rec_algo, fit_params = build_recommender(
+        X=rec_data,
+        method=config["method"],
+        params=config["params"],
+        param_grid=config["param_grid"]
+    )
+
+    rec_path = os.path.join(*(config['rec_path'] + seg_ext))
+    param_path = os.path.join(*(config['param_path'] + seg_ext))
+    logger.info(f"{seg}: Saving Recommender obj={rec_algo}, path={rec_path}")
+    write(rec_algo, rec_path, write_mode=config["write_mode"])
+    logger.info(f"{seg}: Saving Fit Parameters obj={fit_params}, path={param_path}")
+    write(fit_params, param_path, write_mode=config["write_mode"])
+
+
 if "fit_rec" in config.steps:
     logger.info("Begin Preprocessing dataset")
     config_fr = config["fit_rec"]
-    etl_data_path = os.path.join(*config_fr["etl_data_path"])
-    partitionByList = config_fr["partitionByList"]
 
-    for seg in seg_list:
-        seg_ext = [f"{k}={seg[k]}" for k in partitionByList]
-        seg_data_path = os.path.join(*([f"{etl_data_path}"] + seg_ext))
-        seg_data = spark.read.parquet(seg_data_path).toPandas()
-
-        # build surprise preprocessed data
-        data_process_manager = DataProcessor(
-            feature_col=config_fr["feature_col"],
-            item_id=config_fr["item_id"],
-            user_id=config_fr["user_id"],
-            lognorm=config_fr["lognorm"],
-            line_format=config_fr["line_format"],
-            min_lim=config_fr["min_lim"],
-            max_lim=config_fr["max_lim"]
-        )
-
-        seg_data[config_fr["feature_col"]] = seg_data[config_fr["feature_col"]].astype(float)
-        rec_data = data_process_manager.get(seg_data)
-        logger.info(f"{seg}: Recommender Data Created")
-
-        data_processor_path = os.path.join(*(config_fr['data_processor_path'] + seg_ext))
-        logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, path={data_processor_path}")
-        write(data_process_manager, os.path.join(data_processor_path), write_mode=config_fr["write_mode"])
-        logger.info(f"{seg}: Build Recommender")
-
-        rec_algo, fit_params = build_recommender(
-            X=rec_data,
-            method=config_fr["method"],
-            params=config_fr["params"],
-            param_grid=config_fr["param_grid"]
-        )
-
-        rec_path = os.path.join(*(config_fr['rec_path'] + seg_ext))
-        param_path = os.path.join(*(config_fr['param_path'] + seg_ext))
-        logger.info(f"{seg}: Saving Recommender obj={rec_algo}, path={rec_path}")
-        write(rec_algo, rec_path, write_mode=config_fr["write_mode"])
-        logger.info(f"{seg}: Saving Fit Parameters obj={fit_params}, path={param_path}")
-        write(fit_params, param_path, write_mode=config_fr["write_mode"])
+    # for seg in seg_list:
+    n_threads = int(config_fr["n_threads"])
+    pool = ThreadPool(n_threads)
+    _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr), seg_list)
+    pool.close()
+    pool.join()
 
 # COMMAND ----------
 

@@ -347,25 +347,25 @@ class SegmentationManager(BaseManager):
             data_ = data.filter(demog_cat_filters)
             data_count = data_.count()
             self.log(f"{demog_groups_str}: Count: {data_count}")
+
+            assemble = VectorAssembler(inputCols=self.num_cols, outputCol='features')
+            assembled_data = assemble.transform(data_)
+
+            output_col = "standardized"
+            scale = StandardScaler(inputCol='features', outputCol="standardized")
+            data_scale = scale.fit(assembled_data)
+            data_scale_output = data_scale.transform(assembled_data)
+
+            if self.pca_k:
+                self.log(f"{demog_groups_str}: \t Use PCA Features")
+                output_col = "pca_features"
+                pca = sparkPCA(k=self.pca_k, inputCol="standardized", outputCol=output_col)
+                pca_model = pca.fit(data_scale_output)
+                data_output = pca_model.transform(data_scale_output)
+            else:
+                data_output = data_scale_output
+
             if data_count > self.data_lower_lim:
-
-                assemble = VectorAssembler(inputCols=self.num_cols, outputCol='features')
-                assembled_data = assemble.transform(data_)
-
-                output_col = "standardized"
-                scale = StandardScaler(inputCol='features', outputCol="standardized")
-                data_scale = scale.fit(assembled_data)
-                data_scale_output = data_scale.transform(assembled_data)
-
-                if self.pca_k:
-                    self.log(f"{demog_groups_str}: \t Use PCA Features")
-                    output_col = "pca_features"
-                    pca = sparkPCA(k=self.pca_k, inputCol="standardized", outputCol=output_col)
-                    pca_model = pca.fit(data_scale_output)
-                    data_output = pca_model.transform(data_scale_output)
-                else:
-                    data_output = data_scale_output
-
                 silhouette_score = {}
                 outputs = {}
                 evaluator = ClusteringEvaluator(predictionCol='segmentation', featuresCol=output_col,
@@ -410,6 +410,12 @@ class SegmentationManager(BaseManager):
                 output_dict[demog_groups_str] = outputs[max_silhouette_score_key]
                 self.log(
                     f"{demog_groups_str} - K={max_silhouette_score_key} Max Silhouette Score: {max_silhouette_score}")
+            else:
+                all_silhouette_score_max[demog_groups_str] = 0.0
+                output_dict[demog_groups_str] = (data_output
+                                                 .withColumn("segmentation", F.lit(0))
+                                                 )
+
 
         return output_dict, all_silhouette_score_max
 
@@ -419,7 +425,7 @@ class SegmentationManager(BaseManager):
         """
         The dictionary output from self._find_best_KMeans() to concatenated here.
         """
-        final_output = reduce(DataFrame.union, kmeans_dict.values())
+        final_output = reduce(DataFrame.unionByName, kmeans_dict.values())
         for p in range(self.pca_k):
             extract_element = F.udf(lambda v: float(v[p]))
             final_output = final_output.withColumn(f"pca_{p}", extract_element("pca_features"))
