@@ -6,23 +6,23 @@ sections:
     prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_run/prod_input/"
     upcoming_campaign: &upcoming_campaign "202204"
     verions:
-      data: &vdata v0.0.6
-      model: &vmodel v0.0.6
-      prediction: &vprediction v0.0.5
+      data: &vdata v0.0.7
+      model: &vmodel v0.0.7
+      prediction: &vprediction v0.0.6
     steps: [segmentation, build_dataset, fit_rec, predict]
     # offline_eval
     date_format: &date_format '%Y%m%d'
     dates:
-      start_date: &start_date 20210328
-      end_date: &end_date 20220328
-      etl_date: &etl_date 20220328
+      start_date: &start_date 20220105
+      end_date: &end_date 20220331
+      etl_date: &etl_date 20220331
     columns:
       user_id: &user_id "cust_id"
       item_id: &item_id "l2_id"
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "average_basket_value"
+      feature_col: &feature_col "mean_spend_timespan"
       # "mean_spend_timespan"
       # "average_basket_value"
       #"total_spend" #"number_of_transactions"
@@ -45,7 +45,7 @@ sections:
       k_search_min: 2
       k_search_max: 8
       pca_k: 3
-      data_lower_lim: 100000
+      data_lower_lim: 200000
       verbose: True
       # output
       write_mode: overwrite # errorifexists # overwrite

@@ -5,7 +5,7 @@
 
 devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
 pip_url = f"https://{devops_token}@pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"  # .format(token=devops_token)
-%pip install --extra-index-url "{pip_url}" dtaml cdsutils==0.0.8.2021061002 customer-headroom==0.1.7a57544
+%pip install --extra-index-url "{pip_url}" dtaml cdsutils==0.0.8.2021061002 customer-headroom==0.1.7a59041
 
 # COMMAND ----------
 
@@ -33,6 +33,7 @@ from customer_headroom.evaluation.model_selection import Evaluator
 from dtaml.logging import get_logger
 from cdsutils.io_utils import file_exists, save_object, load_object
 from pyspark.sql import DataFrame, functions as F
+from multiprocessing.pool import ThreadPool
 import seaborn as sns
 
 sns.set(style="whitegrid")
