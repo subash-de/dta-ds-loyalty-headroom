@@ -2,13 +2,13 @@ experiment_name: v3
 
 sections:
   prod: &prod
-    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/test_run/v0.5/
+    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/test_run/v0.6/
     prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_run/prod_input/"
     upcoming_campaign: &upcoming_campaign "202204"
     verions:
-      data: &vdata v0.0.7
-      model: &vmodel v0.0.7
-      prediction: &vprediction v0.0.6
+      data: &vdata v0.0.1
+      model: &vmodel v0.0.1
+      prediction: &vprediction v0.0.1
     steps: [segmentation, build_dataset, fit_rec, predict]
     # offline_eval
     date_format: &date_format '%Y%m%d'
@@ -22,9 +22,9 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "mean_spend_timespan"
+      feature_col: &feature_col "85percentile_spend_timespan"
       # "mean_spend_timespan"
-      # "average_basket_value"
+      # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
       # Segmentation columns
       seg_num_cols: &seg_num_cols ["age_to_use", "FD_spend", "GM_spend", "FD_items",  "GM_items", "FD_baskets", "GM_baskets" ]
@@ -71,6 +71,7 @@ sections:
       # ["01", "02", "03", "04", "05", "07"]
       date_format: *date_format
       window_days: 30
+      christmas_remove_range: ["1218", "0101"]
       # output
       partitionByList: *partitionByList
       write_mode: overwrite # errorifexists # overwrite

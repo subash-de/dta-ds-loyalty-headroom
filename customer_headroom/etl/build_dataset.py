@@ -1,5 +1,5 @@
-from pyspark.sql import functions as F, DataFrame, Window as W, types as T
-from typing import Optional, Union, Iterable, Dict, List
+from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
+from typing import Optional, Union, Iterable, Dict, List, Tuple
 from datetime import datetime
 
 
@@ -29,6 +29,50 @@ class BaseManager(object):
                           )
         return common_filters
 
+    @staticmethod
+    def remove_christmas_transactions(df: DataFrame,
+                                      christmas_range: Tuple[str] = ("1218", "0101")
+                                      ) -> DataFrame:
+        """
+        Method to remove christmas period from data. Christmas is an atypical trading period.
+        """
+
+        if not "date" in df.columns:
+            df = self._add_date(df)
+
+        df_mmdd = (df
+                   .withColumn("date_mmdd",
+                               F.substring(F.col("date").cast(T.StringType()), 5, 4)
+                               .cast(T.IntegerType()))
+                   )
+
+        christmas_start = int(christmas_range[0])
+        christmas_end = int(christmas_range[1])
+
+        return (df_mmdd
+                .filter(~((F.col("date_mmdd") >= christmas_start) &
+                          (F.col("date_mmdd") <= christmas_end)))
+                .drop("date_mmdd")
+                )
+
+
+    @staticmethod
+    def get_expr_agg(col: str,
+                     pct_list: Tuple[float] = (50, 75, 85, 90, 100)
+                     ) -> List[Column]:
+        """
+        method to fetch the statistics at defined percentile levels + the mean
+        """
+        out_expr = []
+        #[F.mean(col).cast(T.DoubleType()).alias(f"mean_{col}")]
+        for p in pct_list:
+            pct = float(p/100.)
+            out_expr.append(F.expr(f"percentile_approx({col}, {pct})")
+                            .cast(T.DoubleType())
+                            .alias(f"{p}percentile_{col}")
+                            )
+        return out_expr
+
 
 class TransactionsManager(BaseManager):
     def __init__(
@@ -44,7 +88,8 @@ class TransactionsManager(BaseManager):
             channels: List[str] = ["POS"],
             # No BWS, {"lx_id": [list, of, products, at lx, level]}
             exclude_items: Dict[str, str] = {"l3_id": ["MM14"]},
-            window_days: Optional[int] = None
+            window_days: Optional[int] = None,
+            christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101")
     ):
         self.start_date = start_date
         self.end_date = end_date
@@ -56,6 +101,7 @@ class TransactionsManager(BaseManager):
         self.channels = channels
         self.exclude_items = exclude_items
         self.window_days = window_days
+        self.christmas_remove_range = christmas_remove_range
 
     def get(self,
             trx_line: DataFrame,
@@ -74,6 +120,10 @@ class TransactionsManager(BaseManager):
                 .filter(self.get_common_filters())
         )
 
+        if self.christmas_remove_range is not None:
+            trx_line = self.remove_christmas_transactions(trx_line,
+                                                          christmas_range=self.christmas_remove_range)
+
         # Remove items from transaction list, e.g. BWS items
         trx_line = self.remove_items(trx_line)
 
@@ -88,7 +138,7 @@ class TransactionsManager(BaseManager):
             trx_timespan = self.add_timespan_spend(cust_lx_trx)
             cust_lx_trx_metrics = (cust_lx_trx_metrics
                                    .join(trx_timespan, on=self.user_key, how="left")
-                                   .fillna(0, subset=["mean_spend_timespan"])
+                                   .fillna(0)
                                    )
 
         if cust_seg is not None:
@@ -152,7 +202,8 @@ class TransactionsManager(BaseManager):
                         .withColumn("day_diff", days_back("date"))
                         .withColumn("spend_timespan", F.sum('sales_amt').over(WinSpan))
                         .groupby("cust_id")
-                        .agg(F.mean("spend_timespan").cast(T.DoubleType()).alias("mean_spend_timespan"))
+                        .agg(*self.get_expr_agg("spend_timespan")
+                             )
                         )
         return trx_timespan
 
@@ -220,12 +271,8 @@ class TransactionsManager(BaseManager):
                                      .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"),
                                           F.count("basket_id").cast(T.IntegerType()).alias("items_per_basket"))
                                      .groupby([self.user_key, f"{self.lx}_id"])
-                                     .agg(F.mean("total_spend_basket")
-                                          .cast(T.DoubleType()).alias("average_basket_value"),
-                                          F.expr('percentile_approx(total_spend_basket, 0.5)')
-                                          .cast(T.DoubleType()).alias("median_basket_value"),
-                                          F.max("total_spend_basket").cast(T.DoubleType()).alias("max_basket_value"),
-                                          F.mean("items_per_basket").cast(T.IntegerType()).alias("average_items_per_basket"),
+                                     .agg(*self.get_expr_agg("total_spend_basket"),
+                                          *self.get_expr_agg("items_per_basket"),
                                           )
                                      )
 
@@ -235,14 +282,8 @@ class TransactionsManager(BaseManager):
                                      .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket_full"),
                                           F.count("basket_id").cast(T.DoubleType()).alias("items_per_basket_full"))
                                      .groupby([self.user_key])
-                                     .agg(F.mean("total_spend_basket_full").cast(T.DoubleType())
-                                          .alias("average_basket_value_full"),
-                                          F.expr('percentile_approx(total_spend_basket_full, 0.5)')
-                                          .cast(T.DoubleType()).alias("median_basket_full_value"),
-                                          F.max("total_spend_basket_full").cast(T.DoubleType())
-                                          .alias("max_basket_full_value"),
-                                          F.mean("items_per_basket_full").cast(T.DoubleType())
-                                          .alias("average_items_per_basket_full"),
+                                     .agg(*self.get_expr_agg("total_spend_basket_full"),
+                                          *self.get_expr_agg("items_per_basket_full"),
                                           )
                                      )
 
