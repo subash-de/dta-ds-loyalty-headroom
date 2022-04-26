@@ -63,8 +63,7 @@ class BaseManager(object):
         """
         method to fetch the statistics at defined percentile levels + the mean
         """
-        out_expr = []
-        #[F.mean(col).cast(T.DoubleType()).alias(f"mean_{col}")]
+        out_expr = [F.mean(col).cast(T.DoubleType()).alias(f"average_{col}")]
         for p in pct_list:
             pct = float(p/100.)
             out_expr.append(F.expr(f"percentile_approx({col}, {pct})")

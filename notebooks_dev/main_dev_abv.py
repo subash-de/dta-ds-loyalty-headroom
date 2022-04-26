@@ -1,5 +1,5 @@
 # Databricks notebook source
-#%run ./bootstrap $environment=prod
+# %run ./bootstrap $environment=prod
 
 # COMMAND ----------
 
@@ -11,7 +11,7 @@ pip_url = f"https://{devops_token}@pkgs.dev.azure.com/dta-devops/datascience-pla
 
 from customer_headroom.config import load_config
 
-config = load_config('dev')
+config = load_config('dev', file_name="config_abv.yaml")
 print(f'Config used is: \n{config.dumps()}')
 
 # COMMAND ----------

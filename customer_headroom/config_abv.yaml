@@ -7,9 +7,9 @@ sections:
     upcoming_campaign: &upcoming_campaign "202205"
     verions:
       data: &vdata v0.0.2
-      model: &vmodel v0.0.2/test_2
-      prediction: &vprediction v0.0.2/test_2
-    steps: [segmentation, build_dataset, fit_rec, predict]
+      model: &vmodel v0.0.2/test_1
+      prediction: &vprediction v0.0.2/test_1
+    steps: [fit_rec, predict]
     # offline_eval
     date_format: &date_format '%Y%m%d'
     dates:
@@ -22,7 +22,7 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "85percentile_spend_timespan"
+      feature_col: &feature_col "average_total_spend_basket"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
