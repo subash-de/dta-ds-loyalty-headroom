@@ -1,16 +1,24 @@
-# COMMAND ----------
-
+# Databricks notebook source
 # MAGIC %run ./version
 
 # COMMAND ----------
 
 devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
-pip_url = PIP_URL.format(token=devops_token)
+pip_url = PIP_URL.format(token=devops_token).replace('%40prerelease', '')
 
-%pip install --extra-index-url "{pip_url}" "{PACKAGE_NAME}=={PACKAGE_VERSION}"
-%pip install cdsutils --index-url "https://{devops_token}@pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple"
+%pip config set global.extra-index-url "{pip_url}"
+
+if PACKAGE_SOURCE=="repos":
+    try:
+        %pip install -e "{'/Workspace'+'/'.join(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().split('/', 4)[:4])}"
+    except:
+        pass
+else:
+    %pip install "{PACKAGE_NAME}=={PACKAGE_VERSION}"
+    
 
 # COMMAND ----------
+
 from dtaml.databricks import get_all_widgets
 from customer_headroom.config import load_config
 

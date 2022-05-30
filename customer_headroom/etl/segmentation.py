@@ -416,7 +416,6 @@ class SegmentationManager(BaseManager):
                                                  .withColumn("segmentation", F.lit(0))
                                                  )
 
-
         return output_dict, all_silhouette_score_max
 
     def _join_all_best_KMeans(self,

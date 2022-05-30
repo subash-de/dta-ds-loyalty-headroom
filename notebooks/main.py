@@ -6,12 +6,15 @@
 import os
 from functools import partial
 import pandas as pd
+from datetime import datetime
 from customer_headroom.etl.build_dataset import TransactionsManager
 from customer_headroom.etl.segmentation import SegmentationDataManager, SegmentationManager
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
 from customer_headroom.evaluation.model_selection import Evaluator
+from customer_headroom.allocation.allocator import Allocator
+import offerallocationv2.utils.persist_utils as persist_utils
 from dtaml.logging import get_logger
 from cdsutils.io_utils import file_exists, save_object, load_object
 from pyspark.sql import DataFrame, functions as F
@@ -24,21 +27,26 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
-def write(obj, path, write_mode):
-    if write_mode == "errorifexists" and file_exists(path):
-        raise IOError(f"{path} exists")
-    else:
-        if isinstance(obj, DataFrame):
-            obj.repartition(1).write.parquet(path, mode=write_mode)
-        else:
-            save_object(obj, path)
-
-
 def find_all_segments(data, partitionByList):
     segs = data.select(partitionByList).distinct().rdd.map(
         lambda x: {k: v for (k, v) in zip(partitionByList, x)}).collect()
     return segs
 
+
+def get_date(date):
+    if str(date).lower() == "today":
+        date = datetime.now().strftime("%Y%m%d")
+    return int(date)
+
+
+def get_campaign(campaign, etl_date):
+    if (campaign == "{campaign}") or (campaign == ""):
+        campaign = get_date(etl_date)
+    return campaign
+
+
+config_dates = config["dates"]
+campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
 
 # COMMAND ----------
 
@@ -50,10 +58,7 @@ def find_all_segments(data, partitionByList):
 if "segmentation" in config.steps:
     logger.info("Begin Building Segmentation Dataset")
     config_sg = config["segmentation"]
-    cust_path = os.path.join(*config_sg["cust_path"])
-    seg_data_path = os.path.join(*config_sg["seg_data_path"])
-    custs_data_seg_path = os.path.join(*config_sg["custs_data_seg_path"])
-    partitionByList = config_sg["partitionByList"]
+    # cust_path = create_path_campaign(config_sg["cust_path"])
 
     # load factory tables
     sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
@@ -62,21 +67,41 @@ if "segmentation" in config.steps:
 
     # load customer table
     # TODO: Replace with input customer id's if required.
-    custs_etl_data = spark.read.parquet(cust_path)
+    # if cust_path is None:
+    #     custs_etl_data = None
+    # else:
+    #     custs_etl_data = spark.read.parquet(cust_path)
+    custs_etl_data = None
 
-    seg_data_manager = SegmentationDataManager(etl_date=config_sg["etl_date"],
+    seg_data_manager = SegmentationDataManager(etl_date=get_date(config_sg["etl_date"]),
                                                lookback_days=config_sg["lookback_days"],
                                                l1_id=config_sg["l1_id"],
                                                user_id=config_sg["user_id"])
 
-    seg_data = seg_data_manager.get(trx_line_df, sparks_account_df, cust_master_df, customer_input=custs_etl_data)
-    logger.info(f"Writing seg_data to {seg_data_path}")
+    seg_data = (seg_data_manager.get(trx_line_df, sparks_account_df, cust_master_df, customer_input=custs_etl_data)
+                .withColumn("campaign", F.lit(campaign))
+                )
 
     # TODO: Replace with customer cluster work to reduce data sizes to appropiate groups.
-    seg_data.write.parquet(seg_data_path, mode=config_sg["write_mode"])
+    seg_data_table_name = persist_utils.create_beam_table(table_prefix=config_sg.seg_data_tbl.prefix,
+                                                          lab_database=config.dev_database,
+                                                          factory_database=config_sg.seg_data_tbl.factory_database,
+                                                          sensitivity=config_sg.seg_data_tbl.sensitivity,
+                                                          schema=seg_data,
+                                                          partition_by=config_sg.seg_data_tbl.partitionByList,
+                                                          overwrite_table=False,
+                                                          assert_equality=False,
+                                                          add_load_timestamp=True
+                                                          )
+
+    logger.info(f"""seg_data_table_name: {seg_data_table_name}""")
+
+    persist_utils.insert_df_into_table(target_tbl_name=seg_data_table_name,
+                                       insert_df=seg_data,
+                                       delete_where=f"campaign={campaign}")
 
     logger.info("Begin Segmentation of Dataset")
-    seg_data_read = spark.read.parquet(seg_data_path)
+    seg_data_read = persist_utils.read_table(table_name=seg_data_table_name, where=f"campaign={campaign}")
     seg_manager = SegmentationManager(num_cols=config_sg["num_cols"],
                                       cat_cols=config_sg["cat_cols"],
                                       frac_lim=config_sg["frac_lim"],
@@ -89,10 +114,24 @@ if "segmentation" in config.steps:
                                       verbose=config_sg["verbose"]
                                       )
 
-    custs_etl_data_seg = seg_manager.get(data=seg_data_read)
+    segmentations = (seg_manager.get(data=seg_data_read)
+                     .withColumn("campaign", F.lit(campaign))
+                     )
+    segmentations_tbl_name = persist_utils.create_beam_table(table_prefix=config_sg.segmentations_tbl.prefix,
+                                                             lab_database=config.dev_database,
+                                                             factory_database=config_sg.segmentations_tbl.factory_database,
+                                                             sensitivity=config_sg.segmentations_tbl.sensitivity,
+                                                             schema=segmentations,
+                                                             partition_by=config_sg.segmentations_tbl.partitionByList,
+                                                             overwrite_table=False,
+                                                             assert_equality=False,
+                                                             add_load_timestamp=True
+                                                             )
+    logger.info(f"""segmentations_tbl_name: {segmentations_tbl_name}""")
 
-    logger.info(f"Writing custs_etl_data_seg to {custs_data_seg_path}")
-    custs_etl_data_seg.write.partitionBy(*partitionByList).parquet(custs_data_seg_path, mode=config_sg["write_mode"])
+    persist_utils.insert_df_into_table(target_tbl_name=segmentations_tbl_name,
+                                       insert_df=segmentations,
+                                       delete_where=f"campaign={campaign}")
 
 # COMMAND ----------
 
@@ -105,11 +144,14 @@ if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict"))
     config_use = config["use_segments"]
     if config_use["all"] == True:
         logger.info(f"Use all Segmentations")
-        custs_data_seg_path = config_use["custs_data_seg_path"]
-        partitionByList = config_use["partitionByList"]
         # In
-        custs_data_seg = spark.read.parquet(os.path.join(*custs_data_seg_path))
-        seg_list = find_all_segments(custs_data_seg, partitionByList)
+        segmentations_tbl_name = persist_utils.get_table_name(
+            factory_database=config_use.segmentations_tbl.factory_database,
+            lab_database=config.dev_database,
+            table_prefix=config_use.segmentations_tbl.prefix,
+            sensitivity=config_use.segmentations_tbl.sensitivity)
+        segmentations_tbl = persist_utils.read_table(table_name=segmentations_tbl_name, where=f"campaign={campaign}")
+        seg_list = find_all_segments(segmentations_tbl, config_use["partitionByList"])
     else:
         seg_list = config_use["seg_list"]
     logger.info(f"Segmentations: {seg_list}")
@@ -126,8 +168,6 @@ if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict"))
 if "build_dataset" in config.steps:
     logger.info("Begin building dataset")
     config_bd = config["build_dataset"]
-    cust_path = os.path.join(*config_bd["cust_input_path"])
-    partitionByList = config_bd["partitionByList"]
 
     # load factory tables
     articles_df = spark.table("analytics_trans_prod.lu_article")
@@ -138,22 +178,50 @@ if "build_dataset" in config.steps:
     # Load Segmentation Dataset
     # TODO: Replace with customer cluster work to reduce data sizes to appropiate groups.
     # TODO: Possibl build data for just 1 segment at a time?
-    custs = spark.read.parquet(cust_path).select([config_bd["user_id"]] + partitionByList)
+    partitionByList = config_use.segmentations_tbl.partitionByList
+
+    segmentations_tbl_name = persist_utils.create_beam_table(table_prefix=config_bd.segmentations_tbl.prefix,
+                                                             lab_database=config.dev_database,
+                                                             factory_database=config_bd.segmentations_tbl.factory_database,
+                                                             sensitivity=config_bd.segmentations_tbl.sensitivity,
+                                                             schema=segmentations,
+                                                             partition_by=config_bd.segmentations_tbl.partitionByList,
+                                                             overwrite_table=False,
+                                                             assert_equality=False,
+                                                             add_load_timestamp=True
+                                                             )
+    segmentations_tbl = (persist_utils.read_table(table_name=segmentations_tbl_name, where=f"campaign={campaign}")
+                         .select([config_bd["user_id"]] + partitionByList)
+                         )
 
     # build training data
     trx_manager = TransactionsManager(
-        start_date=config_bd["start_date"],
-        end_date=config_bd["end_date"],
+        etl_date=get_date(config_bd["etl_date"]),
+        lookback_days=config_bd["lookback_days"],
         l1_ids=config_bd["l1_ids"],
         lx=config_bd["lx"],
         lx_ids=config_bd["lx_ids"],
         user_key=config_bd["user_id"],
         window_days=config_bd["window_days"],
     )
-    all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=custs)
-    etl_data_path = os.path.join(*config_bd["etl_data_path"])
-    logger.info(f"Writing all_data to {etl_data_path}")
-    all_data.write.partitionBy(*partitionByList).parquet(etl_data_path, mode=config_bd["write_mode"])
+    all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
+
+    etl_data_tbl_name = persist_utils.create_beam_table(table_prefix=config_bd.etl_data_tbl.prefix,
+                                                        lab_database=config.dev_database,
+                                                        factory_database=config_bd.etl_data_tbl.factory_database,
+                                                        sensitivity=config_bd.etl_data_tbl.sensitivity,
+                                                        schema=all_data,
+                                                        partition_by=config_bd.etl_data_tbl.partitionByList,
+                                                        overwrite_table=False,
+                                                        assert_equality=False,
+                                                        add_load_timestamp=True
+                                                        )
+    logger.info(f"""etl_data_tbl_name: {etl_data_tbl_name}""")
+
+    persist_utils.insert_df_into_table(target_tbl_name=etl_data_tbl_name,
+                                       insert_df=all_data,
+                                       delete_where=f"campaign={campaign}")
+
     # TODO: Save cust_id to account_id Mapping as done in the customer_purchase work.
 
     # # Check dataset
@@ -172,24 +240,34 @@ if "build_dataset" in config.steps:
 
 if "build_dataset" in config.steps:
     config_bd = config["build_dataset"]
-    etl_data_path = os.path.join(*config_bd["etl_data_path"])
-    all_data_groups = spark.read.parquet(etl_data_path)
-    display(all_data_groups.orderBy(F.rand()))
+    etl_data_tbl_name = persist_utils.get_table_name(factory_database=config_bd.etl_data_tbl.factory_database,
+                                                     lab_database=config.dev_database,
+                                                     table_prefix=config_bd.etl_data_tbl.prefix,
+                                                     sensitivity=config_bd.etl_data_tbl.sensitivity)
+
+    etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=f"campaign={campaign}")
+    display(etl_data_tbl.orderBy(F.rand()))
+
 
 # COMMAND ----------
 
-def run_fit_rec(seg, config):
-    etl_data_path = os.path.join(*config["etl_data_path"])
+def run_fit_rec(seg, config, database):
     partitionByList = config["partitionByList"]
-    seg_ext = [f"{k}={seg[k]}" for k in partitionByList]
-    seg_data_path = os.path.join(*([f"{etl_data_path}"] + seg_ext))
-    seg_data_df = spark.read.parquet(seg_data_path)
+    seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
+    ext_str = "_".join([str(seg[k]) for k in partitionByList])
+    etl_data_tbl_name = persist_utils.get_table_name(factory_database=config.etl_data_tbl.factory_database,
+                                                     lab_database=database,
+                                                     table_prefix=config.etl_data_tbl.prefix,
+                                                     sensitivity=config.etl_data_tbl.sensitivity)
+
+    seg_etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
+
     max_size = config["max_train_size"]
     if max_size:
         # Randomly order and limit to max size of training segment
-        seg_data_df = seg_data_df.orderBy(F.rand()).limit(max_size)
+        seg_etl_data_tbl = seg_etl_data_tbl.orderBy(F.rand()).limit(max_size)
 
-    seg_data = seg_data_df.toPandas()
+    seg_data = seg_etl_data_tbl.toPandas()
 
     # build surprise preprocessed data
     data_process_manager = DataProcessor(
@@ -206,9 +284,12 @@ def run_fit_rec(seg, config):
     rec_data = data_process_manager.get(seg_data)
     logger.info(f"{seg}: Recommender Data Created")
 
-    data_processor_path = os.path.join(*(config['data_processor_path'] + seg_ext))
-    logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, path={data_processor_path}")
-    write(data_process_manager, os.path.join(data_processor_path), write_mode=config["write_mode"])
+    data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
+    logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
+    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
+                                 tags={"campaign": campaign}, 
+                                 description="Headroom: Registered Data Processor Object")
+
     logger.info(f"{seg}: Build Recommender")
 
     rec_algo, fit_params = build_recommender(
@@ -218,12 +299,17 @@ def run_fit_rec(seg, config):
         param_grid=config["param_grid"]
     )
 
-    rec_path = os.path.join(*(config['rec_path'] + seg_ext))
-    param_path = os.path.join(*(config['param_path'] + seg_ext))
-    logger.info(f"{seg}: Saving Recommender obj={rec_algo}, path={rec_path}")
-    write(rec_algo, rec_path, write_mode=config["write_mode"])
-    logger.info(f"{seg}: Saving Fit Parameters obj={fit_params}, path={param_path}")
-    write(fit_params, param_path, write_mode=config["write_mode"])
+    rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
+    logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
+    persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
+                                 tags={"campaign": campaign}, 
+                                 description="Headroom: Registered Recommender Model")
+
+    param_name = (config.param_name + "_{ext}").format(ext=ext_str)
+    logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
+    persist_utils.register_model(model_name=param_name, model_object=fit_params, 
+                                 tags={"campaign": campaign}, 
+                                 description="Headroom: Registered Parameters Object")
 
 
 if "fit_rec" in config.steps:
@@ -233,7 +319,7 @@ if "fit_rec" in config.steps:
     # for seg in seg_list:
     n_threads = int(config_fr["n_threads"])
     pool = ThreadPool(n_threads)
-    _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr), seg_list)
+    _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr, database=config.dev_database), seg_list)
     pool.close()
     pool.join()
 
@@ -242,21 +328,26 @@ if "fit_rec" in config.steps:
 if "predict" in config.steps:
     logger.info("Begin Predictions")
     config_pd = config["predict"]
-
-    pred_data_path = os.path.join(*config_pd["pred_data_path"])
     partitionByList = config_pd["partitionByList"]
 
+    etl_data_tbl_name = persist_utils.get_table_name(factory_database=config_pd.etl_data_tbl.factory_database,
+                                                     lab_database=config.dev_database,
+                                                     table_prefix=config_pd.etl_data_tbl.prefix,
+                                                     sensitivity=config_pd.etl_data_tbl.sensitivity)
+
     for seg in seg_list:
-        seg_ext = [f"{k}={seg[k]}" for k in partitionByList]
-        seg_pred_data_path = os.path.join(*([f"{pred_data_path}"] + seg_ext))
+        seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
+        ext_str = "_".join([str(seg[k]) for k in partitionByList if k!="campaign"])
+        data = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
 
-        data_processor_path = os.path.join(*(config_pd["data_processor_path"] + seg_ext))
-        rec_path = os.path.join(*(config_pd["rec_path"] + seg_ext))
-        pred_path = os.path.join(*(config_pd["pred_path"] + seg_ext))
+        rec_name = (config_pd.rec_name + "_{ext}").format(ext=ext_str)
+        logger.info(f"{seg}: Read Recommender name={rec_name}")
+        rec_algo = persist_utils.load_model(model_name=rec_name)
 
-        data = spark.read.parquet(seg_pred_data_path)
-        rec_algo = load_object(rec_path)
-        data_processor = load_object(data_processor_path)
+        data_processor_name = (config_pd.data_processor_name + "_{ext}").format(ext=ext_str)
+        logger.info(f"{seg}: Read Data Processor name={data_processor_name}")
+        data_processor = persist_utils.load_model(model_name=data_processor_name)
+
         # build surprise preprocessed data
         predictor_manager = Predictor(
             feature_col=config_pd["feature_col"],
@@ -268,79 +359,94 @@ if "predict" in config.steps:
 
         predictions = predictor_manager.get(data=data, algo=rec_algo)
 
-        for obj, path in ((predictions, pred_path),):
-            logger.info(f"{seg}: Saving obj={obj}, path={path}")
-            write(obj, path, write_mode=config_pd["write_mode"])
+        prediction_tbl_name = persist_utils.create_beam_table(table_prefix=config_pd.prediction_tbl.prefix,
+                                                              lab_database=config.dev_database,
+                                                              factory_database=config_pd.prediction_tbl.factory_database,
+                                                              sensitivity=config_pd.prediction_tbl.sensitivity,
+                                                              schema=predictions,
+                                                              partition_by=config_pd.prediction_tbl.partitionByList,
+                                                              overwrite_table=False,
+                                                              assert_equality=False,
+                                                              add_load_timestamp=True
+                                                              )
+        logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
-        predictions = spark.read.parquet(pred_path)
-        logger.info(f"predictions {seg} | row count: {predictions.count()}; column count: {len(predictions.columns)}")
+        persist_utils.insert_df_into_table(target_tbl_name=prediction_tbl_name,
+                                           insert_df=predictions,
+                                           delete_where=" and ".join(seg_ext))
+
+        predictions_read = persist_utils.read_table(table_name=prediction_tbl_name, where=" and ".join(seg_ext))
+        logger.info(
+            f"predictions {seg} | row count: {predictions_read.count()}; column count: {len(predictions_read.columns)}")
 
 # COMMAND ----------
 
 if "predict" in config.steps:
     config_pd = config["predict"]
-    pred_path = os.path.join(*config_pd["pred_path"])
-    predictions = spark.read.parquet(pred_path)
-    display(predictions.orderBy(F.rand()))
+    prediction_tbl_name = persist_utils.get_table_name(factory_database=config_pd.prediction_tbl.factory_database,
+                                                       lab_database=config.dev_database,
+                                                       table_prefix=config_pd.prediction_tbl.prefix,
+                                                       sensitivity=config_pd.prediction_tbl.sensitivity)
+
+    prediction_tbl = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
+    display(prediction_tbl.orderBy(F.rand()))
 
 # COMMAND ----------
 
-if "offline_eval" in config.steps:
-    logger.info("Begin Offline Evaluation")
-    config_ev = config["offline_eval"]
+if "allocate" in config.steps:
+    logger.info("Begin Allocation")
+    config_al = config["allocation"]
 
-    user_key = config_ev["user_key"]
-    pred_key = f'{config_ev["pred_key"]}_id'
-    method = config_ev["method"]
-    methods = config_ev["methods"]
+    prediction_tbl_name = persist_utils.get_table_name(factory_database=config_al.prediction_tbl.factory_database,
+                                                       lab_database=config.dev_database,
+                                                       table_prefix=config_al.prediction_tbl.prefix,
+                                                       sensitivity=config_al.prediction_tbl.sensitivity)
 
-    for seg in seg_list:
-        seg_ext = [f"{k}={seg[k]}" for k in partitionByList]
-        seg_pred_data_path = os.path.join(*(config_ev["eval_data_path"] + seg_ext))
-        seg_data_processor_path = os.path.join(*(config_ev["data_processor_path"] + seg_ext))
+    predictions = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
 
-        data_processor = load_object(seg_data_processor_path)
-        data = (spark.read.parquet(seg_pred_data_path)
-                .select(user_key, pred_key, data_processor.feature_col)
-                ).toPandas()
+    allocation_manager = Allocator(feature_col=config_al["feature_col"],
+                                   offer_limits=config_al["offer_limits"],
+                                   offer_desc=config_al["offers_desc"],
+                                   user_key=config_al["user_key"],
+                                   outlier_min=config_al["outlier_min"],
+                                   outlier_max=config_al["outlier_max"],
+                                   max_increase=config_al["max_increase"],
+                                   min_increase=config_al["min_increase"],
+                                   headroom_factor=config_al["headroom_factor"],
+                                   fill_offer=config_al["fill_offer"],
+                                   )
 
-        all_methods = list(set(map(str.lower, methods)).union({str(method).lower()}))
-        for m in all_methods:
-            logger.info(f"Run Offline Evaluation for Method: {m.upper()}")
-            algo_fn = partial(
-                build_recommender,
-                method=m
-            )
+    headroom_export = (allocation_manager.get(predictions)
+                       .withColumn("campaign", F.lit(campaign))
+                       )
 
-            evaluator = Evaluator(
-                algorithm=algo_fn,
-                data_processor=data_processor,
-                user_key=user_key,
-                pred_key=pred_key,
-                pred_items=config_ev["pred_items"],
-                dev_size=config_ev["dev_size"],
-                test_size=config_ev["test_size"],
-                split_col=config_ev["split_col"],
-                sample=config_ev["sample"],
-                random_state=config_ev["random_state"]
-            )
-
-            if config_ev["kfold"]:
-                eval_summary = evaluator.evaluate_kfold(data,
-                                                        n_splits=config_ev["n_splits"],
-                                                        shuffle=config_ev["shuffle"],
-                                                        run_tag=f"{seg}: {m}"
+    headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
+                                                        lab_database=config.dev_database,
+                                                        factory_database=config_al.headroom_export_tbl.factory_database,
+                                                        sensitivity=config_al.headroom_export_tbl.sensitivity,
+                                                        schema=headroom_export,
+                                                        partition_by=config_al.headroom_export_tbl.partitionByList,
+                                                        overwrite_table=True,
+                                                        assert_equality=False,
+                                                        add_load_timestamp=True
                                                         )
-            else:
-                eval_summary = evaluator.evaluate(data, run_tag=f"{seg}: {m}")
-            eval_summaries[m] = eval_summary
-            full_eval_summary = pd.concat(list(eval_summaries.values()))
+    logger.info(f"""headroom_tbl_name: {prediction_tbl_name}""")
+
+    persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
+                                       insert_df=headroom_export,
+                                       delete_where=f"campaign={campaign}")
 
 # COMMAND ----------
 
-if "offline_eval" in config.steps:
-    # metrics summary
-    display(full_eval_summary)
+if "allocate" in config.steps:
+    config_al = config["allocation"]
+    headroom_tbl_name = persist_utils.get_table_name(factory_database=config_al.headroom_export_tbl.factory_database,
+                                                     lab_database=config.dev_database,
+                                                     table_prefix=config_al.headroom_export_tbl.prefix,
+                                                     sensitivity=config_al.headroom_export_tbl.sensitivity)
+
+    headroom_tbl = persist_utils.read_table(table_name=headroom_tbl_name, where=f"campaign={campaign}")
+    display(headroom_tbl.orderBy(F.rand()))
 
 # COMMAND ----------
 

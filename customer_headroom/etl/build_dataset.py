@@ -1,6 +1,6 @@
 from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
 from typing import Optional, Union, Iterable, Dict, List, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # from great_expectations.dataset.sparkdf_dataset import SparkDFDataset
@@ -29,15 +29,15 @@ class BaseManager(object):
                           )
         return common_filters
 
-    @staticmethod
-    def remove_christmas_transactions(df: DataFrame,
+    def remove_christmas_transactions(self,
+                                      df: DataFrame,
                                       christmas_range: Tuple[str] = ("1218", "0101")
                                       ) -> DataFrame:
         """
         Method to remove christmas period from data. Christmas is an atypical trading period.
         """
 
-        if not "date" in df.columns:
+        if ~("date" in df.columns):
             df = self._add_date(df)
 
         df_mmdd = (df
@@ -55,7 +55,6 @@ class BaseManager(object):
                 .drop("date_mmdd")
                 )
 
-
     @staticmethod
     def get_expr_agg(col: str,
                      pct_list: Tuple[float] = (50, 75, 85, 90, 100)
@@ -65,7 +64,7 @@ class BaseManager(object):
         """
         out_expr = [F.mean(col).cast(T.DoubleType()).alias(f"average_{col}")]
         for p in pct_list:
-            pct = float(p/100.)
+            pct = float(p / 100.)
             out_expr.append(F.expr(f"percentile_approx({col}, {pct})")
                             .cast(T.DoubleType())
                             .alias(f"{p}percentile_{col}")
@@ -76,8 +75,8 @@ class BaseManager(object):
 class TransactionsManager(BaseManager):
     def __init__(
             self,
-            start_date: str,
-            end_date: str,
+            etl_date: str,
+            lookback_days: str,
             l1_ids: list = ("GM"),
             lx: str = "l2",
             lx_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
@@ -90,8 +89,10 @@ class TransactionsManager(BaseManager):
             window_days: Optional[int] = None,
             christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101")
     ):
-        self.start_date = start_date
-        self.end_date = end_date
+        self.etl_date = etl_date
+        self.lookback_days = lookback_days
+        self.lookback_date = int((datetime.strptime(str(etl_date), date_format) -
+                                  timedelta(days=lookback_days)).strftime(date_format))
         self.l1_ids = l1_ids
         self.lx = lx
         self.lx_ids = lx_ids
@@ -112,8 +113,8 @@ class TransactionsManager(BaseManager):
         """
         trx_line = (
             self._add_date(trx_line)
-                .filter(F.col("date") >= self.start_date)
-                .filter(F.col("date") <= self.end_date)
+                .filter(F.col("date") <= self.etl_date)
+                .filter(F.col("date") >= self.lookback_date)
                 .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
                 .filter(F.col("l1_id").isin(list(self.l1_ids)))
                 .filter(self.get_common_filters())
@@ -187,7 +188,7 @@ class TransactionsManager(BaseManager):
 
         @F.udf(T.IntegerType())
         def days_back(date):
-            days_diff = (datetime.strptime(str(self.end_date), self.date_format) -
+            days_diff = (datetime.strptime(str(self.lookback_date), self.date_format) -
                          datetime.strptime(str(date), self.date_format)).days
             return days_diff
 
@@ -276,15 +277,15 @@ class TransactionsManager(BaseManager):
                                      )
 
         customer_lx_trans_baskets_full = (customer_lx_transactions
-                                     .filter(F.col(self.user_key).isNotNull())
-                                     .groupby([self.user_key, "basket_id"])
-                                     .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket_full"),
-                                          F.count("basket_id").cast(T.DoubleType()).alias("items_per_basket_full"))
-                                     .groupby([self.user_key])
-                                     .agg(*self.get_expr_agg("total_spend_basket_full"),
-                                          *self.get_expr_agg("items_per_basket_full"),
+                                          .filter(F.col(self.user_key).isNotNull())
+                                          .groupby([self.user_key, "basket_id"])
+                                          .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket_full"),
+                                               F.count("basket_id").cast(T.DoubleType()).alias("items_per_basket_full"))
+                                          .groupby([self.user_key])
+                                          .agg(*self.get_expr_agg("total_spend_basket_full"),
+                                               *self.get_expr_agg("items_per_basket_full"),
+                                               )
                                           )
-                                     )
 
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                          .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])

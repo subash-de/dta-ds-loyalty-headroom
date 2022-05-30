@@ -155,8 +155,8 @@ if "build_dataset" in config.steps:
 
     # build training data
     trx_manager = TransactionsManager(
-        start_date=config_bd["start_date"],
-        end_date=config_bd["end_date"],
+        etl_date=config_bd["etl_date"],
+        lookback_days=config_bd["lookback_days"],
         l1_ids=config_bd["l1_ids"],
         lx=config_bd["lx"],
         lx_ids=config_bd["lx_ids"],
