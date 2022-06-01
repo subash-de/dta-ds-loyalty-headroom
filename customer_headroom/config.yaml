@@ -1,0 +1,205 @@
+experiment_name: v4
+
+tables:
+  seg_data_tbl: &seg_data_tbl
+    prefix: headroom_segmentation_data
+    factory_stg_database: datascienceoffers_analysestg_prod
+    factory_database: datascienceoffers_analyse_prod
+    sensitivity: p
+    partitionByList: ["campaign"]
+  segmentations_tbl: &segmentations_tbl
+    prefix: headroom_segmentations
+    factory_stg_database: datascienceoffers_analysestg_prod
+    factory_database: datascienceoffers_analyse_prod
+    sensitivity: p
+    partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
+  etl_data_tbl: &etl_data_tbl
+    prefix: headroom_etl_data
+    factory_stg_database: datascienceoffers_analysestg_prod
+    factory_database: datascienceoffers_analyse_prod
+    sensitivity: p
+    partitionByList: *segPartition
+  prediction_tbl: &prediction_tbl
+    prefix: predictions
+    factory_stg_database: datascienceoffers_analysestg_prod
+    factory_database: datascienceoffers_analyse_prod
+    sensitivity: p
+    partitionByList: *segPartition
+  headroom_export_tbl: &headroom_export_tbl
+    prefix: headroom_allocation
+    factory_stg_database: datascienceoffers_analysestg_prod
+    factory_database: datascienceoffers_analyse_prod
+    sensitivity: p
+    partitionByList: ["campaign", "offer_id"]
+
+sections:
+  prod: &prod
+    factory_database: "datascienceoffers_analyse_prod"
+    dev_database: "loyalty_azlab_prod"
+    training_table_prefix: "headroom_training"
+    prediction_table_prefix: "headroom_prediction"
+    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
+    prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
+    upcoming_campaign: &upcoming_campaign "{campaign}"
+    verions:
+      data: &vdata v0.0.1
+      model: &vmodel v0.0.1
+      prediction: &vprediction v0.0.1
+    steps: [segmentation, build_dataset, fit_rec, predict, allocate]
+    # offline_eval
+    date_format: &date_format '%Y%m%d'
+    dates:
+      upcoming_campaign: *upcoming_campaign
+      etl_date: &etl_date "today"
+      lookback_days: &lookback_days 365
+    columns:
+      user_id: &user_id "cust_id"
+      item_id: &item_id "l2_id"
+      l1_ids: &l1_ids ["FD"]
+      # ["GM"]
+      lx: &lx "l2"
+      feature_col: &feature_col "85percentile_total_spend_basket"
+      # "mean_spend_timespan"
+      # "average_basket_value" "mean_total_spend_basket"
+      #"total_spend" #"number_of_transactions"
+      # Segmentation columns
+      seg_num_cols: &seg_num_cols ["age_to_use", "FD_spend", "GM_spend", "FD_items",  "GM_items", "FD_baskets", "GM_baskets" ]
+      seg_cat_cols: &seg_cat_cols ["experian_hh_composition"]
+      # "experian_hh_composition", "experian_mosaic_uk_type"
+      # ""
+    segmentation:
+      # input
+      etl_date: *etl_date
+      lookback_days: *lookback_days
+      l1_id: "FD"
+      user_id: *user_id
+      cust_path: None
+      # [*prod_input, *upcoming_campaign, "customers"]
+      num_cols: *seg_num_cols
+      cat_cols: *seg_cat_cols
+      frac_lim: 0.1
+      fail_limit: 3
+      k_search_min: 2
+      k_search_max: 8
+      pca_k: 3
+      data_lower_lim: 200000
+      verbose: True
+      # output
+      seg_data_tbl: *seg_data_tbl
+      segmentations_tbl: *segmentations_tbl
+    use_segments:
+      all: True
+      # seg_list e.g. [{'experian_hh_composition': 'Cat_U', 'segmentation': 1}, ...]
+      seg_list: {}
+      segmentations_tbl: *segmentations_tbl
+      partitionByList: *segPartition
+    build_dataset:
+      # input
+      segmentations_tbl: *segmentations_tbl
+      etl_date: *etl_date
+      lookback_days: *lookback_days
+      user_id: *user_id
+      l1_ids: *l1_ids
+      lx: *lx
+      lx_ids: &lx_ids ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
+      # "EX08" - Non Trading
+      # ["01", "02", "03", "04", "05", "07"]
+      date_format: *date_format
+      window_days: 30
+      christmas_remove_range: ["1218", "0101"]
+      # output
+      etl_data_tbl: *etl_data_tbl
+      partitionByList: *segPartition
+    fit_rec:
+      # input
+      etl_data_tbl: *etl_data_tbl
+      user_id: *user_id
+      item_id: *item_id
+      feature_col: *feature_col
+      max_train_size: 100000
+      n_threads: 5
+      lognorm: &lognorm True
+      method: &method "SVD"
+      line_format: "user item rating"
+      rating_scale: (-10, 0)
+      min_lim: 0
+      max_lim: 500
+      cat_cols: *seg_cat_cols
+      partitionByList: *segPartition
+      params: None
+#      {'n_factors': 100, 'n_epochs': 20, 'biased': True, 'init_mean': 0, 'init_std_dev': 0.1, 'lr_bu': 0.005,
+#       'lr_bi': 0.005, 'lr_pu': 0.005, 'lr_qi': 0.005, 'reg_bu': 0.02, 'reg_bi': 0.02, 'reg_pu': 0.02,'reg_qi': 0.02}
+      param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
+      # output
+      write_mode: overwrite # errorifexists # overwrite
+      data_processor_name: &data_processor_name "data_processor"
+      param_name: &param_name "data_params"
+      rec_name: &rec_name "recommender"
+    predict:
+      # input
+      etl_data_tbl: *etl_data_tbl
+      data_processor_name: *data_processor_name
+      rec_name: *rec_name
+      feature_col: *feature_col
+      pred_key: *lx
+      pred_items: *lx_ids
+      cat_cols: *seg_cat_cols
+      partitionByList: *segPartition
+      # output
+      prediction_tbl: *prediction_tbl
+    offline_eval:
+      # input
+      etl_data_tbl: *etl_data_tbl
+      data_processor_name: *data_processor_name
+      method: *method
+      # ["svd", "svdpp", "nmf", "knn", "knn_zscore", "knn_mean"]
+      methods: ["svd", "svdpp", "nmf"]
+      sample: None
+      dev_size: 0.1
+      test_size: 0.1
+      split_col: *user_id
+      random_state: 42
+      user_key: *user_id
+      pred_key: *lx
+      pred_items: *lx_ids
+      kfold: True
+      n_splits: 5
+      shuffle: True
+    allocation:
+      # input
+      prediction_tbl: *prediction_tbl
+      feature_col: *feature_col
+      offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
+                    '14140': "£5 off when you spend £30 on M&S food in store",
+                    '14141': "£5 off when you spend £40 on M&S food in store",
+                    '14142': "£5 off when you spend £50 on M&S food in store",
+                    '14238': "£7 off when you spend £70 on M&S food in store",
+                    '14144': "£9 off when you spend £90 on M&S food in store",
+                    '14239': "£10 off when you spend £100 on M&S food in store",
+                    '14146': "£12 off when you spend £120 on M&S food in store",
+                    '14242': "£14 off when you spend £140 on M&S food in store",
+                    '14190': "£16 off when you spend £160 on M&S food in store",
+                    '14191': "£20 off when you spend £200 on M&S food in store"}
+      offer_limits: {'16388': [0,11],
+                     '14140': [11,21],
+                     '14141': [21,37],
+                     '14142': [37,50],
+                     '14238': [50,70],
+                     '14144': [70,90],
+                     '14239': [90,100],
+                     '14146': [100,120],
+                     '14242': [120,140],
+                     '14190': [140,160],
+                     '14191': [180,220]}
+      user_key: *user_id
+      outlier_min: -0.5
+      outlier_max: 200.
+      max_increase: 80.
+      min_increase: 5.
+      headroom_factor: 1.2
+      fill_offer: 14140
+      # Output
+      headroom_export_tbl: *headroom_export_tbl
+
+  dev: *prod
+

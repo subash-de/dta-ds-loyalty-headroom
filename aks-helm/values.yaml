@@ -1,0 +1,60 @@
+image:
+  pullPolicy: IfNotPresent
+  repository: dtaeunlabacrgen01.azurecr.io/dummy
+  tag: "0.0.1"
+  digest: "sha256:8021a49d654b6a0eb8569c9ad692a4bf6dbe4ddc38d69ff6a7c2945ae3c0d68d"
+
+keyvault:
+  name: dta-eun-lab-kv-dsc-01
+  resourceGroup: dta-eun-lab-rg-kv-01
+  subscriptionId: 99626c5d-0085-4b5c-88c1-cb34b47453cc
+  tenantId: bd5c6713-7399-4b31-be79-78f2d078e543
+  credentials: dta-eun-lab-sp-akstokv-01
+
+storage:
+  enable: false
+  provisionedPVC: Persistent_Volume_claim_Name
+  mountPath: "/mnt/your_mount_folder" 
+
+nameOverride: ""
+fullnameOverride: ""
+
+securityContext:
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+  dockerPort: 5000
+
+serviceAccount:
+  create: false
+
+ingress:
+  enabled: false
+
+# nodeSelector: {}
+
+# tolerations: []
+
+replicaCount: 1
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  # targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+resources:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+secrets:
+  - tenant-id
+
+ENV:
+  key1: value1

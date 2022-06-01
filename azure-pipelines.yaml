@@ -1,0 +1,73 @@
+name: $(Date:yyyyMMdd)$(Rev:.rr)
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: datascience-platforms/dta-ds-platform-scripts
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+
+pool:
+  vmImage: "ubuntu-latest"
+
+stages:
+  
+  # - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/pull/') }}:
+  #     - stage: tests
+  #       jobs:
+  #         - job: test
+  #           steps:
+  #             - bash: echo "Add some tests you might want to do"
+  
+
+  - template: /devops/project_flow/v2/stage-multi-project.yaml@templates
+    parameters:
+      root_dir: "." # No need to edit this mostly, check the docs for details
+
+      version_file: version.py
+      
+      python:
+        enable: true
+      
+        enable_tests: false
+        tests_flake8: false
+        tests_prospector: false
+      
+      databricks:
+        enable: true
+        lab_workspace: loyalty # enterprise / marketing / loyalty
+        folder_name: headroom
+        clean: true
+      
+        enable_tests: false
+        test_notebook_path: sample_query
+        test_worker_type: Standard_F4s_v2
+        test_worker_count: 1
+        test_notebook_params:
+          key1: value1
+          key2: value2
+      
+      # docker:
+      #   enable: true
+      #   image_name: dummy
+      
+      # aks:
+      #   enable: true
+      #   app_name: dummy
+      #   values_file_dev: values.yaml
+      #   values_file_prod: values.yaml
+      
+      # adf:
+      #   enable_tests: false
+      #   test_pipeline_name: my_adf_pipeline
+      #   test_pipeline_params:
+      #     param1: value1
+      #     param2: value2
+    
