@@ -345,7 +345,7 @@ if "predict" in config.steps:
 
     for seg in seg_list:
         seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-        ext_str = "_".join([str(seg[k]) for k in partitionByList])
+        ext_str = "_".join([str(seg[k]) for k in partitionByList if k!="campaign"])
         data = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
 
         rec_name = (config_pd.rec_name + "_{ext}").format(ext=ext_str)
