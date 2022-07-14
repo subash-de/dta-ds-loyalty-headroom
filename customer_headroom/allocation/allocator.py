@@ -37,7 +37,7 @@ class Allocator(object):
         self.N_offer_fill = N_offer_fill
         if large_offers is None:
             offer_limit_maxes = dict(sorted(self.offer_limits.items(), key=lambda x: max(x[1]),
-                                           reverse=True)[:self.N_offer_fill])
+                                            reverse=True)[:self.N_offer_fill])
             self.large_offers = list((offer_limit_maxes.keys()))
         else:
             self.large_offers = large_offers
@@ -62,7 +62,6 @@ class Allocator(object):
         self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
         self.get_offer_desc_part = F.udf(partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType())
 
-
     @staticmethod
     def get_offer(rand, offers):
         try:
@@ -71,15 +70,12 @@ class Allocator(object):
         except IndexError or KeyError:
             return int(offers[0])
 
-
-
     @staticmethod
     def get_offer_desc(offer, offer_desc):
         if offer_desc:
             return offer_desc[str(offer)]
         else:
             return "Missing"
-
 
     def get(self,
             predictions: DataFrame,
@@ -133,8 +129,6 @@ class Allocator(object):
         return data_tagged
 
     def get_headroom(self, data):
-
-
 
         data_hrm = (data
                     .withColumn("used_headroom_frac",
