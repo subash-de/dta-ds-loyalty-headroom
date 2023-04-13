@@ -3,8 +3,13 @@ name: $(Date:yyyyMMdd)$(Rev:.rr)
 resources:
   repositories:
     - repository: templates
-      type: git
-      name: datascience-platforms/dta-ds-platform-scripts
+      type: github
+      endpoint: DigitalInnovation
+      name: DigitalInnovation/dta-ds-platform-scripts
+
+pr:
+  - main
+  - develop
 
 trigger:
   batch: true
