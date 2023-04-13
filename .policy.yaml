@@ -1,0 +1,20 @@
+policy:
+  approval:
+    - and:
+        - mlops_review
+
+approval_rules:
+  - name: mlops_review
+    description: MLOps to approve production deployment
+    requires:
+      count: 1
+      teams:
+        - DigitalInnovation/data-portfolio-mlops
+    if:
+      targets_branch:
+        pattern: main
+    options:
+      invalidate_on_push: true
+      request_review:
+        enabled: true
+        mode: teams
