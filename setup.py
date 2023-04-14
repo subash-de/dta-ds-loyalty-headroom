@@ -8,7 +8,7 @@ setup(
     description="Predicting a customer's category purchase Headroom.",
     author="Benjamin Tunbridge",
     install_requires=[
-        "dtaml[azureml]>=1.*,<2.*",
+        "dtaml>=1.*",
         "scikit-surprise==1.1.1",
         "scikit-learn==0.24.2",
         "seaborn==0.11.1",
