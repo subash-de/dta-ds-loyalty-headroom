@@ -30,7 +30,8 @@ class Predictor(object):
     def get(self,
             data: DataFrame,
             algo: Any,
-            predict_col: str = "prediction"
+            predict_col: str = "prediction",
+            items: Optional[Iterable] = []
             ) -> DataFrame:
         """
         Predict customers' Headroom using provided (Surprise) algo.
@@ -43,7 +44,8 @@ class Predictor(object):
                                                         out_predict_col=out_predict_col)
         predictions_headroom = self.get_headroom(data=data,
                                                  pred_data=predictions_transformed,
-                                                 predict_col=out_predict_col
+                                                 predict_col=out_predict_col,
+                                                 items=items
                                                  )
         return predictions_headroom
 
@@ -101,7 +103,8 @@ class Predictor(object):
     def get_headroom(self,
                      data: DataFrame,
                      pred_data: DataFrame,
-                     predict_col: str = "prediction_out"
+                     predict_col: str = "prediction_out",
+                     items: Optional[Iterable] = []
                      ):
         """
         Find Headroom, Actual - Predicted [Metric e.g. number_of_transactions] in category.
@@ -114,14 +117,23 @@ class Predictor(object):
                                                                                .orderBy(F.col("headroom"))))
                          )
 
+        headroom_col = "headroom"
+        if items and len(items) > 0:
+            headroom_col = "headroom_items"
+            data_headroom = data_headroom.withColumn(headroom_col, F.when(F.col(self.pred_key).isin(items),
+                                                                          F.col("headroom"))
+                                                     .otherwise(F.lit(0.))
+                                                     )
+
         data_headroom_full = (data_headroom
-                              .withColumn("positive_headroom", F.when(F.col("headroom")>0, F.col("headroom"))
+                              .withColumn(f"positive_{headroom_col}",
+                                          F.when(F.col(headroom_col) > 0, F.col(headroom_col))
                                           .otherwise(F.lit(0)))
                               .groupby(self.user_key)
-                              .agg(F.sum("headroom").alias("sum_headroom"),
-                                   F.mean("headroom").alias("ave_headroom"),
-                                   F.sum("positive_headroom").alias("sum_positive_headroom"),
-                                   F.mean("positive_headroom").alias("ave_positive_headroom"),
+                              .agg(F.sum(headroom_col).alias("sum_headroom"),
+                                   F.mean(headroom_col).alias("ave_headroom"),
+                                   F.sum(f"positive_{headroom_col}").alias("sum_positive_headroom"),
+                                   F.mean(f"positive_{headroom_col}").alias("ave_positive_headroom"),
                                    )
                               )
 

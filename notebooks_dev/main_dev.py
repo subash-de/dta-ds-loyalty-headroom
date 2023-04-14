@@ -5,7 +5,8 @@
 
 from customer_headroom.config import load_config
 
-config = load_config('dev')
+# config = load_config('dev')
+config = load_config('dev', file_name="config_accu.yaml")
 print(f'Config used is: \n{config.dumps()}')
 
 # COMMAND ----------
@@ -55,6 +56,10 @@ def get_campaign(campaign, etl_date):
 
 config_dates = config["dates"]
 campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
+print(f"""
+config_dates: {config_dates}
+campaign: {campaign}
+""")
 
 # COMMAND ----------
 
@@ -263,6 +268,7 @@ def run_fit_rec(seg, config, database):
     partitionByList = config["partitionByList"]
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
     ext_str = "_".join([str(seg[k]) for k in partitionByList if k!="campaign"])
+    model_tags = {**config.get("model_tags", {}), **{"campaign": campaign}}
     etl_data_tbl_name = persist_utils.get_table_name(factory_database=config.etl_data_tbl.factory_database,
                                                      lab_database=database,
                                                      table_prefix=config.etl_data_tbl.prefix,
@@ -295,7 +301,7 @@ def run_fit_rec(seg, config, database):
     data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
     logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
     persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
-                                 tags={"campaign": campaign}, 
+                                 tags=model_tags, 
                                  description="Headroom: Registered Data Processor Object")
 
     logger.info(f"{seg}: Build Recommender")
@@ -310,13 +316,13 @@ def run_fit_rec(seg, config, database):
     rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
     persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
-                                 tags={"campaign": campaign}, 
+                                 tags=model_tags, 
                                  description="Headroom: Registered Recommender Model")
 
     param_name = (config.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
     persist_utils.register_model(model_name=param_name, model_object=fit_params, 
-                                 tags={"campaign": campaign}, 
+                                 tags=model_tags, 
                                  description="Headroom: Registered Parameters Object")
 
 
@@ -345,7 +351,7 @@ if "predict" in config.steps:
 
     for seg in seg_list:
         seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-        ext_str = "_".join([str(seg[k]) for k in partitionByList if k!="campaign"])
+        ext_str = "_".join([str(seg[k]) for k in partitionByList if "campaign"!=k])
         data = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
 
         rec_name = (config_pd.rec_name + "_{ext}").format(ext=ext_str)

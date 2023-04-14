@@ -1,5 +1,18 @@
 # Databricks notebook source
-# MAGIC %run ./bootstrap $environment=prod
+# %run ../notebooks/bootstrap
+
+# COMMAND ----------
+
+devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
+pip_url = f"https://{devops_token}@pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"  # .format(token=devops_token)
+%pip install --extra-index-url "{pip_url}" dtaml  customer-headroom==0.1.8a73980
+
+# COMMAND ----------
+
+from customer_headroom.config import load_config
+
+config = load_config('dev', file_name="config_ch.yaml")
+print(f'Config used is: \n{config.dumps()}')
 
 # COMMAND ----------
 
@@ -27,6 +40,7 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
+
 def find_all_segments(data, partitionByList):
     segs = data.select(partitionByList).distinct().rdd.map(
         lambda x: {k: v for (k, v) in zip(partitionByList, x)}).collect()
@@ -47,10 +61,6 @@ def get_campaign(campaign, etl_date):
 
 config_dates = config["dates"]
 campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
-print(f"""
-config_dates: {config_dates}
-campaign: {campaign}
-""")
 
 # COMMAND ----------
 
@@ -258,8 +268,7 @@ if "build_dataset" in config.steps:
 def run_fit_rec(seg, config, database):
     partitionByList = config["partitionByList"]
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-    ext_str = "_".join([str(seg[k]) for k in partitionByList if "campaign"!=k])
-    model_tags = {**config.get("model_tags", {}), **{"campaign": campaign}}
+    ext_str = "_".join([str(seg[k]) for k in partitionByList if k!="campaign"])
     etl_data_tbl_name = persist_utils.get_table_name(factory_database=config.etl_data_tbl.factory_database,
                                                      lab_database=database,
                                                      table_prefix=config.etl_data_tbl.prefix,
@@ -292,7 +301,7 @@ def run_fit_rec(seg, config, database):
     data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
     logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
     persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
-                                 tags=model_tags,
+                                 tags={"campaign": campaign}, 
                                  description="Headroom: Registered Data Processor Object")
 
     logger.info(f"{seg}: Build Recommender")
@@ -307,13 +316,13 @@ def run_fit_rec(seg, config, database):
     rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
     persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
-                                 tags=model_tags,
+                                 tags={"campaign": campaign}, 
                                  description="Headroom: Registered Recommender Model")
 
     param_name = (config.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
     persist_utils.register_model(model_name=param_name, model_object=fit_params, 
-                                 tags=model_tags,
+                                 tags={"campaign": campaign}, 
                                  description="Headroom: Registered Parameters Object")
 
 
@@ -359,10 +368,10 @@ if "predict" in config.steps:
             pred_key=f'{config_pd["pred_key"]}_id',
             pred_items=config_pd["pred_items"],
             min_col=data_processor.min_col,
-            max_col=data_processor.max_col,
+            max_col=data_processor.max_col
         )
 
-        predictions = predictor_manager.get(data=data, algo=rec_algo)
+        predictions = predictor_manager.get(data=data, algo=rec_algo, items=config_pd["headroom_items"])
 
         prediction_tbl_name = persist_utils.create_beam_table(table_prefix=config_pd.prediction_tbl.prefix,
                                                               lab_database=config.dev_database,
@@ -395,6 +404,65 @@ if "predict" in config.steps:
 
     prediction_tbl = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
     display(prediction_tbl.orderBy(F.rand()))
+
+# COMMAND ----------
+
+if "offline_eval" in config.steps:
+    logger.info("Begin Offline Evaluation")
+    config_ev = config["offline_eval"]
+
+    user_key = config_ev["user_key"]
+    pred_key = f'{config_ev["pred_key"]}_id'
+    method = config_ev["method"]
+    methods = config_ev["methods"]
+
+    for seg in seg_list:
+        seg_ext = [f"{k}={seg[k]}" for k in partitionByList]
+        seg_pred_data_path = create_path_campaign((config_ev["eval_data_path"] + seg_ext))
+        seg_data_processor_path = create_path_campaign((config_ev["data_processor_path"] + seg_ext))
+
+        data_processor = load_object(seg_data_processor_path)
+        data = (spark.read.parquet(seg_pred_data_path)
+                .select(user_key, pred_key, data_processor.feature_col)
+                ).toPandas()
+
+        all_methods = list(set(map(str.lower, methods)).union({str(method).lower()}))
+        for m in all_methods:
+            logger.info(f"Run Offline Evaluation for Method: {m.upper()}")
+            algo_fn = partial(
+                build_recommender,
+                method=m
+            )
+
+            evaluator = Evaluator(
+                algorithm=algo_fn,
+                data_processor=data_processor,
+                user_key=user_key,
+                pred_key=pred_key,
+                pred_items=config_ev["pred_items"],
+                dev_size=config_ev["dev_size"],
+                test_size=config_ev["test_size"],
+                split_col=config_ev["split_col"],
+                sample=config_ev["sample"],
+                random_state=config_ev["random_state"]
+            )
+
+            if config_ev["kfold"]:
+                eval_summary = evaluator.evaluate_kfold(data,
+                                                        n_splits=config_ev["n_splits"],
+                                                        shuffle=config_ev["shuffle"],
+                                                        run_tag=f"{seg}: {m}"
+                                                        )
+            else:
+                eval_summary = evaluator.evaluate(data, run_tag=f"{seg}: {m}")
+            eval_summaries[m] = eval_summary
+            full_eval_summary = pd.concat(list(eval_summaries.values()))
+
+# COMMAND ----------
+
+if "offline_eval" in config.steps:
+    # metrics summary
+    display(full_eval_summary)
 
 # COMMAND ----------
 

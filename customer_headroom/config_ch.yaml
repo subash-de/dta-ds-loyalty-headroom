@@ -14,19 +14,19 @@ tables:
     sensitivity: p
     partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data
+    prefix: headroom_etl_data_ch
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: predictions
+    prefix: predictions_ch
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation
+    prefix: headroom_allocation_ch
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
@@ -38,8 +38,8 @@ sections:
     dev_database: "loyalty_azlab_prod"
     training_table_prefix: "headroom_training"
     prediction_table_prefix: "headroom_prediction"
-    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
-    prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
+    directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/test_run/v0.1/
+    prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/test_run/prod_input/"
     upcoming_campaign: &upcoming_campaign "{campaign}"
     verions:
       data: &vdata v0.0.1
@@ -54,10 +54,11 @@ sections:
       lookback_days: &lookback_days 365
     columns:
       user_id: &user_id "cust_id"
-      item_id: &item_id "l2_id"
-      l1_ids: &l1_ids ["FD"]
+      item_id: &item_id "l3_id"
+      l1_ids: &l1_ids ["GM"]
       # ["GM"]
-      lx: &lx "l2"
+      lx: &lx "l3"
+      headroom_items: &headroom_items ["50"]
       feature_col: &feature_col "85percentile_total_spend_basket"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
@@ -101,7 +102,10 @@ sections:
       user_id: *user_id
       l1_ids: *l1_ids
       lx: *lx
-      lx_ids: &lx_ids ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
+      lx_ids: &lx_ids ['23', '27', '21', '11', '37', '40', '64', '20', '30', '50', '25', '33',
+                       '14', '10', '28', '31', '62', '19', '61', '24', '67', '41', '17', '71',
+                       '26', '66', '15', '63', '80', '29', '3', 'MY', 'GEN']
+      # ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
       # "EX08" - Non Trading
       # ["01", "02", "03", "04", "05", "07"]
       date_format: *date_format
@@ -143,6 +147,7 @@ sections:
       feature_col: *feature_col
       pred_key: *lx
       pred_items: *lx_ids
+      headroom_items: *headroom_items
       cat_cols: *seg_cat_cols
       partitionByList: *segPartition
       # output
