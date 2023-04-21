@@ -51,7 +51,7 @@ sections:
     dates:
       upcoming_campaign: *upcoming_campaign
       etl_date: &etl_date "today"
-      lookback_days: &lookback_days 365
+      lookback_days: &lookback_days 180
     columns:
       user_id: &user_id "cust_id"
       item_id: &item_id "l2_id"
