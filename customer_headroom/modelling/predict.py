@@ -94,7 +94,7 @@ class Predictor(object):
         if self.lognorm:
             data_transform = (pred_df
                               .withColumn(out_predict_col,
-                                          (F.exp(F.col(predict_col) + self.min_col) * (self.max_col - self.min_col)))
+                                          (F.exp(F.col(predict_col) ) * (self.max_col - self.min_col) + self.min_col))
                               )
         else:
             data_transform = pred_df.withColumn(out_predict_col, F.col(predict_col))
