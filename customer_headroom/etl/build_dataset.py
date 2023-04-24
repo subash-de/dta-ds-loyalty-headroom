@@ -218,27 +218,36 @@ class TransactionsManager(BaseManager):
                         )
         return trx_timespan
 
-    def add_time_window_ind(self, 
-                            cust_lx_trx: DataFrame
-                            )-> DataFrame:
-        """Calcuate the time window, difference in days between the transaction date, and etl date divided by the window length
+    # def add_time_window_ind(self, 
+    #                         cust_lx_trx: DataFrame
+    #                         )-> DataFrame:
+    #     """Calcuate the time window, difference in days between the transaction date, and etl date divided by the window length
 
-        Args:
-            cust_lx_trx (DataFrame): _description_
+    #     Args:
+    #         cust_lx_trx (DataFrame): _description_
 
-        Returns:
-            DataFrame: _description_
-        """
+    #     Returns:
+    #         DataFrame: _description_
+    #     """
+    #     @F.udf(T.IntegerType())
+    #     def time_window_back(date):
+    #         days_diff = (datetime.strptime(str(self.etl_date), self.date_format) - 
+    #                     datetime.strptime(str(date), self.date_format)).days // self.time_window_length
+    #         return days_diff 
+        
+    #     trx_time_window = (cust_lx_trx
+    #                     .select("date")
+    #                     .withColumn("time_window_ind", time_window_back("date")))
+
+    #     return trx_time_window
+    def add_time_window_ind(self, cust_lx_trx) -> DataFrame:
         @F.udf(T.IntegerType())
         def time_window_back(date):
             days_diff = (datetime.strptime(str(self.etl_date), self.date_format) - 
-                        datetime.strptime(str(date), self.date_format)).days // self.time_window_length
+                            datetime.strptime(str(date), self.date_format)).days // self.time_window_length
             return days_diff 
-        
-        trx_time_window = (cust_lx_trx
-                        .select("date")
-                        .withColumn("time_window_ind", time_window_back("date")))
 
+        trx_time_window = (cust_lx_trx.select("date").withColumn("time_window_ind", time_window_back("date")))
         return trx_time_window
 
 
@@ -340,7 +349,7 @@ class TransactionsManager(BaseManager):
                                          .join(customer_lx_trans_count, on=[self.user_key])
                                          .join(customer_lx_trans_count_basket, on=[self.user_key])
                                          .join(customer_lx_trans_baskets_full, on=[self.user_key])
-                                         .join(customer_lx_trans_time_window, on = [self.user_key])
+                                         .join(customer_lx_trans_time_window, on = [self.user_key, f"{self.lx}_id"])
                                          )
         return customer_lx_trans_grouped_all
 
