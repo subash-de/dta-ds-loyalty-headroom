@@ -87,7 +87,8 @@ class TransactionsManager(BaseManager):
             # No BWS, {"lx_id": [list, of, products, at lx, level]}
             exclude_items: Dict[str, str] = {"l3_id": ["MM14"]},
             window_days: Optional[int] = None,
-            christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101")
+            christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101"),
+            time_window_length: Optional[int] = None,
     ):
         self.etl_date = etl_date
         self.lookback_days = lookback_days
@@ -102,6 +103,7 @@ class TransactionsManager(BaseManager):
         self.exclude_items = exclude_items
         self.window_days = window_days
         self.christmas_remove_range = christmas_remove_range
+        self.time_window_length = time_window_length
 
     def get(self,
             trx_line: DataFrame,
@@ -132,6 +134,14 @@ class TransactionsManager(BaseManager):
             trx_line = trx_line.join(cust_seg.select(self.user_key).distinct(), on=self.user_key)
 
         cust_lx_trx = self.get_customer_transactions(trx_line, lu_article)
+
+        # Add a time window column to groupby 
+        if self.time_window_length is not None: 
+            time_window_ind_df = self.add_time_window_ind(cust_lx_trx = cust_lx_trx)
+            cust_lx_trx = (cust_lx_trx
+                                    .join(time_window_ind_df, on = "date", how = 'left'))
+
+
         cust_lx_trx_metrics = self.get_transaction_metrics(cust_lx_trx)
 
         if self.window_days is not None:
@@ -140,6 +150,7 @@ class TransactionsManager(BaseManager):
                                    .join(trx_timespan, on=self.user_key, how="left")
                                    .fillna(0)
                                    )
+
 
         if cust_seg is not None:
             # Join on segmentation columns
@@ -206,6 +217,30 @@ class TransactionsManager(BaseManager):
                              )
                         )
         return trx_timespan
+
+    def add_time_window_ind(self, 
+                            cust_lx_trx: DataFrame
+                            )-> DataFrame:
+        """Calcuate the time window, difference in days between the transaction date, and etl date divided by the window length
+
+        Args:
+            cust_lx_trx (DataFrame): _description_
+
+        Returns:
+            DataFrame: _description_
+        """
+        @F.udf(T.IntegerType())
+        def time_window_back(date):
+            days_diff = (datetime.strftime(str(self.etl_date), self.date_format) - 
+                        datetime.strftime(str(date), self.date_format)).days // self.time_window_length
+            return days_diff 
+        
+        trx_time_window = (cust_lx_trx
+                        .select("date")
+                        .withColumn("time_window_ind", time_window_back("date")))
+
+        return trx_time_window
+
 
     def get_transaction_metrics(self,
                                 customer_lx_transactions: DataFrame
@@ -287,12 +322,25 @@ class TransactionsManager(BaseManager):
                                                )
                                           )
 
+
+        customer_lx_trans_time_window= (customer_lx_transactions
+                                     .filter(F.col(self.user_key).isNotNull())
+                                     .groupby([self.user_key, f"{self.lx}_id", "time_window_ind"])
+                                     .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"),
+                                          F.countDistinct("basket_id").cast(T.IntegerType()).alias("basket_per_time_window"))
+                                     .groupby([self.user_key, f"{self.lx}_id"])
+                                     .agg(*self.get_expr_agg("total_spend_time_window"),
+                                          *self.get_expr_agg("basket_per_time_window"),
+                                          )
+                                     )
+
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                          .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
                                          .join(customer_lx_trans_sum, on=[self.user_key])
                                          .join(customer_lx_trans_count, on=[self.user_key])
                                          .join(customer_lx_trans_count_basket, on=[self.user_key])
                                          .join(customer_lx_trans_baskets_full, on=[self.user_key])
+                                         .join(customer_lx_trans_time_window, on = [self.user_key])
                                          )
         return customer_lx_trans_grouped_all
 

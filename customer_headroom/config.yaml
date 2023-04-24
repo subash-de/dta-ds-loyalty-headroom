@@ -58,7 +58,7 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "total_spend"
+      feature_col: &feature_col "85percentile_total_spend_time_window"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
@@ -106,6 +106,7 @@ sections:
       # ["01", "02", "03", "04", "05", "07"]
       date_format: *date_format
       window_days: 30
+      time_window_days : 7
       christmas_remove_range: ["1218", "0101"]
       # output
       etl_data_tbl: *etl_data_tbl
