@@ -231,8 +231,8 @@ class TransactionsManager(BaseManager):
         """
         @F.udf(T.IntegerType())
         def time_window_back(date):
-            days_diff = (datetime.strftime(str(self.etl_date), self.date_format) - 
-                        datetime.strftime(str(date), self.date_format)).days // self.time_window_length
+            days_diff = (datetime.strptime(str(self.etl_date), self.date_format) - 
+                        datetime.strptime(str(date), self.date_format)).days // self.time_window_length
             return days_diff 
         
         trx_time_window = (cust_lx_trx
