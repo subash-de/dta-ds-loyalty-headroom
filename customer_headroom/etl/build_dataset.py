@@ -252,7 +252,9 @@ class TransactionsManager(BaseManager):
             .select("date")
             .distinct()
             .withColumn("time_window_ind", time_window_back("date"))
-            )
+            )  
+
+        # add a comment line to test package version
         return trx_time_window
 
 
