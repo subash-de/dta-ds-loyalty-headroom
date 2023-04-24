@@ -247,7 +247,12 @@ class TransactionsManager(BaseManager):
                             datetime.strptime(str(date), self.date_format)).days // self.time_window_length
             return days_diff 
 
-        trx_time_window = (cust_lx_trx.select("date").withColumn("time_window_ind", time_window_back("date")))
+        trx_time_window = (
+            cust_lx_trx
+            .select("date")
+            .distinct()
+            .withColumn("time_window_ind", time_window_back("date"))
+            )
         return trx_time_window
 
 
