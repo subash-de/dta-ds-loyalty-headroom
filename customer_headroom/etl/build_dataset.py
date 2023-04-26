@@ -350,6 +350,19 @@ class TransactionsManager(BaseManager):
                                           )
                                      )
 
+        # max time window basket 
+        customer_lx_trans_weekly_max_basket = (
+            customer_lx_transactions
+            .filter(F.col(self.user_key).isNotNull())
+            .groupby([self.user_key, f"{self.lx}_id", "basket_id", "time_window_ind"])
+            .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"),
+            F.count("basket_id").cast(T.IntegerType()).alias("items_per_basket"))
+            .groupby([self.user_key, f"{self.lx}_id", "time_window_ind"])
+            .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+            .groupby([self.user_key, f"{self.lx}_id"])
+            .agg(*self.get_expr_agg("time_window_max_spend_basket"))
+        )
+
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                          .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
                                          .join(customer_lx_trans_sum, on=[self.user_key])
@@ -357,6 +370,7 @@ class TransactionsManager(BaseManager):
                                          .join(customer_lx_trans_count_basket, on=[self.user_key])
                                          .join(customer_lx_trans_baskets_full, on=[self.user_key])
                                          .join(customer_lx_trans_time_window, on = [self.user_key, f"{self.lx}_id"])
+                                         .join(customer_lx_trans_weekly_max_basket, on = [self.user_key, f"{self.lx}_id"])
                                          )
         return customer_lx_trans_grouped_all
 
