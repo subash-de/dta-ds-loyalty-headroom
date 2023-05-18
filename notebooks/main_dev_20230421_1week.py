@@ -1,4 +1,8 @@
 # Databricks notebook source
+# MAGIC %md using version 0.1.9a123129
+
+# COMMAND ----------
+
 # MAGIC %run ./bootstrap $environment=prod
 
 # COMMAND ----------
@@ -48,7 +52,7 @@ prediction_month = prediction_time_span/30.
 
 # COMMAND ----------
 
-prediction_period = prediction_week / 2 # want bi-weekly 
+prediction_period = prediction_week  # want weekly 
 prediction_period
 
 # COMMAND ----------
@@ -147,15 +151,6 @@ class Allocator2(Allocator):
 
 # COMMAND ----------
 
-config_use = config["use_segments"]
-persist_utils.get_table_name(
-            factory_database=config_use.segmentations_tbl.factory_database,
-            lab_database=config.dev_database,
-            table_prefix=config_use.segmentations_tbl.prefix,
-            sensitivity=config_use.segmentations_tbl.sensitivity)
-
-# COMMAND ----------
-
 def find_all_segments(data, partitionByList):
     segs = data.select(partitionByList).distinct().rdd.map(
         lambda x: {k: v for (k, v) in zip(partitionByList, x)}).collect()
@@ -176,6 +171,8 @@ def get_campaign(campaign, etl_date):
 
 config_dates = config["dates"]
 campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
+
+campaign = 20230421
 print(f"""
 config_dates: {config_dates}
 campaign: {campaign}
@@ -588,84 +585,41 @@ if "allocate" in config.steps:
                        .withColumn("campaign", F.lit(campaign))
                        )
 
-    headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
-                                                        lab_database=config.dev_database,
-                                                        factory_database=config_al.headroom_export_tbl.factory_database,
-                                                        sensitivity=config_al.headroom_export_tbl.sensitivity,
-                                                        schema=headroom_export,
-                                                        partition_by=config_al.headroom_export_tbl.partitionByList,
-                                                        overwrite_table=True,
-                                                        assert_equality=False,
-                                                        add_load_timestamp=True
-                                                        )
-    logger.info(f"""headroom_tbl_name: {prediction_tbl_name}""")
+    # headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
+    #                                                     lab_database=config.dev_database,
+    #                                                     factory_database=config_al.headroom_export_tbl.factory_database,
+    #                                                     sensitivity=config_al.headroom_export_tbl.sensitivity,
+    #                                                     schema=headroom_export,
+    #                                                     partition_by=config_al.headroom_export_tbl.partitionByList,
+    #                                                     overwrite_table=True,
+    #                                                     assert_equality=False,
+    #                                                     add_load_timestamp=True
+    #                                                     )
+    # logger.info(f"""headroom_tbl_name: {prediction_tbl_name}""")
 
-    persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
-                                       insert_df=headroom_export,
-                                       delete_where=f"campaign={campaign}")
-
-# COMMAND ----------
-
-# prediction_scores = allocation_manager.get_prediction_scores(predictions)
-# display(prediction_scores)
+    # persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
+    #                                    insert_df=headroom_export,
+    #                                    delete_where=f"campaign={campaign}")
 
 # COMMAND ----------
 
-# prediction_scores_tagged = allocation_manager.tag_outliers(prediction_scores)
-# display(prediction_scores)
+headroom_tbl = (headroom_export).cache()
 
 # COMMAND ----------
 
-# data_hrm = (prediction_scores_tagged
-#             .withColumn("used_headroom_frac",
-#                         F.when((F.col("pct_error") >= allocation_manager.max_increase) & (F.col("outlier") == 0),
-#                                 (1. + allocation_manager.max_increase / 100.))
-#                         .when((F.col("pct_error") <= allocation_manager.min_increase) & (F.col("outlier") == 0),
-#                               (1. + allocation_manager.min_increase / 100.))
-#                         .when((F.col("pct_error") < allocation_manager.max_increase) &
-#                               (F.col("pct_error") > allocation_manager.min_increase) & (F.col("outlier") == 0),
-#                               1. + F.col("pct_error") / 100.)
-#                         .otherwise(allocation_manager.headroom_factor)
-#                         )
-#             .withColumn("total_used_headroom_per_id",
-#                         F.col(allocation_manager.feature_col) * F.col("used_headroom_frac"))
-#             .withColumn("rand", F.rand())
-#             .groupby(allocation_manager.user_key, "experian_hh_composition", "segmentation")
-#             .agg(F.sum("total_used_headroom_per_id").alias("total_used_headroom_whole_time_period"))
-#             .withColumn("total_used_headroom", F.col("total_used_headroom_whole_time_period") / F.lit(11.857 ))
-#             )
-# display(data_hrm)
+headroom_tbl.display()
 
 # COMMAND ----------
 
-# headroom_predictions = allocation_manager.get_headroom(prediction_scores_tagged)
-# display(headroom_predictions)
+# if "allocate" in config.steps:
+#     config_al = config["allocation"]
+#     headroom_tbl_name = persist_utils.get_table_name(factory_database=config_al.headroom_export_tbl.factory_database,
+#                                                      lab_database=config.dev_database,
+#                                                      table_prefix=config_al.headroom_export_tbl.prefix,
+#                                                      sensitivity=config_al.headroom_export_tbl.sensitivity)
 
-# COMMAND ----------
-
-# headroom_export = allocation_manager.prepare_export(headroom_predictions)
-
-# COMMAND ----------
-
-  # headroom_export = (allocation_manager.get(predictions)
-  #                      .withColumn("campaign", F.lit(campaign))
-  #                      )
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-if "allocate" in config.steps:
-    config_al = config["allocation"]
-    headroom_tbl_name = persist_utils.get_table_name(factory_database=config_al.headroom_export_tbl.factory_database,
-                                                     lab_database=config.dev_database,
-                                                     table_prefix=config_al.headroom_export_tbl.prefix,
-                                                     sensitivity=config_al.headroom_export_tbl.sensitivity)
-
-    headroom_tbl = persist_utils.read_table(table_name=headroom_tbl_name, where=f"campaign={campaign}")
-    display(headroom_tbl.orderBy(F.rand()))
+#     headroom_tbl = persist_utils.read_table(table_name=headroom_tbl_name, where=f"campaign={campaign}")
+#     display(headroom_tbl.orderBy(F.rand()))
 
 # COMMAND ----------
 
@@ -683,15 +637,15 @@ config_al["offer_limits"]
 
 # COMMAND ----------
 
-headroom_tbl_name
-
-# COMMAND ----------
-
 # headroom_export
 
 headroom_tbl.groupBy('desc').count()\
   .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
   .over(W.partitionBy()),3)).display()
+
+# COMMAND ----------
+
+0.651 + 0.154 + 0.1 
 
 # COMMAND ----------
 
@@ -707,4 +661,24 @@ headroom_tbl.groupBy('desc').count()\
 
 # COMMAND ----------
 
+display(headroom_tbl.filter(F.col("cust_id") == '-7385606211536121860'))
+
+# COMMAND ----------
+
+display(headroom_tbl.filter(F.col("cust_id") == '6872732896086312431'))
+
+# COMMAND ----------
+
 # dbutils.notebook.exit(True)
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+30 // 7
+
+# COMMAND ----------
+
+def add_time_window_ind(self, cust)

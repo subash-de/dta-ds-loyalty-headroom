@@ -58,7 +58,7 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "85percentile_total_spend_time_window"
+      feature_col: &feature_col "85percentile_time_window_max_spend_basket"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
@@ -192,7 +192,7 @@ sections:
                      '14146': [100,120],
                      '14242': [120,140],
                      '14190': [140,160],
-                     '14191': [180,220]}
+                     '14191': [160,220]}
       user_key: *user_id
       outlier_min: -0.5
       outlier_max: 200.
