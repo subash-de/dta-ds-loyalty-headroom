@@ -93,13 +93,17 @@ segtco_history_.display()
 
 # COMMAND ----------
 
+# %sql select campaign, count (distinct campaign) from loyalty_azlab_prod.headroom_allocation_p_tbl group by campaign  
+
+# COMMAND ----------
+
 # MAGIC %md  Saving the allocation result, because the allocation gets overwritten each time
 
 # COMMAND ----------
 
 # alloc = spark.sql("select * from loyalty_azlab_prod.headroom_allocation_p_tbl")
-# # # alloc.groupby("campaign").count().show()
-# alloc.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/allocation", mode = "overwrite")
+# # # # alloc.groupby("campaign").count().show()
+# alloc.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230519/allocation", mode = "overwrite")
 
 
 # COMMAND ----------
@@ -107,7 +111,7 @@ segtco_history_.display()
 # alloc = spark.sql("select * from loyalty_azlab_prod.headroom_allocation_p_tbl")
 # alloc.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230426/allocation")
 
-alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/allocation")
+alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230519/allocation")
 alloc.count()
 
 # COMMAND ----------
@@ -173,11 +177,11 @@ alloc_combined.groupBy('desc', 'cust_band_fd').count().display()
 
 # COMMAND ----------
 
-# MAGIC %sql select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515 
+# MAGIC %sql select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519
 
 # COMMAND ----------
 
-predictions = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515 ")
+predictions = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519 ")
 predictions = (
   predictions
   .select("cust_id", "50percentile_time_window_max_spend_basket", 
@@ -190,11 +194,11 @@ predictions.display()
 
 # COMMAND ----------
 
-# MAGIC %sql select count (distinct cust_id) from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515 and (experian_hh_composition is null or segmentation is null) 
+# MAGIC %sql select count (distinct cust_id) from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519 and (experian_hh_composition is null or segmentation is null) 
 
 # COMMAND ----------
 
-prediction = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515")
+prediction = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519")
 
 # COMMAND ----------
 
@@ -723,7 +727,7 @@ sns.kdeplot(data=capped_pd, x="estimated_spend_capped", hue = "desc")
 # COMMAND ----------
 
 
-alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/allocation")
+alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230519/allocation")
 alloc.count()
 
 # COMMAND ----------

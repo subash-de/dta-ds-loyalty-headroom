@@ -14,13 +14,13 @@ tables:
     sensitivity: p
     partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data
+    prefix: headroom_etl_data_2305
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: predictions
+    prefix: predictions_2305
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
@@ -58,7 +58,7 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "85percentile_time_window_max_spend_basket"
+      feature_col: &feature_col 'weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
