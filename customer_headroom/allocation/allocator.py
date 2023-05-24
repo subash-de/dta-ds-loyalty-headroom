@@ -106,24 +106,24 @@ class Allocator(object):
                        .withColumn("pct_error",
                                    100. * (F.col("prediction_out") - F.col(self.feature_col)) / (
                                        F.col(self.feature_col)))
-                       .groupby(self.user_key, "experian_hh_composition", "segmentation")
-                       .agg(F.mean(self.feature_col).alias("mean_input"),
-                            F.sum(self.feature_col).alias("sum_input"),
-                            F.sum("prediction_out").alias("sum_prediction"),
-                            F.mean("pct_error").alias("mean_pct_error"),
-                            (F.sum(F.col(self.feature_col) * F.col("visits")) / F.sum(
-                                F.col("visits"))).alias("weightedmean_input"),
-                            (F.sum(F.col("pct_error") * F.col("visits")) / F.sum(F.col("visits"))).alias(
-                                "weightedmean_pct_error")
-                            )
+                      #  .groupby(self.user_key, "experian_hh_composition", "segmentation")
+                      #  .agg(F.mean(self.feature_col).alias("mean_input"),
+                      #       F.sum(self.feature_col).alias("sum_input"),
+                      #       F.sum("prediction_out").alias("sum_prediction"),
+                      #       F.mean("pct_error").alias("mean_pct_error"),
+                      #       (F.sum(F.col(self.feature_col) * F.col("visits")) / F.sum(
+                      #           F.col("visits"))).alias("weightedmean_input"),
+                      #       (F.sum(F.col("pct_error") * F.col("visits")) / F.sum(F.col("visits"))).alias(
+                      #           "weightedmean_pct_error")
+                      #       )
                        .withColumn("offer_id", F.lit(None))
                        )
         return pred_scores
 
     def tag_outliers(self, data):
         data_tagged = (data
-                       .withColumn("outlier", F.when(((F.col("mean_pct_error") >= self.outlier_min) &
-                                                      (F.col("mean_pct_error") <= self.outlier_max)
+                       .withColumn("outlier", F.when(((F.col("pct_error") >= self.outlier_min) &
+                                                      (F.col("pct_error") <= self.outlier_max)
                                                       ), 0).otherwise(1))
                        )
         return data_tagged
@@ -132,18 +132,28 @@ class Allocator(object):
 
         data_hrm = (data
                     .withColumn("used_headroom_frac",
-                                F.when((F.col("mean_pct_error") >= self.max_increase) & (F.col("outlier") == 0),
+                                F.when((F.col("pct_error") >= self.max_increase) & (F.col("outlier") == 0),
                                        (1. + self.max_increase / 100.))
-                                .when((F.col("mean_pct_error") <= self.min_increase) & (F.col("outlier") == 0),
+                                .when((F.col("pct_error") <= self.min_increase) & (F.col("outlier") == 0),
                                       (1. + self.min_increase / 100.))
-                                .when((F.col("mean_pct_error") < self.max_increase) &
-                                      (F.col("mean_pct_error") > self.min_increase) & (F.col("outlier") == 0),
-                                      1. + F.col("mean_pct_error") / 100.)
+                                .when((F.col("pct_error") < self.max_increase) &
+                                      (F.col("pct_error") > self.min_increase) & (F.col("outlier") == 0),
+                                      1. + F.col("pct_error") / 100.)
                                 .otherwise(self.headroom_factor)
                                 )
-                    .withColumn("total_used_headroom",
-                                F.col("weightedmean_input") * F.col("used_headroom_frac"))
+                    .withColumn("total_used_headroom_per_id",
+                                F.col(self.feature_col) * F.col("used_headroom_frac"))
+                    # .groupby(self.user_key, "experian_hh_composition", "segmentation") # there are null segmentations, which result in random offer being assigned
+                    .groupby(self.user_key)
+                    .agg(F.sum("total_used_headroom_per_id").alias("total_used_headroom_whole_time_period"),
+                    F.sum(self.feature_col).alias("sum_total_spend_whole_period"))
+                    .withColumn("sum_total_spend", F.col("sum_total_spend_whole_period") )
+                    .withColumn("total_used_headroom", F.col("total_used_headroom_whole_time_period") )
                     .withColumn("rand", F.rand())
+                    .withColumn("offer_id", F.lit(None))
+                    # .withColumn("total_used_headroom",
+                    #             F.col("weightedmean_input") * F.col("used_headroom_frac"))
+                    # .withColumn("rand", F.rand())
                     )
         for k, v in self.offer_limits.items():
             offer_id = int(k)
@@ -174,7 +184,7 @@ class Allocator(object):
                                    .otherwise(F.col("offer_id"))
                                    )
                        .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
-                       .withColumn("estimated_spend", F.round(F.col("weightedmean_input"), 2))
+                       .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
                        .withColumn("estimated_headroom",
                                    F.round(F.col("spend_plus_headroom") - F.col("weightedmean_input"),
                                            2))

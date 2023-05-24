@@ -197,6 +197,148 @@ prediction_period
 #       return customer_lx_trans_grouped_all
 
 
+class TransactionsManager2(TransactionsManager):
+      def get_transaction_metrics(self,
+                                customer_lx_transactions: DataFrame
+                                ) -> DataFrame:
+        """
+        Extract a series of metrics/stats from the customer level transaction table derived from the
+        `get_customer_transactions` method.
+        This includes:
+        - number_of_transactions (count per lx & total over all lx)
+        - total_spend (sum per lx & total over all lx)
+        - items (count per lx & total over all lx)
+        - visits (count per lx & total over all lx)
+        - spend_per_item (mean per lx & total over all lx)
+        - sum_baskets (count per lx & total over all lx)
+        """
+
+        # Find number of transactions per customer per l2 category
+        customer_lx_trans_grouped = (customer_lx_transactions
+                                     .filter(F.col(self.user_key).isNotNull())
+                                    #  .groupby([self.user_key, f"{self.lx}_id"])
+                                     .groupby([self.user_key])
+                                     #                                      .pivot(f"{self.lx}_id")
+                                     .agg(F.count(f"{self.lx}_name")
+                                          .cast(T.IntegerType()).alias("number_of_transactions"),
+                                          F.sum("sales_amt")
+                                          .cast(T.DoubleType()).alias("total_spend"),
+                                          F.count("article_id")
+                                          .cast(T.IntegerType()).alias("items"),
+                                          F.countDistinct("basket_id")
+                                          .cast(T.IntegerType()).alias("visits"),
+                                          (F.sum("sales_amt") / F.count("article_id"))
+                                          .cast(T.DoubleType()).alias("spend_per_item")
+                                          )
+                                     )
+
+        # Find the sum of transactions and number of transactions
+        customer_lx_trans_sum = (customer_lx_transactions
+                                 .filter(F.col(self.user_key).isNotNull())
+                                 .groupby([self.user_key])
+                                 .agg(F.count(f"{self.lx}_name").cast(T.IntegerType())
+                                      .alias("total_number_of_transactions"),
+                                      F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_amount"),
+                                      F.countDistinct("basket_id").cast(T.IntegerType()).alias("total_visits"),
+                                      F.count("article_id").cast(T.IntegerType()).alias("total_items")
+                                      )
+                                 )
+
+        # add number of baskets
+        customer_lx_trans_count_basket = (customer_lx_transactions
+                                          .filter(F.col(self.user_key).isNotNull())
+                                          .groupby([self.user_key])
+                                          .agg(F.countDistinct("basket_id").cast(T.IntegerType()).alias("sum_baskets"))
+                                          )
+
+        customer_lx_trans_count = (customer_lx_transactions
+                                   .filter(F.col(self.user_key).isNotNull())
+                                   .groupby([self.user_key])
+                                   .agg(F.countDistinct(f"{self.lx}_name").alias(f"count_of_{self.lx}"))
+                                   )
+
+        customer_lx_trans_baskets = (customer_lx_transactions
+                                     .filter(F.col(self.user_key).isNotNull())
+                                     .groupby([self.user_key, f"{self.lx}_id", "basket_id"])
+                                     .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"),
+                                          F.count("basket_id").cast(T.IntegerType()).alias("items_per_basket"))
+                                     .groupby([self.user_key, f"{self.lx}_id"])
+                                     .agg(*self.get_expr_agg("total_spend_basket"),
+                                          *self.get_expr_agg("items_per_basket"),
+                                          )
+                                     )
+
+        customer_lx_trans_baskets_full = (customer_lx_transactions
+                                          .filter(F.col(self.user_key).isNotNull())
+                                          .groupby([self.user_key, "basket_id"])
+                                          .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket_full"),
+                                               F.count("basket_id").cast(T.DoubleType()).alias("items_per_basket_full"))
+                                          .groupby([self.user_key])
+                                          .agg(*self.get_expr_agg("total_spend_basket_full"),
+                                               *self.get_expr_agg("items_per_basket_full"),
+                                               )
+                                          )
+
+
+        customer_lx_trans_time_window= (customer_lx_transactions
+                                     .filter(F.col(self.user_key).isNotNull())
+                                     .groupby([self.user_key, f"{self.lx}_id", "time_window_ind"])
+                                     .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"),
+                                          F.countDistinct("basket_id").cast(T.IntegerType()).alias("basket_per_time_window"))
+                                     .groupby([self.user_key, f"{self.lx}_id"])
+                                     .agg(*self.get_expr_agg("total_spend_time_window"),
+                                          *self.get_expr_agg("basket_per_time_window"),
+                                          )
+                                     )
+
+        # max time window basket 
+        customer_lx_trans_weekly_max_basket = (
+            customer_lx_transactions
+            .filter(F.col(self.user_key).isNotNull())
+            .groupby([self.user_key, f"{self.lx}_id", "basket_id", "time_window_ind"])
+            .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"),
+            F.count("basket_id").cast(T.IntegerType()).alias("items_per_basket"))
+            .groupby([self.user_key, f"{self.lx}_id", "time_window_ind"])
+            .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+            .groupby([self.user_key, f"{self.lx}_id"])
+            .agg(*self.get_expr_agg("time_window_max_spend_basket"))
+        )
+        unpivotExpr = "stack(6, 'average_time_window_max_spend_basket', average_time_window_max_spend_basket, \
+          '50percentile_time_window_max_spend_basket', 50percentile_time_window_max_spend_basket, \
+            '75percentile_time_window_max_spend_basket', 75percentile_time_window_max_spend_basket, \
+            '85percentile_time_window_max_spend_basket', 85percentile_time_window_max_spend_basket, \
+            '90percentile_time_window_max_spend_basket', 90percentile_time_window_max_spend_basket, \
+            '100percentile_time_window_max_spend_basket', 100percentile_time_window_max_spend_basket ) as (l2_id,weekly_max_basket_percentile)"
+
+
+        cust_weekly_max_transaction = ( 
+                                       customer_lx_transactions
+        .select(self.user_key, "basket_id", "time_window_ind", "sales_amt")
+        # find the basket amount 
+        .groupby(self.user_key, "basket_id", "time_window_ind")
+        .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
+        # find the weeky max basket amount 
+        .groupby(self.user_key, "time_window_ind")
+        .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+        .groupby("cust_id")
+        .agg(*self.get_expr_agg("time_window_max_spend_basket"))  
+        .select("cust_id", F.expr(unpivotExpr))
+        .filter(~F.col("l2_id").isNull())
+        )
+
+
+        customer_lx_trans_grouped_all = (customer_lx_trans_grouped
+                                         .join(cust_weekly_max_transaction, on = [self.user_key], how = "outer")
+                                        #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
+                                        #  .join(customer_lx_trans_sum, on=[self.user_key])
+                                        #  .join(customer_lx_trans_count, on=[self.user_key])
+                                        #  .join(customer_lx_trans_count_basket, on=[self.user_key])
+                                        #  .join(customer_lx_trans_baskets_full, on=[self.user_key])
+                                        #  .join(customer_lx_trans_time_window, on = [self.user_key, f"{self.lx}_id"])
+                                        #  .join(customer_lx_trans_weekly_max_basket, on = [self.user_key, f"{self.lx}_id"])
+                                         )
+        return customer_lx_trans_grouped_all
+
 # COMMAND ----------
 
 class Allocator2(Allocator):
@@ -440,6 +582,10 @@ if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict"))
 
 # COMMAND ----------
 
+config["use_segments"]
+
+# COMMAND ----------
+
 # campaign = 20230417
 
 # COMMAND ----------
@@ -481,11 +627,14 @@ if "build_dataset" in config.steps:
     segmentations_tbl = (persist_utils.read_table(table_name=segmentations_tbl_name, where=f"campaign= {campaign}")
                          .select([config_bd["user_id"]] + partitionByList)
                          )
-    # segmentations_tbl = (segmentations_tbl.withColumn("campaign", F.lit("campaign_temp")))
+    
+    #############
+    segmentations_tbl = (segmentations_tbl.withColumn("campaign", F.lit("20230519")))
+    #############
 
     # build training data
     # trx_manager = TransactionsManager(
-    trx_manager = TransactionsManager(
+    trx_manager = TransactionsManager2(
         etl_date=get_date(config_bd["etl_date"]),
         lookback_days=config_bd["lookback_days"],
         l1_ids=config_bd["l1_ids"],
@@ -543,9 +692,9 @@ segmentations_tbl.filter(F.col("cust_id") == "6872732896086312431").display()
 
 # COMMAND ----------
 
-import inspect
-lines = inspect.getsource(trx_manager.add_time_window_ind)
-print(lines)
+# import inspect
+# lines = inspect.getsource(trx_manager.add_time_window_ind)
+# print(lines)
 
 # COMMAND ----------
 
@@ -630,6 +779,10 @@ print(lines)
 
 # COMMAND ----------
 
+campaign 
+
+# COMMAND ----------
+
 if "build_dataset" in config.steps:
     config_bd = config["build_dataset"]
     etl_data_tbl_name = persist_utils.get_table_name(factory_database=config_bd.etl_data_tbl.factory_database,
@@ -645,11 +798,37 @@ if "build_dataset" in config.steps:
 
 # COMMAND ----------
 
+etl_data_tbl.filter(F.col("cust_id") == 6872732896086312431).display()
+
+# COMMAND ----------
+
 # MAGIC %md # Fit recommendation 
 
 # COMMAND ----------
 
 config["fit_rec"]
+
+# COMMAND ----------
+
+campaign = 20230519
+
+# COMMAND ----------
+
+seg_list
+
+# COMMAND ----------
+
+seg_list2 = seg_list.copy()
+# seg_list2 = [i for i in seg_list2]
+seg_list_3 = []
+
+for j in seg_list2:
+  k = j 
+  k['campaign'] = 20230519
+  seg_list_3.append(k)
+
+seg_list_3
+
 
 # COMMAND ----------
 
@@ -723,6 +902,8 @@ if "fit_rec" in config.steps:
     n_threads = int(config_fr["n_threads"])
     pool = ThreadPool(n_threads)
     _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr, database=config.dev_database), seg_list)
+    # _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr, database=config.dev_database), seg_list_3)
+
     pool.close()
     pool.join()
 
@@ -732,9 +913,19 @@ if "fit_rec" in config.steps:
 
 # COMMAND ----------
 
+config["predict"]
+
+# COMMAND ----------
+
 if "predict" in config.steps:
     logger.info("Begin Predictions")
     config_pd = config["predict"]
+    config_pd["pred_items"] = ["average_time_window_max_spend_basket", 
+                                     "50percentile_time_window_max_spend_basket", 
+                                     "75percentile_time_window_max_spend_basket", 
+                                     "85percentile_time_window_max_spend_basket", 
+                                     "90percentile_time_window_max_spend_basket", 
+                                     "100percentile_time_window_max_spend_basket",]
     partitionByList = config_pd["partitionByList"]
 
     etl_data_tbl_name = persist_utils.get_table_name(factory_database=config_pd.etl_data_tbl.factory_database,
@@ -742,7 +933,8 @@ if "predict" in config.steps:
                                                      table_prefix=config_pd.etl_data_tbl.prefix,
                                                      sensitivity=config_pd.etl_data_tbl.sensitivity)
 
-    for seg in seg_list:
+    # for seg in seg_list:
+    for seg in seg_list_3:
         seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
         ext_str = "_".join([str(seg[k]) for k in partitionByList if k!="campaign"])
         data = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
@@ -765,7 +957,7 @@ if "predict" in config.steps:
         )
 
         predictions = predictor_manager.get(data=data, algo=rec_algo)
-        predictions = (predictions.withColumn("campaign", F.lit("20230515"))) # ----------------------------------------------
+        predictions = (predictions.withColumn("campaign", F.lit("20230519"))) # ----------------------------------------------
 
         prediction_tbl_name = persist_utils.create_beam_table(table_prefix=config_pd.prediction_tbl.prefix,
                                                               lab_database=config.dev_database,
@@ -823,6 +1015,7 @@ if "allocate" in config.steps:
                                                        sensitivity=config_al.prediction_tbl.sensitivity)
 
     predictions = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
+    predictions = (predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket"))
 
     allocation_manager = Allocator2(feature_col=config_al["feature_col"],
                                    offer_limits=config_al["offer_limits"],
@@ -1232,8 +1425,214 @@ class Allocator2(Allocator):
 
 # COMMAND ----------
 
+config_use = config["use_segments"]
+config_use
+
+# COMMAND ----------
+
+config_use = config["use_segments"]
+if "build_dataset" in config.steps:
+    logger.info("Begin building dataset")
+    config_bd = config["build_dataset"]
+
+    # load factory tables
+    articles_df = spark.table("analytics_trans_prod.lu_article")
+    trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
+    sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
+    segtco_history_df = spark.table("customer_azbase_prod.segtco_history")
+
+    # Load Segmentation Dataset
+    # TODO: Replace with customer cluster work to reduce data sizes to appropiate groups.
+    # TODO: Possibl build data for just 1 segment at a time?
+    partitionByList = config_use.segmentations_tbl.partitionByList
+
+    # segmentations_tbl_name = persist_utils.(table_prefix=config_bd.segmentations_tbl.prefix,
+    #                                                          lab_database=config.dev_database,
+    #                                                          factory_database=config_bd.segmentations_tbl.factory_database,
+    #                                                          sensitivity=config_bd.segmentations_tbl.sensitivity,
+    #                                                          schema=segmentations,
+    #                                                          partition_by=config_bd.segmentations_tbl.partitionByList,
+    #                                                          overwrite_table=False,
+    #                                                          assert_equality=False,
+    #                                                          add_load_timestamp=True
+    #                                                          )
+    segmentations_tbl_name = persist_utils.get_table_name(
+      table_prefix=config_bd.segmentations_tbl.prefix,
+      lab_database=config.dev_database,
+      factory_database=config_bd.segmentations_tbl.factory_database,
+      sensitivity=config_bd.segmentations_tbl.sensitivity,
+    )
+    logger.info(f"""segmentations_tbl_name: {segmentations_tbl_name}""")
+
+    segmentations_tbl = (persist_utils.read_table(table_name=segmentations_tbl_name, where=f"campaign= {campaign}")
+                         .select([config_bd["user_id"]] + partitionByList)
+                         )
+    # segmentations_tbl = (segmentations_tbl.withColumn("campaign", F.lit("campaign_temp")))
+
+    # build training data
+    # trx_manager = TransactionsManager(
+    trx_manager = TransactionsManager2(
+        etl_date=get_date(config_bd["etl_date"]),
+        lookback_days=config_bd["lookback_days"],
+        l1_ids=config_bd["l1_ids"],
+        lx=config_bd["lx"],
+        lx_ids=config_bd["lx_ids"],
+        user_key=config_bd["user_id"],
+        window_days=config_bd["window_days"],
+        time_window_length = config_bd["time_window_days"],
+    )
+    # all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
+
+    # etl_data_tbl_name = persist_utils.create_beam_table(table_prefix=config_bd.etl_data_tbl.prefix,
+    #                                                     lab_database=config.dev_database,
+    #                                                     factory_database=config_bd.etl_data_tbl.factory_database,
+    #                                                     sensitivity=config_bd.etl_data_tbl.sensitivity,
+    #                                                     schema=all_data,
+    #                                                     partition_by=config_bd.etl_data_tbl.partitionByList,
+    #                                                     overwrite_table=False,
+    #                                                     assert_equality=False,
+    #                                                     add_load_timestamp=True
+    #                                                     )
+    # logger.info(f"""etl_data_tbl_name: {etl_data_tbl_name}""")
+
+    # persist_utils.insert_df_into_table(target_tbl_name=etl_data_tbl_name,
+    #                                    insert_df=all_data,
+    #                                    add_columns=True,
+    #                                   #  insert_append=True,
+    #                                    delete_where=f"campaign={campaign}")
+
+    # # TODO: Save cust_id to account_id Mapping as done in the customer_purchase work.
+
+    # # # Check dataset
+    # # logger.info("Validating training data")
+    # # all_data = spark.read.parquet(all_data_path)
+    # # valid_manager = ValidationManager(
+    # #     start_date=config_bd["start_date"],
+    # #     end_date=config_bd["end_date"],
+    # #     date_format=config_bd["date_format"],
+    # # )
+    # # is_valid = valid_manager.get(all_data)
+    # # logger.info(f"Is dataset valid: {is_valid}")
+    # # logger.info(f"all_data | row count: {all_data.count()}; column count: {len(all_data.columns)}")
+
+# COMMAND ----------
+
+# all_data = trx_manager.get(trx_line_df.filter(F.col("cust_id") == 6872732896086312431), articles_df, cust_seg=segmentations_tbl)
+# display(all_data)
+
+# COMMAND ----------
+
+trx_line = (
+    trx_manager._add_date(trx_line_df)
+        .filter(F.col("date") <= trx_manager.etl_date)
+        .filter(F.col("date") >= trx_manager.lookback_date)
+        .filter(F.col("PURCHASE_CHANNEL").isin(trx_manager.channels))
+        .filter(F.col("l1_id").isin(list(trx_manager.l1_ids)))
+        .filter(trx_manager.get_common_filters())
+        .filter(F.col("cust_id") == 6872732896086312431)
+)
+# display(trx_line)
+# if self.christmas_remove_range is not None:
+#     trx_line = self.remove_christmas_transactions(trx_line,
+#                                                   christmas_range=self.christmas_remove_range)
+
+# # Remove items from transaction list, e.g. BWS items
+# trx_line = self.remove_items(trx_line)
+
+# COMMAND ----------
+
+# trx_line.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/atl_6872732896086312431")
+
+# COMMAND ----------
+
+trx_line = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/atl_6872732896086312431")
+trx_line.display()
+
+# COMMAND ----------
+
+# trx_line = (
+#     self._add_date(trx_line)
+#         .filter(F.col("date") <= self.etl_date)
+#         .filter(F.col("date") >= self.lookback_date)
+#         .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
+#         .filter(F.col("l1_id").isin(list(self.l1_ids)))
+#         .filter(self.get_common_filters())
+# )
+# trx_line = trx_line_2
+
+lu_article = articles_df
+
+if trx_manager.christmas_remove_range is not None:
+    trx_line = trx_manager.remove_christmas_transactions(trx_line,
+                                                  christmas_range=trx_manager.christmas_remove_range)
+
+# Remove items from transaction list, e.g. BWS items
+trx_line = trx_manager.remove_items(trx_line)
+
+# if cust_seg is not None:
+#     # Only keep customers in segmentations
+#     trx_line = trx_line.join(cust_seg.select(trx_manager.user_key).distinct(), on=trx_manager.user_key)
+
+cust_lx_trx = trx_manager.get_customer_transactions(trx_line, lu_article)
+
+# Add a time window column to groupby 
+if trx_manager.time_window_length is not None: 
+    time_window_ind_df = trx_manager.add_time_window_ind(cust_lx_trx = cust_lx_trx)
+    cust_lx_trx = (cust_lx_trx
+                            .join(time_window_ind_df, on = "date", how = 'left'))
+    
+cust_lx_trx_metrics = trx_manager.get_transaction_metrics(cust_lx_trx)
 
 
 # COMMAND ----------
 
+display(cust_lx_trx_metrics)
 
+# COMMAND ----------
+
+display(cust_lx_trx)
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+unpivotExpr = "stack(6, 'average_time_window_max_spend_basket', average_time_window_max_spend_basket, \
+'50percentile_time_window_max_spend_basket', 50percentile_time_window_max_spend_basket, \
+  '75percentile_time_window_max_spend_basket', 75percentile_time_window_max_spend_basket, \
+  '85percentile_time_window_max_spend_basket', 85percentile_time_window_max_spend_basket, \
+  '90percentile_time_window_max_spend_basket', 90percentile_time_window_max_spend_basket, \
+  '100percentile_time_window_max_spend_basket', 100percentile_time_window_max_spend_basket ) as (l2_id,weekly_max_basket_percentile)"
+
+display(
+  cust_lx_trx
+  .select("cust_id", "basket_id", "time_window_ind", "sales_amt")
+  # find the basket amount 
+  .groupby("cust_id", "basket_id", "time_window_ind")
+  .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
+  # find the weeky max basket amount 
+  .groupby("cust_id", "time_window_ind")
+  .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+  .groupby("cust_id")
+  .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))  
+  .select("cust_id", F.expr(unpivotExpr))
+  .filter(~F.col("l2_id").isNull())
+  # .unpivot(ids = ['cust_id'], values = ["average_time_window_max_spend_basket", 
+  #                                    "50percentile_time_window_max_spend_basket", 
+  #                                    "75percentile_time_window_max_spend_basket", 
+  #                                    "85percentile_time_window_max_spend_basket", 
+  #                                    "90percentile_time_window_max_spend_basket", 
+  #                                    "100percentile_time_window_max_spend_basket",],
+  #       variableColumnName = "l2_id", 
+  #       valueColumnName = 'value',
+  #       )  
+)
+
+# COMMAND ----------
+
+unpivotExpr = "stack(3, 'average_time_window_max_spend_basket', average_time_window_max_spend_basket, '50percentile_time_window_max_spend_basket', 50percentile_time_window_max_spend_basket,) as (L2_id,value)"
+unPivotDF = pivotDF.select("Product", expr(unpivotExpr)) \
+    .where("Total is not null")
+unPivotDF.show(truncate=False)
+unPivotDF.show()

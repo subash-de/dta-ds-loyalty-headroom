@@ -52,6 +52,7 @@ sections:
       upcoming_campaign: *upcoming_campaign
       etl_date: &etl_date "today"
       lookback_days: &lookback_days 180
+      lookback_days_registration: &lookback_days_registration 180
     columns:
       user_id: &user_id "cust_id"
       item_id: &item_id "l2_id"
@@ -144,7 +145,12 @@ sections:
       rec_name: *rec_name
       feature_col: *feature_col
       pred_key: *lx
-      pred_items: *lx_ids
+      pred_items: ["average_time_window_max_spend_basket", 
+                  "50percentile_time_window_max_spend_basket", 
+                  "75percentile_time_window_max_spend_basket", 
+                  "85percentile_time_window_max_spend_basket", 
+                  "90percentile_time_window_max_spend_basket", 
+                  "100percentile_time_window_max_spend_basket",] #*lx_ids
       cat_cols: *seg_cat_cols
       partitionByList: *segPartition
       # output
@@ -194,6 +200,7 @@ sections:
                      '14190': [140,160],
                      '14191': [160,220]}
       user_key: *user_id
+      prediction_row_name: "85percentile_time_window_max_spend_basket"
       outlier_min: -0.5
       outlier_max: 200.
       max_increase: 80.
