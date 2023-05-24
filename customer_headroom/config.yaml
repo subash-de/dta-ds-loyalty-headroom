@@ -59,7 +59,7 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col 'weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+      feature_col: &feature_col "weekly_max_basket_percentile" # "l2_id_total_spend_basket" #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
@@ -78,11 +78,11 @@ sections:
       # [*prod_input, *upcoming_campaign, "customers"]
       num_cols: *seg_num_cols
       cat_cols: *seg_cat_cols
-      frac_lim: 0.1
+      frac_lim: 0.01 # 0.1
       fail_limit: 3
-      k_search_min: 2
+      k_search_min: 5
       k_search_max: 8
-      pca_k: 3
+      pca_k: 2
       data_lower_lim: 200000
       verbose: True
       # output
@@ -128,10 +128,13 @@ sections:
       max_lim: 500
       cat_cols: *seg_cat_cols
       partitionByList: *segPartition
-      params: None
+      # params: None
 #      {'n_factors': 100, 'n_epochs': 20, 'biased': True, 'init_mean': 0, 'init_std_dev': 0.1, 'lr_bu': 0.005,
 #       'lr_bi': 0.005, 'lr_pu': 0.005, 'lr_qi': 0.005, 'reg_bu': 0.02, 'reg_bi': 0.02, 'reg_pu': 0.02,'reg_qi': 0.02}
-      param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
+      # param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
+      # param_grid: {'n_factors':[100],'n_epochs':[20,30],  'lr_all':[0.005],'reg_all':[0.1]}
+      params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
+      param_grid : None
       # output
       model_tags: {"campaignType": "averageBasketValue", "runType": "recurring"}
       write_mode: overwrite # errorifexists # overwrite
@@ -145,6 +148,7 @@ sections:
       rec_name: *rec_name
       feature_col: *feature_col
       pred_key: *lx
+      # pred_items: *lx_ids
       pred_items: ["average_time_window_max_spend_basket", 
                   "50percentile_time_window_max_spend_basket", 
                   "75percentile_time_window_max_spend_basket", 
