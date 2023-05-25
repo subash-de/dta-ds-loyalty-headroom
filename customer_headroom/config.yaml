@@ -2,31 +2,31 @@ experiment_name: v4
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data
+    prefix: headroom_segmentation_data_np
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: ["campaign"]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations
+    prefix: headroom_segmentations_np
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data_230522
+    prefix: headroom_etl_data_np
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: predictions_230522
+    prefix: predictions_np
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation
+    prefix: headroom_allocation_np
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
@@ -128,13 +128,13 @@ sections:
       max_lim: 500
       cat_cols: *seg_cat_cols
       partitionByList: *segPartition
-      # params: None
+      params: None
 #      {'n_factors': 100, 'n_epochs': 20, 'biased': True, 'init_mean': 0, 'init_std_dev': 0.1, 'lr_bu': 0.005,
 #       'lr_bi': 0.005, 'lr_pu': 0.005, 'lr_qi': 0.005, 'reg_bu': 0.02, 'reg_bi': 0.02, 'reg_pu': 0.02,'reg_qi': 0.02}
-      # param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
+      param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
       # param_grid: {'n_factors':[100],'n_epochs':[20,30],  'lr_all':[0.005],'reg_all':[0.1]}
-      params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
-      param_grid : None
+      # params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
+      # param_grid : None
       # output
       model_tags: {"campaignType": "averageBasketValue", "runType": "recurring"}
       write_mode: overwrite # errorifexists # overwrite
