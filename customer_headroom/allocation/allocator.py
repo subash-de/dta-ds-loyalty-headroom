@@ -186,7 +186,7 @@ class Allocator(object):
                        .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
                        .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
                        .withColumn("estimated_headroom",
-                                   F.round(F.col("spend_plus_headroom") - F.col("weightedmean_input"),
+                                   F.round(F.col("spend_plus_headroom") - F.col("sum_total_spend"),
                                            2))
                        .select(self.user_key, "offer_id", "estimated_spend", "estimated_headroom",
                                "spend_plus_headroom", "desc")

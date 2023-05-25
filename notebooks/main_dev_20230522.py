@@ -505,6 +505,10 @@ if "predict" in config.steps:
 
 # COMMAND ----------
 
+# MAGIC %sql select load_timestamp, count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl group by load_timestamp
+
+# COMMAND ----------
+
 # MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl  where load_timestamp is not null 
 
 # COMMAND ----------
@@ -514,6 +518,10 @@ if "predict" in config.steps:
 # COMMAND ----------
 
 # MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl where prediction_out < l2_id_total_spend_basket
+
+# COMMAND ----------
+
+39459712 / (39459712 + 12687585)
 
 # COMMAND ----------
 
@@ -561,9 +569,14 @@ if "allocate" in config.steps:
 
     predictions = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
 
+    # if its under predicting, then would force the stretch to be 20% 
+    predictions = (predictions
+                    .withColumn("prediction_out_orig", F.lit(F.col("prediction_out")))
+                    .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col("l2_id_total_spend_basket"), F.col("l2_id_total_spend_basket")*1.2).otherwise(F.col("prediction_out_orig")))
+                    )
 
     # predictions = (predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket"))
-    predictions = (predictions.filter(F.col("l2_id") == config_al["prediction_row_name"]))
+    # predictions = (predictions.filter(F.col("l2_id") == config_al["prediction_row_name"]))
 
     allocation_manager = Allocator(feature_col=config_al["feature_col"],
                                    offer_limits=config_al["offer_limits"],
@@ -609,6 +622,12 @@ if "allocate" in config.steps:
 
     headroom_tbl = persist_utils.read_table(table_name=headroom_tbl_name, where=f"campaign={campaign}")
     display(headroom_tbl.orderBy(F.rand()))
+
+# COMMAND ----------
+
+headroom_tbl.groupBy('desc').count()\
+  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
+  .over(W.partitionBy()),3)).display()
 
 # COMMAND ----------
 
@@ -956,8 +975,8 @@ prediction.select("cust_id").distinct().count()
 
 # COMMAND ----------
 
-# prediction.filter(F.col("cust_id") == 6872732896086312431).display()
-prediction.filter(F.col("cust_id") == -1007808414006833422).display()
+prediction.filter(F.col("cust_id") == 6872732896086312431).display()
+# prediction.filter(F.col("cust_id") == -1007808414006833422).display()
 
 # COMMAND ----------
 
