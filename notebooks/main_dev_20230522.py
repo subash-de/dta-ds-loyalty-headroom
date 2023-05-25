@@ -74,7 +74,7 @@ config["segmentation"]
 
 # COMMAND ----------
 
-logger.info(f""" {config["segmentation"] } """)
+# logger.info(f""" {config["segmentation"] } """)
 
 # COMMAND ----------
 
@@ -191,6 +191,14 @@ if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict"))
     logger.info(f"Segmentations: {seg_list}")
 
 # seg_list = [{'experian_hh_composition': 'Cat_U', 'segmentation': 1}, {'experian_hh_composition': 'Cat_00', 'segmentation': 1}, {'experian_hh_composition': 'Cat_00', 'segmentation': 0}, {'experian_hh_composition': 'Cat_05', 'segmentation': 1}, {'experian_hh_composition': 'Cat_01', 'segmentation': 0}, {'experian_hh_composition': 'Cat_05', 'segmentation': 0}, {'experian_hh_composition': 'Cat_03', 'segmentation': 0}, {'experian_hh_composition': 'Cat_01', 'segmentation': 1}, {'experian_hh_composition': 'Cat_U', 'segmentation': 2}, {'experian_hh_composition': 'Cat_U', 'segmentation': 0}, {'experian_hh_composition': 'Cat_02', 'segmentation': 1}, {'experian_hh_composition': 'Cat_02', 'segmentation': 0}, {'experian_hh_composition': 'Cat_03', 'segmentation': 1}, {'experian_hh_composition': 'Cat_08', 'segmentation': 1}, {'experian_hh_composition': 'Cat_04', 'segmentation': 0}, {'experian_hh_composition': 'Cat_08', 'segmentation': 0}, {'experian_hh_composition': 'Cat_04', 'segmentation': 1}, {'experian_hh_composition': 'Cat_07', 'segmentation': 0}, {'experian_hh_composition': 'Cat_10', 'segmentation': 0}, {'experian_hh_composition': 'Cat_07', 'segmentation': 1}, {'experian_hh_composition': 'Cat_10', 'segmentation': 1}, {'experian_hh_composition': 'Cat_06', 'segmentation': 1}, {'experian_hh_composition': 'Cat_06', 'segmentation': 0}, {'experian_hh_composition': 'Cat_09', 'segmentation': 1}, {'experian_hh_composition': 'Cat_11', 'segmentation': 0}, {'experian_hh_composition': 'Cat_09', 'segmentation': 0}, {'experian_hh_composition': 'Cat_11', 'segmentation': 1}]
+
+# COMMAND ----------
+
+seg_list
+
+# COMMAND ----------
+
+len(seg_list)
 
 # COMMAND ----------
 
@@ -316,6 +324,10 @@ logger.info(config["fit_rec"])
 
 # COMMAND ----------
 
+# MAGIC %sql select count(*), experian_hh_composition, segmentation from loyalty_azlab_prod.headroom_etl_data_230522_p_tbl where campaign = 20230522 group by experian_hh_composition, segmentation 
+
+# COMMAND ----------
+
 # To replace the campaign in seg_list if using a previouse segmentation
 # seg_list2 = seg_list.copy()
 # # seg_list2 = [i for i in seg_list2]
@@ -343,10 +355,10 @@ def run_fit_rec(seg, config, database):
 
     seg_etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
 
-    max_size = config["max_train_size"]
-    if max_size:
-        # Randomly order and limit to max size of training segment
-        seg_etl_data_tbl = seg_etl_data_tbl.orderBy(F.rand()).limit(max_size)
+    # max_size = config["max_train_size"]
+    # if max_size:
+    #     # Randomly order and limit to max size of training segment
+    #     seg_etl_data_tbl = seg_etl_data_tbl.orderBy(F.rand()).limit(max_size)
 
     seg_data = seg_etl_data_tbl.toPandas()
 
@@ -493,6 +505,42 @@ if "predict" in config.steps:
 
 # COMMAND ----------
 
+# MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl  where load_timestamp is not null 
+
+# COMMAND ----------
+
+# MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl where prediction_out >= l2_id_total_spend_basket
+
+# COMMAND ----------
+
+# MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl where prediction_out < l2_id_total_spend_basket
+
+# COMMAND ----------
+
+21655153 / 7397371
+
+# COMMAND ----------
+
+# MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl  where load_timestamp is null 
+
+# COMMAND ----------
+
+30492144 / 7393251
+
+# COMMAND ----------
+
+# MAGIC %sql select count(*) from loyalty_azlab_prod.predictions_230522_p_tbl 
+
+# COMMAND ----------
+
+# MAGIC %sql select count(distinct cust_id) from loyalty_azlab_prod.predictions_230522_p_tbl 
+
+# COMMAND ----------
+
+52147297 / 7397371
+
+# COMMAND ----------
+
 # MAGIC %md # Allocation 
 
 # COMMAND ----------
@@ -630,10 +678,10 @@ def run_fit_rec(seg, config, database):
 
     seg_etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
 
-    max_size = config["max_train_size"]
-    if max_size:
-        # Randomly order and limit to max size of training segment
-        seg_etl_data_tbl = seg_etl_data_tbl.orderBy(F.rand()).limit(max_size)
+    # max_size = config["max_train_size"]
+    # if max_size:
+    #     # Randomly order and limit to max size of training segment
+    #     seg_etl_data_tbl = seg_etl_data_tbl.orderBy(F.rand()).limit(max_size)
 
     seg_data = seg_etl_data_tbl.toPandas()
 
@@ -687,7 +735,9 @@ if "fit_rec" in config.steps:
     # for seg in seg_list:
     n_threads = int(config_fr["n_threads"])
     pool = ThreadPool(n_threads)
-    _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr, database=config.dev_database), [seg_list[11]] )
+    _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr, database=config.dev_database), seg_list )
+
+    # _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr, database=config.dev_database), [seg_list[11]] )
     # _pool_res = pool.map(lambda s: run_fit_rec(s, config=config_fr, database=config.dev_database), seg_list_3)
 
     pool.close()
@@ -826,7 +876,7 @@ data_processor.max_col
 
 # COMMAND ----------
 
-campaign
+config["predict"]
 
 # COMMAND ----------
 
@@ -893,7 +943,7 @@ if "predict" in config.steps:
 
 # COMMAND ----------
 
-prediction = spark.sql("select * from loyalty_azlab_prod.predictions_2305_p_tbl where campaign = 20230522")
+prediction = spark.sql("select * from loyalty_azlab_prod.predictions_230522_p_tbl where campaign = 20230522")
 prediction.count()
 
 # COMMAND ----------
@@ -906,7 +956,12 @@ prediction.select("cust_id").distinct().count()
 
 # COMMAND ----------
 
-prediction.filter(F.col("cust_id") == 6872732896086312431).display()
+# prediction.filter(F.col("cust_id") == 6872732896086312431).display()
+prediction.filter(F.col("cust_id") == -1007808414006833422).display()
+
+# COMMAND ----------
+
+# MAGIC %sql select * from loyalty_azlab_prod.headroom_etl_data_230522_p_tbl where cust_id == -1007808414006833422
 
 # COMMAND ----------
 
@@ -1335,7 +1390,7 @@ max_basket_id.display()
 (trx_line
 .join(max_basket_id.select("cust_id", "basket_id"), how = 'inner', on = ["cust_id", "basket_id"])
 # .filter(F.col("basket_id") == "15696-7317-702-20230415100931")
-.groupby("L2_ID").agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
+.groupby("cust_id", "L2_ID").agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
 ).display()
 
 # COMMAND ----------

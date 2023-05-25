@@ -14,13 +14,13 @@ tables:
     sensitivity: p
     partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data_2305
+    prefix: headroom_etl_data_230522
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: predictions_2305
+    prefix: predictions_230522
     factory_stg_database: datascienceoffers_analysestg_prod
     factory_database: datascienceoffers_analyse_prod
     sensitivity: p
@@ -59,7 +59,7 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "weekly_max_basket_percentile" # "l2_id_total_spend_basket" #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+      feature_col: &feature_col "l2_id_total_spend_basket" #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
@@ -148,13 +148,13 @@ sections:
       rec_name: *rec_name
       feature_col: *feature_col
       pred_key: *lx
-      # pred_items: *lx_ids
-      pred_items: ["average_time_window_max_spend_basket", 
-                  "50percentile_time_window_max_spend_basket", 
-                  "75percentile_time_window_max_spend_basket", 
-                  "85percentile_time_window_max_spend_basket", 
-                  "90percentile_time_window_max_spend_basket", 
-                  "100percentile_time_window_max_spend_basket",] #*lx_ids
+      pred_items: *lx_ids
+      # pred_items: ["average_time_window_max_spend_basket", 
+      #             "50percentile_time_window_max_spend_basket", 
+      #             "75percentile_time_window_max_spend_basket", 
+      #             "85percentile_time_window_max_spend_basket", 
+      #             "90percentile_time_window_max_spend_basket", 
+      #             "100percentile_time_window_max_spend_basket",] #*lx_ids
       cat_cols: *seg_cat_cols
       partitionByList: *segPartition
       # output
