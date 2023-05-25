@@ -3,6 +3,10 @@
 
 # COMMAND ----------
 
+dbutils.widgets.text("seg_list", "[]", "")
+
+# COMMAND ----------
+
 import os
 from functools import partial
 import pandas as pd
@@ -28,6 +32,15 @@ from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
+
+# COMMAND ----------
+
+seg_list = eval(dbutils.widgets.get("seg_list"))
+
+if seg_list == []:
+    dbutils.notebook.exit(True)
+else:
+    logger.info(f"seg_list: {seg_list}")
 
 # COMMAND ----------
 
