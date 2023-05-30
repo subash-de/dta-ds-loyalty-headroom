@@ -77,7 +77,7 @@ last_registration_date = int(
     ).strftime(date_format)
 )
 
-campaign = 20230522
+# campaign = 20230522
 
 logger.info(
     f"""
@@ -134,9 +134,15 @@ if "predict" in config.steps:
         )
 
         predictions = predictor_manager.get(data=data, algo=rec_algo)
-        predictions = predictions.withColumn(
-            "campaign", F.lit(campaign)
-        )  # ----------------------------------------------
+        # add the segment here !!! or else the rows are note deleted when inserting 
+        # new rows are added in the predict step for l2 ids not in etl
+        predictions = (predictions
+                       .withColumn("campaign", F.lit(campaign))
+                       .drop("load_timestamp")
+                       .withColumn("experian_hh_composition", F.lit(seg["experian_hh_composition"]) )
+                       .withColumn("segmentation", F.lit(seg["segmentation"]) )
+         ) # ----------------------------------------------
+
 
         prediction_tbl_name = persist_utils.create_beam_table(
             table_prefix=config_pd.prediction_tbl.prefix,

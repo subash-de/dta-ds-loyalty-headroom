@@ -77,7 +77,7 @@ last_registration_date = int(
     ).strftime(date_format)
 )
 
-campaign = 20230522
+# campaign = 20230522
 
 logger.info(
     f"""

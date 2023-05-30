@@ -64,7 +64,7 @@ last_registration_date = int(
     ).strftime(date_format)
 )
 
-campaign = 20230522
+# campaign = 20230522
 
 logger.info(
     f"""
@@ -79,6 +79,7 @@ last_registration_date: {last_registration_date}
 if "allocate" in config.steps:
     logger.info("Begin Allocation")
     config_al = config["allocation"]
+    under_predict_adjustment_factor = config_al["headroom_factor"]
 
     prediction_tbl_name = persist_utils.get_table_name(factory_database=config_al.prediction_tbl.factory_database,
                                                        lab_database=config.dev_database,
@@ -91,7 +92,7 @@ if "allocate" in config.steps:
     # if its under predicting, then would force the stretch to be 20% 
     predictions = (predictions
                     .withColumn("prediction_out_orig", F.lit(F.col("prediction_out")))
-                    .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col("l2_id_total_spend_basket"), F.col("l2_id_total_spend_basket")*1.2).otherwise(F.col("prediction_out_orig")))
+                    .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col("l2_id_total_spend_basket"), F.col("l2_id_total_spend_basket")*under_predict_adjustment_factor).otherwise(F.col("prediction_out_orig")))
                     )
 
     # predictions = (predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket"))
@@ -107,6 +108,7 @@ if "allocate" in config.steps:
                                    min_increase=config_al["min_increase"],
                                    headroom_factor=config_al["headroom_factor"],
                                    fill_offer=config_al["fill_offer"],
+                                   prev_not_bought_factor = config_al["prev_not_bought_factor"],
                                    )
 
     headroom_export = (allocation_manager.get(predictions)
@@ -141,6 +143,12 @@ if "allocate" in config.steps:
 
     headroom_tbl = persist_utils.read_table(table_name=headroom_tbl_name, where=f"campaign={campaign}")
     display(headroom_tbl.orderBy(F.rand()))
+
+# COMMAND ----------
+
+headroom_tbl.groupBy('desc').count()\
+  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
+  .over(W.partitionBy()),3)).display()
 
 # COMMAND ----------
 

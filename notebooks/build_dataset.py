@@ -74,6 +74,10 @@ last_registration_date: {last_registration_date}
 
 # COMMAND ----------
 
+# MAGIC %md # Build Segmentations
+
+# COMMAND ----------
+
 if "segmentation" in config.steps:
     logger.info("Begin Building Segmentation Dataset")
     config_sg = config["segmentation"]
@@ -172,6 +176,10 @@ if "segmentation" in config.steps:
 
 # COMMAND ----------
 
+# MAGIC %md # Get Segmentations to use
+
+# COMMAND ----------
+
 if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict")):
     config_use = config["use_segments"]
     if config_use["all"] == True:
@@ -190,6 +198,10 @@ if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict"))
     else:
         seg_list = config_use["seg_list"]
     logger.info(f"Segmentations: {seg_list}")
+
+# COMMAND ----------
+
+# MAGIC %md # Build dataset
 
 # COMMAND ----------
 
