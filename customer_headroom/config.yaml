@@ -209,6 +209,7 @@ sections:
       outlier_max: 200.
       max_increase: 80.
       min_increase: 5.
+      prev_not_bought_factor: 1
       headroom_factor: 1.2
       fill_offer: 14140
       # Output

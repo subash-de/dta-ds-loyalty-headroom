@@ -25,6 +25,7 @@ class Allocator(object):
             fill_offer: Optional[int] = None,
             offer_desc: Optional[Dict[str, str]] = None,
             date_format: Optional[str] = "%Y%m%d",
+            prev_not_bought_factor: float = 1,
     ):
         self.feature_col = feature_col
         self.offer_limits = offer_limits
@@ -103,9 +104,15 @@ class Allocator(object):
 
     def get_prediction_scores(self, predictions):
         pred_scores = (predictions
-                       .withColumn("pct_error",
+                      #  .withColumn("pct_error",
+                      #              100. * (F.col("prediction_out") - F.col(self.feature_col)) / (
+                      #                  F.col(self.feature_col)))
+
+                      # set pct error to 0 if there is no purchase (value of 0 in feature col)
+                      .withColumn("pct_error", F.when(F.col(self.feature_col) >0, 
                                    100. * (F.col("prediction_out") - F.col(self.feature_col)) / (
-                                       F.col(self.feature_col)))
+                                       F.col(self.feature_col))).otherwise(0)
+                                   )
                       #  .groupby(self.user_key, "experian_hh_composition", "segmentation")
                       #  .agg(F.mean(self.feature_col).alias("mean_input"),
                       #       F.sum(self.feature_col).alias("sum_input"),
@@ -116,6 +123,7 @@ class Allocator(object):
                       #       (F.sum(F.col("pct_error") * F.col("visits")) / F.sum(F.col("visits"))).alias(
                       #           "weightedmean_pct_error")
                       #       )
+                    
                        .withColumn("offer_id", F.lit(None))
                        )
         return pred_scores
@@ -141,8 +149,12 @@ class Allocator(object):
                                       1. + F.col("pct_error") / 100.)
                                 .otherwise(self.headroom_factor)
                                 )
-                    .withColumn("total_used_headroom_per_id",
-                                F.col(self.feature_col) * F.col("used_headroom_frac"))
+                    # .withColumn("total_used_headroom_per_id",
+                    #             F.col(self.feature_col) * F.col("used_headroom_frac"))
+                    # set the headroom of non purchase to the prediction
+                    .withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
+                                                                       F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor)
+                                )
                     # .groupby(self.user_key, "experian_hh_composition", "segmentation") # there are null segmentations, which result in random offer being assigned
                     .groupby(self.user_key)
                     .agg(F.sum("total_used_headroom_per_id").alias("total_used_headroom_whole_time_period"),
