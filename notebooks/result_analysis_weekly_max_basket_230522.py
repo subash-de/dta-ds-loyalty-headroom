@@ -93,13 +93,17 @@ segtco_history_.display()
 
 # COMMAND ----------
 
+# %sql select campaign, count (distinct campaign) from loyalty_azlab_prod.headroom_allocation_p_tbl group by campaign  
+
+# COMMAND ----------
+
 # MAGIC %md  Saving the allocation result, because the allocation gets overwritten each time
 
 # COMMAND ----------
 
 # alloc = spark.sql("select * from loyalty_azlab_prod.headroom_allocation_p_tbl")
-# # # alloc.groupby("campaign").count().show()
-# alloc.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/allocation", mode = "overwrite")
+# # # # alloc.groupby("campaign").count().show()
+# alloc.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230522/allocation", mode = "overwrite")
 
 
 # COMMAND ----------
@@ -107,12 +111,21 @@ segtco_history_.display()
 # alloc = spark.sql("select * from loyalty_azlab_prod.headroom_allocation_p_tbl")
 # alloc.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230426/allocation")
 
-alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/allocation")
+alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230522/allocation")
 alloc.count()
 
 # COMMAND ----------
 
 alloc.display()
+
+
+# COMMAND ----------
+
+alloc.filter(( F.col("estimated_headroom") / F.col("estimated_spend") >= 0.0499) & ( F.col("estimated_headroom") / F.col("estimated_spend") <= 0.0501)).count()
+
+# COMMAND ----------
+
+alloc.filter(( F.col("estimated_headroom") / F.col("estimated_spend") >= 0.1999) & ( F.col("estimated_headroom") / F.col("estimated_spend") <= 0.2001)).count()
 
 # COMMAND ----------
 
@@ -173,11 +186,11 @@ alloc_combined.groupBy('desc', 'cust_band_fd').count().display()
 
 # COMMAND ----------
 
-# MAGIC %sql select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515 
+# MAGIC %sql select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519
 
 # COMMAND ----------
 
-predictions = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515 ")
+predictions = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519 ")
 predictions = (
   predictions
   .select("cust_id", "50percentile_time_window_max_spend_basket", 
@@ -190,11 +203,11 @@ predictions.display()
 
 # COMMAND ----------
 
-# MAGIC %sql select count (distinct cust_id) from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515 and (experian_hh_composition is null or segmentation is null) 
+# MAGIC %sql select count (distinct cust_id) from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519 and (experian_hh_composition is null or segmentation is null) 
 
 # COMMAND ----------
 
-prediction = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515")
+prediction = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519")
 
 # COMMAND ----------
 
@@ -421,11 +434,6 @@ F.count("*").alias("count"))
 
 # COMMAND ----------
 
-# MAGIC %md # SMR at individual basis 
-# MAGIC - To allow to distinquish high SMR and low SMR in the same group 
-
-# COMMAND ----------
-
 
 
 # COMMAND ----------
@@ -435,286 +443,6 @@ F.count("*").alias("count"))
 # COMMAND ----------
 
 
-
-# COMMAND ----------
-
-
-extra_spend_pd = alloc_spend_gt_x.select("spend_to_markdown_ratio", "spend_needed_to_redeem", "segment_desc", "cust_band_fd").toPandas()
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-extra_spend_pd
-
-# COMMAND ----------
-
-extra_spend_pd.groupby("segment_desc").count()
-
-# COMMAND ----------
-
-
-fig = px.histogram(extra_spend_pd.sample(n = 100000), x="spend_to_markdown_ratio")
-fig.show()
-
-# COMMAND ----------
-
-fig = px.histogram(extra_spend_pd[~(extra_spend_pd.segment_desc.isnull())].sample(n = 100000), x="spend_to_markdown_ratio", facet_row = "segment_desc")
-fig.show()
-
-# COMMAND ----------
-
-fig = px.histogram(extra_spend_pd[~(extra_spend_pd.segment_desc.isnull()) & (extra_spend_pd.spend_to_markdown_ratio > -5)].sample(n = 100000), x="spend_to_markdown_ratio", facet_row = "segment_desc")
-fig.update_yaxes(matches=None, showticklabels=True)
-fig.show()
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-alloc_spend_gt_x.filter(F.col("cust_id") == -6395435731941412311).display()
-
-# COMMAND ----------
-
-alloc_combined.filter(F.col("cust_id") == -6395435731941412311).display()
-
-# COMMAND ----------
-
-alloc.filter(F.col("cust_id") == -6395435731941412311).display()
-
-# COMMAND ----------
-
-# MAGIC %sql select * from loyalty_azlab_prod.headroom_allocation_p_tbl where campaign = 20230426 and cust_id = '-6395435731941412311'
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC - What is the minimun spend needed to get the offer 
-# MAGIC
-# MAGIC - What is the markdown of the offer 
-# MAGIC
-# MAGIC - Ratio of minimun spend / markdown for the offer,  if its >1 its good 
-# MAGIC If its < 1 means losing money 
-
-# COMMAND ----------
-
-# alloc_spend_gt_x = (
-#   alloc_spend_gt_x
-#   .withColumn("spend_needed_to_redeem", F.col("offer_spend_value") - F.col("spend_plus_headroom"))
-#   .withColumn("spend_needed_ex_headroom", F.col("offer_spend_value") - F.col("estimated_spend"))
-#   .withColumn("spend_to_markdown_ratio", F.col("spend_needed_to_redeem") / F.col("markdown"))
-#   .withColumn("spend_to_markdown_ratio_exc_headroom", F.col("spend_needed_ex_headroom") / F.col("markdown"))
-# )
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %md ## By TCOL 
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %sql select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230426
-
-# COMMAND ----------
-
-data = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230426")
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-loyalty_azlab_prod.predictions_p_tbl
-
-1
-
-# COMMAND ----------
-
-lab_230424 = spark.sql("select * from loyalty_azlab_prod.headroom_allocation_p_tbl where campaign = 20230424")
-display(lab_230424)
-
-# COMMAND ----------
-
-lab_230424.groupBy('desc').count()\
-  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
-  .over(W.partitionBy()),3)).display()
-
-# COMMAND ----------
-
-# MAGIC %md # Segmentation 
-
-# COMMAND ----------
-
-segtco_history_df = spark.table("customer_azbase_prod.segtco_history")
-segtco_history_ = tmo_utils.get_preceding_segtco_history(segtco_history_df, 20230424)
-
-# COMMAND ----------
-
-# display(segtco_history_)
-
-# COMMAND ----------
-
-# MAGIC %md # What is the movement for the different segments 
-
-# COMMAND ----------
-
-lab_segment = (
-  lab_230424
-  .join(segtco_history_.select("cust_id", "cust_band_fd"), on = "cust_id", how = "left")
-)
-display(lab_segment)
-
-# COMMAND ----------
-
-lab_segment.groupby("cust_band_fd", "desc").count().display()
-
-# COMMAND ----------
-
-lab_segment.crosstab("prod_desc", "cust_band_fd").display()
-
-# COMMAND ----------
-
-# MAGIC %md # What is the movement between different offer levels? 
-
-# COMMAND ----------
-
-alloc = (
-  prod_230424.select("cust_id", F.col("desc").alias("prod_desc"))
-  .join(lab_230424.select("cust_id", F.col("desc").alias("lab_desc")), on = "cust_id", how = "outer")
-)
-display(alloc)
-
-# COMMAND ----------
-
-alloc.groupby("prod_desc", "lab_desc").count().display()
-
-# COMMAND ----------
-
-alloc.crosstab("prod_desc", "lab_desc").display()
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %md # distribution of spend vs distribution of headroom 
-
-# COMMAND ----------
-
-display(lab_segment)
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %md # For each desc,  whats is the destribution of spend, and headroom 
-
-# COMMAND ----------
-
-display(lab_segment)
-
-# COMMAND ----------
-
-capped_df = (
-  lab_segment
-  .withColumn("estimated_spend_capped", F.when(F.col("estimated_spend") > 200, 200).otherwise(F.col("estimated_spend")))
-  .withColumn("estimated_headroom_capped", F.when(F.col("estimated_headroom") > 200, 200).otherwise(F.col("estimated_headroom")))
-)
-capped_df.display()
-
-
-# COMMAND ----------
-
-capped_pd = capped_df.select("desc", "cust_band_fd", "estimated_spend_capped", "estimated_headroom_capped").toPandas()
-
-# COMMAND ----------
-
-capped_pd
-
-# COMMAND ----------
-
-sns.kdeplot(data=capped_pd, x="estimated_spend_capped", y="estimated_headroom_capped", hue="desc")
-
-# COMMAND ----------
-
-sns.kdeplot(data=capped_pd, x="estimated_spend_capped", hue = "desc")
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %sql select case when customer_segment = 1 then 'grab and goers' else 'Err' end as segment_desc, account_id from fci_azlab_dev.sg_segmentation_cust_base_scores_all where year_end = 20230401
-
-# COMMAND ----------
-
-# MAGIC %sql select * from fci_azlab_dev.sg_segmentation_cust_base_scores_all where year_end = 20230401
-
-# COMMAND ----------
-
-# MAGIC %sql select case
-# MAGIC
-# MAGIC         when customer_segment = 1 then 'grab and goers'
-# MAGIC
-# MAGIC         when customer_segment = 2 then 'magic seekers'
-# MAGIC
-# MAGIC         when customer_segment = 3 then 'basket builders'
-# MAGIC
-# MAGIC         when customer_segment = 4 then 'easy eaters'
-# MAGIC
-# MAGIC         when customer_segment = 5 then 'savvy savers'
-# MAGIC
-# MAGIC         when customer_segment = 6 then 'social shoppers'
-# MAGIC
-# MAGIC         else 'Err' end as segment_desc, account_id
-# MAGIC
-# MAGIC from
-# MAGIC
-# MAGIC fci_azlab_dev.sg_segmentation_cust_base_scores_all
-# MAGIC
-# MAGIC where year_end = 20230401
-
-# COMMAND ----------
-
-# MAGIC %sql select * from fci_azlab_dev.ls_food_segment_20230429
-
-# COMMAND ----------
-
-# MAGIC %sql select * from fci_azlab_dev.ls_food_segment_20230429
 
 # COMMAND ----------
 
@@ -723,8 +451,14 @@ sns.kdeplot(data=capped_pd, x="estimated_spend_capped", hue = "desc")
 # COMMAND ----------
 
 
-alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230515/allocation")
+alloc = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230522/allocation")
 alloc.count()
+
+# COMMAND ----------
+
+alloc.groupBy('desc').count()\
+  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
+  .over(W.partitionBy()),3)).display()
 
 # COMMAND ----------
 
@@ -739,7 +473,7 @@ display(alloc.join(vip.join(sparks, how = "left", on = "account_id"), how = "inn
 
 # COMMAND ----------
 
-# MAGIC %sql select * from analytics_trans_prod.sparks_account
+# %sql select * from analytics_trans_prod.sparks_account
 
 # COMMAND ----------
 
@@ -747,13 +481,15 @@ display(alloc.filter(F.col("cust_id") == 4585580942257894003))
 
 # COMMAND ----------
 
-# MAGIC %md # Investigate individual 
+display(alloc.filter(F.col("cust_id") == 6872732896086312431))
 
 # COMMAND ----------
 
--7117536182747670000
+# MAGIC %sql select * from loyalty_azlab_prod.predictions_230522_p_tbl where cust_id = -7117536182747671208
 
+# COMMAND ----------
 
+# MAGIC %md # Investigate individual 
 
 # COMMAND ----------
 
@@ -761,60 +497,121 @@ display(alloc.filter(F.col("cust_id") == 4585580942257894003))
 
 # COMMAND ----------
 
-# MAGIC %md # investigate outlier 
+
 
 # COMMAND ----------
 
-alloc.filter(( F.col("estimated_headroom") / F.col("estimated_spend") >= 0.1999) & ( F.col("estimated_headroom") / F.col("estimated_spend") <= 0.2001)).count()
+# MAGIC %md # investigate outliers 
 
 # COMMAND ----------
 
-# MAGIC %sql select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515 
+# MAGIC %sql select * from  loyalty_azlab_prod.predictions_2305_p_tbl where l2_id = "85percentile_time_window_max_spend_basket"
 
 # COMMAND ----------
 
-outlier = spark.sql("""select cust_id, prediction_out from  loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515  """)
+prediction_out - weekly_max_basket_percentile
+
+# COMMAND ----------
+
+outlier = spark.sql("""select * from  loyalty_azlab_prod.predictions_2305_p_tbl where l2_id = "85percentile_time_window_max_spend_basket" """)
 outlier.display()
 
 # COMMAND ----------
 
-outlier.approxQuantile('prediction_out', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
+outlier.count()
 
 # COMMAND ----------
 
-outlier.groupby("").approxQuantile('prediction_out', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %md # outliers 
-
-# COMMAND ----------
-
-prediction = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230515")
-
-# COMMAND ----------
-
-display(prediction)
-
-# COMMAND ----------
-
-display(prediction
+display(outlier
   .withColumn("pct_error",
-  100. * (F.col("prediction_out") - F.col('85percentile_time_window_max_spend_basket')) / (
-      F.col('85percentile_time_window_max_spend_basket')))
+  100. * (F.col("prediction_out") - F.col('weekly_max_basket_percentile')) / (
+      F.col('weekly_max_basket_percentile')))
   .withColumn("outlier", F.when(((F.col("pct_error") >= -0.5) &
                                                     (F.col("pct_error") <= 200)
                                                     ), 0).otherwise(1))
-  .groupby("outlier").count() 
+  
+  .groupby("outlier", "campaign").count() 
 )
 
 # COMMAND ----------
 
-prediction.count()
+display(outlier
+  .withColumn("pct_error",
+  100. * (F.col("prediction_out") - F.col('weekly_max_basket_percentile')) / (
+      F.col('weekly_max_basket_percentile')))
+  .withColumn("outlier", F.when(((F.col("pct_error") >= -0.5) &
+                                                    (F.col("pct_error") <= 200)
+                                                    ), 0).otherwise(1))
+  .withColumn("outlier_direction", F.when( F.col("pct_error") < -0.5, -1)
+              .when(F.col("pct_error") > 200, 1).otherwise(0)
+  )
+  .groupby("outlier", "campaign", "outlier_direction").count() 
+)
+
+# COMMAND ----------
+
+outlier.groupby("experian_hh_composition", "segmentation").count().display()
+
+# COMMAND ----------
+
+display(outlier
+.groupby("experian_hh_composition", "segmentation")
+.agg(F.mean("prediction_out"),
+     F.variance("prediction_out"))
+     )
+
+# COMMAND ----------
+
+outlier.filter((F.col("experian_hh_composition") == 'Cat_04') & (F.col("segmentation") == 0 ) ).approxQuantile('prediction_out', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
+
+# COMMAND ----------
+
+fig = px.histogram(outlier.filter((F.col("experian_hh_composition") == 'Cat_08') & (F.col("segmentation") == 1 ) ).select("prediction_out").toPandas(), x="prediction_out", nbins = 50)
+fig.show()
+
+# COMMAND ----------
+
+outlier.filter((F.col("experian_hh_composition") == 'Cat_04') & (F.col("segmentation") == 0 ) )fig = px.histogram(spend_less_than_5.select("estimated_headroom").toPandas(), x="estimated_headroom", nbins = 20)
+fig.show()
+
+# COMMAND ----------
+
+outlier2 = (outlier 
+        .withColumn("pct_error",
+                                   100. * (F.col("prediction_out") - F.col("weekly_max_basket_percentile")) / (
+                                       F.col("weekly_max_basket_percentile")))
+        .select("cust_id", "prediction_out", "weekly_max_basket_percentile", "pct_error", "l2_id")
+)
+display(outlier2)
+
+# COMMAND ----------
+
+outlier2.groupby("l2_id").count().display()
+
+# COMMAND ----------
+
+outlier2.count()
+
+# COMMAND ----------
+
+outlier2.approxQuantile('prediction_out', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
+
+# COMMAND ----------
+
+outlier2.approxQuantile('weekly_max_basket_percentile', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
+
+# COMMAND ----------
+
+predictions = spark.sql("select * from  loyalty_azlab_prod.predictions_2305_p_tbl")
+predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket").display()
+
+# COMMAND ----------
+
+# MAGIC %sql select * from loyalty_azlab_prod.headroom_etl_data_2305_p_tbl
+
+# COMMAND ----------
+
+display(outlier.filter((F.col("experian_hh_composition") == 'Cat_08') & (F.col("segmentation") == 1 ) ))
 
 # COMMAND ----------
 
