@@ -57,7 +57,8 @@ class Allocator(object):
         else:
             self.offer_desc = None
         self.date_format = date_format
-
+        
+        self.prev_not_bought_factor = prev_not_bought_factor
         self.large_lim = max(list(chain(*self.offer_limits.values())))
         self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
         self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
