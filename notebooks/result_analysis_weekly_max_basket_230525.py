@@ -643,4 +643,28 @@ display(outlier.filter((F.col("experian_hh_composition") == 'Cat_08') & (F.col("
 
 # COMMAND ----------
 
+from datetime import datetime
+
+
+# COMMAND ----------
+
+last_registration_date = 20221126
+sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
+sparks_account_df = sparks_account_df.filter(F.col("registration_date") <= datetime.strptime(str(last_registration_date), "%Y%m%d"))
+sparks_account_df.count()
+
+# COMMAND ----------
+
+# MAGIC %sql select count(distinct cust_id) from loyalty_azlab_prod.headroom_etl_data_230522_p_tbl where campaign = 20230525
+
+# COMMAND ----------
+
+# MAGIC %sql select * from fci_azlab_dev.spendandsave_base_may23
+
+# COMMAND ----------
+
+# MAGIC %sql select count(*) from fci_azlab_dev.spendandsave_base_may23
+
+# COMMAND ----------
+
 

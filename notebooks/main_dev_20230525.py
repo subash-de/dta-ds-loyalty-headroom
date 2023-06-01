@@ -668,3 +668,141 @@ headroom_tbl.groupBy('desc').count()\
 # COMMAND ----------
 
 headroom_tbl.filter(F.col("cust_id") == 6872732896086312431).display()
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+# MAGIC %md # Allocation - only use bought into 
+
+# COMMAND ----------
+
+if "allocate" in config.steps:
+    logger.info("Begin Allocation")
+    config_al = config["allocation"]
+
+    # prediction_tbl_name = persist_utils.get_table_name(factory_database=config_al.prediction_tbl.factory_database,
+    #                                                    lab_database=config.dev_database,
+    #                                                    table_prefix=config_al.prediction_tbl.prefix,
+    #                                                    sensitivity=config_al.prediction_tbl.sensitivity)
+    # logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
+    prediction_tbl_name = "loyalty_azlab_prod.predictions_230522_p_tbl"
+
+    predictions = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
+
+    # if its under predicting, then would force the stretch to be 20% 
+    # replacing the feature col value with pred_out when its 0 
+    predictions = (predictions
+                  .withColumn("prediction_out_orig", F.col("prediction_out"))
+                  .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col("l2_id_total_spend_basket"), F.col("l2_id_total_spend_basket")*1.2).otherwise(F.col("prediction_out_orig")))
+                  # .withColumn("l2_id_total_spend_basket_org", F.col("l2_id_total_spend_basket"))
+                  # .withColumn("l2_id_total_spend_basket", F.when(F.col("l2_id_total_spend_basket_org")==0, F.col("prediction_out"))
+                  #             .otherwise(F.col("l2_id_total_spend_basket_org")))
+                )
+
+
+    # predictions = (predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket"))
+    # predictions = (predictions.filter(F.col("l2_id") == config_al["prediction_row_name"]))
+
+    allocation_manager = Allocator(feature_col=config_al["feature_col"],
+                                   offer_limits=config_al["offer_limits"],
+                                   offer_desc=config_al["offers_desc"],
+                                   user_key=config_al["user_key"],
+                                   outlier_min=config_al["outlier_min"],
+                                   outlier_max=config_al["outlier_max"],
+                                   max_increase=config_al["max_increase"],
+                                   min_increase=config_al["min_increase"],
+                                   headroom_factor=config_al["headroom_factor"],
+                                   fill_offer=config_al["fill_offer"],
+                                   prev_not_bought_factor = 0, # config_al["prev_not_bought_factor"]
+                                   )
+
+    headroom_export = (allocation_manager.get(predictions)
+                       .withColumn("campaign", F.lit(campaign))
+                       )
+
+    # headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
+    #                                                     lab_database=config.dev_database,
+    #                                                     factory_database=config_al.headroom_export_tbl.factory_database,
+    #                                                     sensitivity=config_al.headroom_export_tbl.sensitivity,
+    #                                                     schema=headroom_export,
+    #                                                     partition_by=config_al.headroom_export_tbl.partitionByList,
+    #                                                     overwrite_table=True,
+    #                                                     assert_equality=False,
+    #                                                     add_load_timestamp=True
+    #                                                     )
+    # logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
+
+    # persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
+    #                                    insert_df=headroom_export,
+    #                                    delete_where=f"campaign={campaign}")
+
+# COMMAND ----------
+
+# headroom_export.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/230525/allocation_bought_into", mode = "overwrite")
+
+
+# COMMAND ----------
+
+from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
+
+
+# COMMAND ----------
+
+headroom_tbl = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/230525/allocation_bought_into")
+headroom_tbl.count()
+
+# COMMAND ----------
+
+headroom_tbl.groupBy('desc').count()\
+  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
+  .over(W.partitionBy()),3)).display()
+
+# COMMAND ----------
+
+# MAGIC %sql select count(*) from fci_azlab_dev.spendandsave_base_may23
+
+# COMMAND ----------
+
+audience = spark.sql("select * from  fci_azlab_dev.spendandsave_base_may23")
+
+# COMMAND ----------
+
+audience.count()
+
+# COMMAND ----------
+
+headroom_subset = headroom_tbl.join(audience, on = "cust_id", how = "inner")
+headroom_subset.count()
+
+# COMMAND ----------
+
+headroom_subset.groupBy('desc').count()\
+  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
+  .over(W.partitionBy()),3)).display()
+
+# COMMAND ----------
+
+headroom_subset.display()
+
+# COMMAND ----------
+
+headroom_subset.filter(F.col("desc") == "£3 off when you spend £20 on M&S food in store").orderBy(F.rand()).display()
+
+# COMMAND ----------
+
+headroom_subset.filter(F.col("desc") == "£3 off when you spend £20 on M&S food in store").orderBy(F.rand()).display()
+
+# COMMAND ----------
+
+headroom_subset.filter(F.col("desc") == "£3 off when you spend £20 on M&S food in store").orderBy(F.rand()).limit(30).display()
+
+# COMMAND ----------
+
+headroom_subset.filter(F.col("desc") == "£3 off when you spend £20 on M&S food in store").orderBy(F.rand()).limit(30).write.csv("dbfs:/mnt/centralds/offerallocation/headroom/analysis/230525/sample_cust_3off20.csv")
+
+# COMMAND ----------
+
+
