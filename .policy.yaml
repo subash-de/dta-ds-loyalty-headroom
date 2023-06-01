@@ -1,9 +1,23 @@
 policy:
   approval:
     - and:
+        - peer_review
         - mlops_review
 
 approval_rules:
+  - name: peer_review
+    description: Code review from Peer
+    requires:
+      count: 1
+      teams:
+        - DigitalInnovation/data-portfolio-loyalty-data-science
+    options:
+      invalidate_on_push: true
+      allow_non_author_contributor: true
+      request_review:
+        enabled: true
+        mode: teams
+
   - name: mlops_review
     description: MLOps to approve production deployment
     requires:
@@ -15,6 +29,9 @@ approval_rules:
         pattern: main
     options:
       invalidate_on_push: true
+      allow_non_author_contributor: true
       request_review:
         enabled: true
         mode: teams
+      ignore_commits_by:
+        users: ["su-dtaadmin"]
