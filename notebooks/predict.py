@@ -92,12 +92,6 @@ last_registration_date: {last_registration_date}
 if "predict" in config.steps:
     logger.info("Begin Predictions")
     config_pd = config["predict"]
-    # config_pd["pred_items"] = ["average_time_window_max_spend_basket",
-    #                                  "50percentile_time_window_max_spend_basket",
-    #                                  "75percentile_time_window_max_spend_basket",
-    #                                  "85percentile_time_window_max_spend_basket",
-    #                                  "90percentile_time_window_max_spend_basket",
-    #                                  "100percentile_time_window_max_spend_basket",]
     partitionByList = config_pd["partitionByList"]
 
     etl_data_tbl_name = persist_utils.get_table_name(
@@ -109,7 +103,8 @@ if "predict" in config.steps:
 
     for seg in seg_list:
         seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-        ext_str = "_".join([str(seg[k]) for k in partitionByList if k != "campaign"])
+        ext_str = "_".join([str(seg[k]) for k in partitionByList ])
+        
         data = persist_utils.read_table(
             table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
         )

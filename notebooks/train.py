@@ -92,7 +92,8 @@ last_registration_date: {last_registration_date}
 def run_fit_rec(seg, config, database):
     partitionByList = config["partitionByList"]
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-    ext_str = "_".join([str(seg[k]) for k in partitionByList if "campaign" != k])
+    ext_str = "_".join([str(seg[k]) for k in partitionByList ])
+
     model_tags = {**config.get("model_tags", {}), **{"campaign": campaign}}
     etl_data_tbl_name = persist_utils.get_table_name(
         factory_database=config.etl_data_tbl.factory_database,
