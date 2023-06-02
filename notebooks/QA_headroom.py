@@ -65,7 +65,7 @@ last_registration_date = int((datetime.strptime(str(campaign), date_format) -
 env = os.environ["ENVIRONMENT"]
 
 
-campaign = 20230531
+# campaign = 20230531
 campaign_type = "headroom"
 
 logger.info(f"""
@@ -209,7 +209,7 @@ body = f"""\
     </html>
     """
 displayHTML(body)
-with open(f"{out_path}_qa_email.html", "w") as file:
+with open(f"{out_path}/qa_email.html", "w") as file:
     file.write(body)
 
 # COMMAND ----------
@@ -226,14 +226,15 @@ for fileformat in ("zip", "tar"):
         format=fileformat,
         root_dir=out_path,
     )
-    final_dest = f"{out_path}_qa_tables.{fileformat}"
+    final_dest = f"{out_path}/qa_tables.{fileformat}"
     shutil.move(f"{tmp_dest}.{fileformat}", final_dest)
 
 filepath = out_path.replace("/mnt/", "") + "/"
 
 # COMMAND ----------
 
-filename = f"QA_tables_{campaign_type.upper()}_campaign={campaign}.{fileformat}"
+# filename = f"QA_tables_{campaign_type.upper()}_campaign={campaign}.{fileformat}"
+filename = f"qa_tables.{fileformat}"
 # fromEmail = config.configurable_methods_qa_check.from_email
 # toEmail = ",".join(config.configurable_methods_qa_check.to_email)
 fromEmail = config.Email.from_email
@@ -253,7 +254,6 @@ elif environment == "ppd":
 elif environment == "prod":
     storageaccount = config.mail_storage_account.prod
 assert storageaccount is not None, f"env not equal to dev/ppd/prod"
-
 
 # COMMAND ----------
 
