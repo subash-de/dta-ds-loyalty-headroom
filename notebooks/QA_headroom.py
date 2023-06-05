@@ -233,16 +233,11 @@ filepath = out_path.replace("/mnt/", "") + "/"
 
 # COMMAND ----------
 
-# filename = f"QA_tables_{campaign_type.upper()}_campaign={campaign}.{fileformat}"
 filename = f"qa_tables.{fileformat}"
-# fromEmail = config.configurable_methods_qa_check.from_email
-# toEmail = ",".join(config.configurable_methods_qa_check.to_email)
 fromEmail = config.Email.from_email
 toEmail = ",".join(config.Email.to_email)
 
 
-# if errors > 0:
-#     toEmail = ",".join(config.configurable_methods_qa_check.to_email_failed)
 importance = "normal"
 subject = f"QA Headroom allocations results - {campaign}"
 
