@@ -32,6 +32,21 @@ tables:
     sensitivity: p
     partitionByList: ["campaign", "offer_id"]
 
+mail_containers: # mount paths for different envs
+  dev: "centralds"
+  ppd: "offers-loyalty-ns"
+  prod: "offers-loyalty-ns"
+
+mail_storage_account: #storage account for different envs for email attachments through logic apps
+  dev: "dtaeunprodblbsharing01"
+  ppd: "dtaeunprodblbfactory01"
+  prod: "dtaeunprodblbfactory01"
+  
+Email:
+  from_email: 'dta.admin@mnscorp.net'
+  to_email: ['dapeng.wang@mnscorp.net']
+  to_email_failed: ['dapeng.wang@mnscorp.net']
+
 sections:
   prod: &prod
     factory_database: "datascienceoffers_analyse_prod"
