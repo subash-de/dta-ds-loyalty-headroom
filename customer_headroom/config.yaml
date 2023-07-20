@@ -65,7 +65,7 @@ sections:
     date_format: &date_format '%Y%m%d'
     dates:
       upcoming_campaign: *upcoming_campaign
-      etl_date: &etl_date "today"
+      etl_date: &etl_date "today"  # changed 
       lookback_days: &lookback_days 180
       lookback_days_registration: &lookback_days_registration 180
     columns:
@@ -74,7 +74,7 @@ sections:
       l1_ids: &l1_ids ["FD"]
       # ["GM"]
       lx: &lx "l2"
-      feature_col: &feature_col "l2_id_total_spend_basket" #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+      feature_col: &feature_col "l2_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
       # "mean_spend_timespan"
       # "average_basket_value" "mean_total_spend_basket"
       #"total_spend" #"number_of_transactions"
@@ -122,7 +122,7 @@ sections:
       # ["01", "02", "03", "04", "05", "07"]
       date_format: *date_format
       window_days: 30
-      time_window_days : 7
+      time_window_days : 28 # spend and save 7, accumulator 4 weeks, so 28 days
       christmas_remove_range: ["1218", "0101"]
       # output
       etl_data_tbl: *etl_data_tbl
@@ -143,13 +143,13 @@ sections:
       max_lim: 500
       cat_cols: *seg_cat_cols
       partitionByList: *segPartition
-      params: None
+      # params: None
 #      {'n_factors': 100, 'n_epochs': 20, 'biased': True, 'init_mean': 0, 'init_std_dev': 0.1, 'lr_bu': 0.005,
 #       'lr_bi': 0.005, 'lr_pu': 0.005, 'lr_qi': 0.005, 'reg_bu': 0.02, 'reg_bi': 0.02, 'reg_pu': 0.02,'reg_qi': 0.02}
-      param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
+      # param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
       # param_grid: {'n_factors':[100],'n_epochs':[20,30],  'lr_all':[0.005],'reg_all':[0.1]}
-      # params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
-      # param_grid : None
+      params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
+      param_grid : None
       # output
       model_tags: {"campaignType": "averageBasketValue", "runType": "recurring"}
       write_mode: overwrite # errorifexists # overwrite

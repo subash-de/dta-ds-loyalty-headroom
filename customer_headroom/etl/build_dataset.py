@@ -272,6 +272,8 @@ class TransactionsManager(BaseManager):
         - sum_baskets (count per lx & total over all lx)
         """
 
+        customer_lx_transactions.cache()
+
         # Find number of transactions per customer per l2 category
         customer_lx_trans_grouped = (customer_lx_transactions
                                      .filter(F.col(self.user_key).isNotNull())
@@ -430,8 +432,54 @@ class TransactionsManager(BaseManager):
           .groupby("cust_id", f"{self.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{self.lx}_id_total_spend_basket"))
         )
 
+        # ================================================
+        # calculate the weekly total spend 
+        percentile_spend_time_window = (  
+          customer_lx_transactions
+          .select("cust_id", "time_window_ind", "sales_amt")
+          # find the spend in time window 
+          .groupby("cust_id", "time_window_ind")
+          .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+          # find the weeky max basket amount 
+          # .groupby("cust_id", "time_window_ind")
+          # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+          .groupby("cust_id")
+          .agg(*self.get_expr_agg("total_spend_time_window"))
+          .select("cust_id", "85percentile_total_spend_time_window")  ) # add to config ================
+
+
+        # get the time window ind id that is closest to the 85th percentile
+        time_window_ind_id = (
+          customer_lx_transactions
+          .select("cust_id", "time_window_ind", "sales_amt")
+          # find the basket amount 
+          .groupby("cust_id", "time_window_ind")
+          .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+          # find the weeky max basket amount 
+          # .groupby("cust_id", "WEEK_ID")
+          # .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
+          # .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
+          # .withColumn("percentile", F.lit(34.94))
+          .join(percentile_spend_time_window, how = 'left', on = "cust_id")
+          .where(F.col("total_spend_time_window") >= F.col("85percentile_total_spend_time_window"))
+          # .orderBy("time_window_max_spend_basket")
+          .withColumn("row", F.row_number().over(W.partitionBy("cust_id").orderBy(F.col("total_spend_time_window"))))
+          .filter(F.col("row") == 1)
+        )
+
+        time_window_ind_id.cache()
+
+        # find the l2 id spend for the given time window
+        customer_lx_time_window_spend = (
+          customer_lx_transactions
+          .join(time_window_ind_id.select("cust_id", "time_window_ind"), how = 'inner', on = ["cust_id", "time_window_ind"])
+          .groupby("cust_id", f"{self.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{self.lx}_id_total_time_window_spend"))
+        )
+        # ================================================
+
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                          .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
+                                         .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
                                         #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
                                         #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
                                         #  .join(customer_lx_trans_sum, on=[self.user_key])

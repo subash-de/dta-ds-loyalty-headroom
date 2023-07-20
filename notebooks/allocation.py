@@ -92,8 +92,9 @@ if "allocate" in config.steps:
     # if its under predicting, then would force the stretch to be 20% 
     predictions = (predictions
                     .withColumn("prediction_out_orig", F.lit(F.col("prediction_out")))
-                    .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col("l2_id_total_spend_basket"), F.col("l2_id_total_spend_basket")*under_predict_adjustment_factor).otherwise(F.col("prediction_out_orig")))
+                    .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col(config_al['feature_col']), F.col(config_al['feature_col'])*under_predict_adjustment_factor).otherwise(F.col("prediction_out_orig")))
                     )
+    # spend and save feature column l2_id_total_spend_basket
 
     # predictions = (predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket"))
     # predictions = (predictions.filter(F.col("l2_id") == config_al["prediction_row_name"]))
