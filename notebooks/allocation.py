@@ -123,7 +123,7 @@ if "allocate" in config.steps:
                                     fill_offer=config_al["fill_offer"], # change this for top customer
                                     prev_not_bought_factor = config_al["prev_not_bought_factor"],
                                     )
-      headroom_export_top = (allocation_manager.get(prediction_top)
+      headroom_export_top = (allocation_manager_top.get(prediction_top)
                         .withColumn("campaign", F.lit(campaign))
                         )
       logger.info(f"Allocation top customer - finished")
@@ -142,7 +142,7 @@ if "allocate" in config.steps:
                                     fill_offer=config_al["fill_offer"], 
                                     prev_not_bought_factor = config_al["prev_not_bought_factor"],
                                     )
-      headroom_export_not_top = (allocation_manager.get(prediction_not_top)
+      headroom_export_not_top = (allocation_manager_not_top.get(prediction_not_top)
                         .withColumn("campaign", F.lit(campaign))
                         )
       logger.info(f"Allocation NOT top customer - finished")
