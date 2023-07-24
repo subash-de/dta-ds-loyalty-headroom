@@ -477,9 +477,24 @@ class TransactionsManager(BaseManager):
         )
         # ================================================
 
+
+        # ================================================
+        # calculate the count distinct basket and time window. 
+        # noticed that for accumulator, there are people who had very few baskets 
+        customer_overall_count = (
+          customer_lx_transactions
+          .filter(F.col(self.user_key).isNotNull())
+          .groupby(self.user_key)
+          .agg(F.countDistinct("basket_id").cast(T.IntegerType()).alias("count_user_basket"),
+               F.countDistinct("time_window_ind").cast(T.IntegerType()).alias("count_user_time_window")
+          )
+        )
+        # ================================================
+
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                          .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
                                          .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
+                                         .join(customer_overall_count, on = [self.user_key])
                                         #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
                                         #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
                                         #  .join(customer_lx_trans_sum, on=[self.user_key])
