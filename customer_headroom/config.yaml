@@ -218,6 +218,28 @@ sections:
                      '14242': [120,140],
                      '14190': [140,160],
                      '14191': [160,220]}
+      offers_desc_top: {'16388': "£3 off when you spend £20 on M&S food in store",
+                    '14140': "£5 off when you spend £30 on M&S food in store",
+                    '14141': "£5 off when you spend £40 on M&S food in store",
+                    '14142': "£5 off when you spend £50 on M&S food in store",
+                    '14238': "£7 off when you spend £70 on M&S food in store",
+                    '14144': "£9 off when you spend £90 on M&S food in store",
+                    '14239': "£10 off when you spend £100 on M&S food in store",
+                    '14146': "£12 off when you spend £120 on M&S food in store",
+                    '14242': "£14 off when you spend £140 on M&S food in store",
+                    '14190': "£16 off when you spend £160 on M&S food in store",
+                    '14191': "£20 off when you spend £200 on M&S food in store"}
+      offer_limits_top: {'16388': [0,11],
+                     '14140': [11,21],
+                     '14141': [21,37],
+                     '14142': [37,50],
+                     '14238': [50,70],
+                     '14144': [70,90],
+                     '14239': [90,100],
+                     '14146': [100,120],
+                     '14242': [120,140],
+                     '14190': [140,160],
+                     '14191': [160,220]}
       user_key: *user_id
       prediction_row_name: "85percentile_time_window_max_spend_basket"
       outlier_min: -0.5
@@ -229,6 +251,7 @@ sections:
       fill_offer: 14140
       # Output
       headroom_export_tbl: *headroom_export_tbl
+      tcol_allocate_separately : True # False for Spend and Save 
 
   dev: *prod
 
