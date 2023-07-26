@@ -263,7 +263,7 @@ if "build_dataset" in config.steps:
         target_tbl_name=etl_data_tbl_name,
         insert_df=all_data,
         add_columns=True,
-        #  insert_append=True,
+        insert_append=True,
         delete_where=f"campaign={campaign}",
     )
 
