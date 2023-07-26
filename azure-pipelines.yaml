@@ -18,7 +18,7 @@ trigger:
       - main
       - develop
       - feature/*
-      - hotfix
+      - hotfix/*
 
 pool:
   vmImage: "ubuntu-latest"
