@@ -143,13 +143,13 @@ fit_rec:
   max_lim: 500
   cat_cols: *seg_cat_cols
   partitionByList: *segPartition
-  # params: None
+  params: None
 #      {'n_factors': 100, 'n_epochs': 20, 'biased': True, 'init_mean': 0, 'init_std_dev': 0.1, 'lr_bu': 0.005,
 #       'lr_bi': 0.005, 'lr_pu': 0.005, 'lr_qi': 0.005, 'reg_bu': 0.02, 'reg_bi': 0.02, 'reg_pu': 0.02,'reg_qi': 0.02}
-  # param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
+  param_grid: {'n_factors':[50,100,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
   # param_grid: {'n_factors':[100],'n_epochs':[20,30],  'lr_all':[0.005],'reg_all':[0.1]}
-  params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
-  param_grid : None
+  # params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
+  # param_grid : None
   # output
   model_tags: {"campaignType": "averageBasketValue", "runType": "recurring"}
   write_mode: overwrite # errorifexists # overwrite
@@ -279,7 +279,7 @@ sections:
                     '14190': [140,160],
                     '14191': [160,220]}
   acc:
-    offers_desc: {'1': "£5 off when you spend £30 on M&S food in store",
+    offers_desc_top: {'1': "£5 off when you spend £30 on M&S food in store",
                     '2': "£5 off when you spend £50 on M&S food in store",
                     '3': "£7 off when you spend £70 on M&S food in store",
                     '4': "£9 off when you spend £90 on M&S food in store",
@@ -292,7 +292,7 @@ sections:
                     '11': "£23 off when you spend £230 on M&S food in store", 
                     '12': "£25 off when you spend £250 on M&S food in store",
                     '13': "£27 off when you spend £270 on M&S food in store",}
-    offer_limits: {'1': [0,21],
+    offer_limits_top: {'1': [0,21],
                      '2': [21,50],
                      '3': [50,70],
                      '4': [70,90],

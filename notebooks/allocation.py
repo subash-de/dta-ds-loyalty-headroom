@@ -66,7 +66,7 @@ last_registration_date = int(
     ).strftime(date_format)
 )
 
-# campaign = 20230522
+# campaign = 20230724
 
 logger.info(
     f"""
@@ -108,6 +108,12 @@ if "allocate" in config.steps:
       prediction_top = (predictions.filter(F.col("cust_band_fd").contains("Top"))) 
       prediction_not_top = (predictions.filter(~F.col("cust_band_fd").contains("Top"))) 
       assert prediction_top.count() > 0, f"No of rows for customer in top group, got {prediction_top.count()}"
+
+      # removing customers 
+      # remove any customer whose spend + headroom > 270 
+      # remove customer who have shopped less than x times in the past 180 days 
+
+
 
       # top allocation 
       logger.info(f"Allocation top customer, number of top customers {prediction_top.select('cust_id').distinct().count()}")
@@ -151,6 +157,7 @@ if "allocate" in config.steps:
 
 
     else : 
+      logger.info("Allocating all customers")
       allocation_manager = Allocator(feature_col=config_al["feature_col"],
                                     offer_limits=config_al["offer_limits"],
                                     offer_desc=config_al["offers_desc"],
@@ -166,8 +173,10 @@ if "allocate" in config.steps:
 
       headroom_export = (allocation_manager.get(predictions)
                         .withColumn("campaign", F.lit(campaign))
-                        )
+                        ).cache()
 
+# if config['exclude_high_spend'] is not None:
+  
     headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
                                                         lab_database=config.dev_database,
                                                         factory_database=config_al.headroom_export_tbl.factory_database,
@@ -206,3 +215,61 @@ headroom_tbl.groupBy('desc').count()\
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
+
+# COMMAND ----------
+
+# config["offers_desc"]
+
+# COMMAND ----------
+
+# if "allocate" in config.steps:
+#     logger.info("Begin Allocation")
+#     config_al = config["allocation"]
+#     under_predict_adjustment_factor = config_al["headroom_factor"]
+
+#     prediction_tbl_name = persist_utils.get_table_name(factory_database=config_al.prediction_tbl.factory_database,
+#                                                        lab_database=config.dev_database,
+#                                                        table_prefix=config_al.prediction_tbl.prefix,
+#                                                        sensitivity=config_al.prediction_tbl.sensitivity)
+#     logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
+
+#     predictions = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
+
+#     # if its under predicting, then would force the stretch to be 20% 
+#     predictions = (predictions
+#                     .withColumn("prediction_out_orig", F.lit(F.col("prediction_out")))
+#                     .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col(config_al['feature_col']), F.col(config_al['feature_col'])*under_predict_adjustment_factor).otherwise(F.col("prediction_out_orig")))
+#                     )
+#     # spend and save feature column l2_id_total_spend_basket
+
+# COMMAND ----------
+
+# predictions.display()
+
+# COMMAND ----------
+
+# config_al["tcol_allocate_separately"]
+
+# COMMAND ----------
+
+# display(headroom_export)
+
+# COMMAND ----------
+
+# how many non top customer have spend + headroom > 270?
+# exclude_high_spend = (
+#   headroom_export.filter(F.col("") > 270)
+# )
+# exclude_high_spend.count()
+
+
+
+
+# COMMAND ----------
+
+# how many customers, by tcol have shopped less than 2 times in the past 180 days?
+# predictions.filter(F.col("count_user_basket") <= 2).select("cust_id", "count_user_basket").distinct().count()
+
+# COMMAND ----------
+
+
