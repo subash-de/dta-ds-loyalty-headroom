@@ -251,6 +251,21 @@ spend_less_than_5.count()
 
 # COMMAND ----------
 
+(alloc_combined.filter(F.col("estimated_spend") < 10)).count()
+
+
+# COMMAND ----------
+
+(alloc_combined.filter(F.col("estimated_spend") < 20)).count()
+
+
+# COMMAND ----------
+
+(alloc_combined.filter(F.col("estimated_spend") < 30)).count()
+
+
+# COMMAND ----------
+
 spend_less_than_5.groupby("desc").count().display()
 
 # COMMAND ----------
@@ -317,18 +332,6 @@ fig.show()
 # alloc_spend_gt_x.groupBy('desc').count()\
 #   .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
 #   .over(W.partitionBy()),3)).display()
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
 
 # COMMAND ----------
 
@@ -454,10 +457,6 @@ headroom_ratio_df.filter(F.col("variable") != "100percentile_headroom_ratio").di
 
 # COMMAND ----------
 
-# MAGIC %md # Total number of visits 
-
-# COMMAND ----------
-
 # MAGIC %md # VIP list 
 
 # COMMAND ----------
@@ -525,172 +524,6 @@ display(alloc.filter(F.col("cust_id") == "-7117536182747671208"))
 
 # COMMAND ----------
 
-# MAGIC %md # investigate outliers 
-
-# COMMAND ----------
-
-# MAGIC %sql select * from  loyalty_azlab_prod.predictions_2305_p_tbl where l2_id = "85percentile_time_window_max_spend_basket"
-
-# COMMAND ----------
-
-prediction_out - weekly_max_basket_percentile
-
-# COMMAND ----------
-
-outlier = spark.sql("""select * from  loyalty_azlab_prod.predictions_2305_p_tbl where l2_id = "85percentile_time_window_max_spend_basket" """)
-outlier.display()
-
-# COMMAND ----------
-
-outlier.count()
-
-# COMMAND ----------
-
-display(outlier
-  .withColumn("pct_error",
-  100. * (F.col("prediction_out") - F.col('weekly_max_basket_percentile')) / (
-      F.col('weekly_max_basket_percentile')))
-  .withColumn("outlier", F.when(((F.col("pct_error") >= -0.5) &
-                                                    (F.col("pct_error") <= 200)
-                                                    ), 0).otherwise(1))
-  
-  .groupby("outlier", "campaign").count() 
-)
-
-# COMMAND ----------
-
-display(outlier
-  .withColumn("pct_error",
-  100. * (F.col("prediction_out") - F.col('weekly_max_basket_percentile')) / (
-      F.col('weekly_max_basket_percentile')))
-  .withColumn("outlier", F.when(((F.col("pct_error") >= -0.5) &
-                                                    (F.col("pct_error") <= 200)
-                                                    ), 0).otherwise(1))
-  .withColumn("outlier_direction", F.when( F.col("pct_error") < -0.5, -1)
-              .when(F.col("pct_error") > 200, 1).otherwise(0)
-  )
-  .groupby("outlier", "campaign", "outlier_direction").count() 
-)
-
-# COMMAND ----------
-
-outlier.groupby("experian_hh_composition", "segmentation").count().display()
-
-# COMMAND ----------
-
-display(outlier
-.groupby("experian_hh_composition", "segmentation")
-.agg(F.mean("prediction_out"),
-     F.variance("prediction_out"))
-     )
-
-# COMMAND ----------
-
-outlier.filter((F.col("experian_hh_composition") == 'Cat_04') & (F.col("segmentation") == 0 ) ).approxQuantile('prediction_out', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
-
-# COMMAND ----------
-
-fig = px.histogram(outlier.filter((F.col("experian_hh_composition") == 'Cat_08') & (F.col("segmentation") == 1 ) ).select("prediction_out").toPandas(), x="prediction_out", nbins = 50)
-fig.show()
-
-# COMMAND ----------
-
-outlier.filter((F.col("experian_hh_composition") == 'Cat_04') & (F.col("segmentation") == 0 ) )fig = px.histogram(spend_less_than_5.select("estimated_headroom").toPandas(), x="estimated_headroom", nbins = 20)
-fig.show()
-
-# COMMAND ----------
-
-outlier2 = (outlier 
-        .withColumn("pct_error",
-                                   100. * (F.col("prediction_out") - F.col("weekly_max_basket_percentile")) / (
-                                       F.col("weekly_max_basket_percentile")))
-        .select("cust_id", "prediction_out", "weekly_max_basket_percentile", "pct_error", "l2_id")
-)
-display(outlier2)
-
-# COMMAND ----------
-
-outlier2.groupby("l2_id").count().display()
-
-# COMMAND ----------
-
-outlier2.count()
-
-# COMMAND ----------
-
-outlier2.approxQuantile('prediction_out', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
-
-# COMMAND ----------
-
-outlier2.approxQuantile('weekly_max_basket_percentile', probabilities=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], relativeError = 0)
-
-# COMMAND ----------
-
-predictions = spark.sql("select * from  loyalty_azlab_prod.predictions_2305_p_tbl")
-predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket").display()
-
-# COMMAND ----------
-
-# MAGIC %sql select * from loyalty_azlab_prod.headroom_etl_data_2305_p_tbl
-
-# COMMAND ----------
-
-display(outlier.filter((F.col("experian_hh_composition") == 'Cat_08') & (F.col("segmentation") == 1 ) ))
-
-# COMMAND ----------
-
-# MAGIC %sql select * from analytics_trans_prod.lu_article where l1_name = "Food"
-
-# COMMAND ----------
-
-# MAGIC %sql select distinct l2_id, l2_name from analytics_trans_prod.lu_article where l1_name = "Food"
-
-# COMMAND ----------
-
-# MAGIC %sql select * from loyalty_azlab_prod.predictions_np_p_tbl
-
-# COMMAND ----------
-
-# MAGIC %sql select distinct campaign from loyalty_azlab_prod.predictions_np_p_tbl 
-
-# COMMAND ----------
-
-# MAGIC %sql select count(*) from loyalty_azlab_prod.predictions_np_p_tbl  where campaign is null 
-
-# COMMAND ----------
-
-# MAGIC %sql select count(*) from loyalty_azlab_prod.predictions_np_p_tbl  where experian_hh_composition is null  
-
-# COMMAND ----------
-
-# MAGIC %sql select count(*) from loyalty_azlab_prod.predictions_np_p_tbl  where segmentation is null  
-
-# COMMAND ----------
-
-from datetime import datetime
-
-
-# COMMAND ----------
-
-last_registration_date = 20221126
-sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
-sparks_account_df = sparks_account_df.filter(F.col("registration_date") <= datetime.strptime(str(last_registration_date), "%Y%m%d"))
-sparks_account_df.count()
-
-# COMMAND ----------
-
-# MAGIC %sql select count(distinct cust_id) from loyalty_azlab_prod.headroom_etl_data_230522_p_tbl where campaign = 20230525
-
-# COMMAND ----------
-
-# MAGIC %sql select * from fci_azlab_dev.spendandsave_base_may23
-
-# COMMAND ----------
-
-# MAGIC %sql select count(*) from fci_azlab_dev.spendandsave_base_may23
-
-# COMMAND ----------
-
 # MAGIC %md # Investigate feature 
 
 # COMMAND ----------
@@ -700,19 +533,19 @@ sparks_account_df.count()
 
 # COMMAND ----------
 
-# MAGIC %sql select * from loyalty_azlab_prod.headroom_etl_data_np_p_tbl where campaign = 20230720
+# MAGIC %sql select * from loyalty_azlab_prod.headroom_etl_data_np_p_tbl where campaign = 20230724
 
 # COMMAND ----------
 
-# MAGIC %sql select * from loyalty_azlab_prod.headroom_etl_data_np_p_tbl where campaign = 20230720 and cust_id = 6872732896086312431
+# MAGIC %sql select * from loyalty_azlab_prod.headroom_etl_data_np_p_tbl where campaign = 20230724 and cust_id = 6872732896086312431
 
 # COMMAND ----------
 
-# MAGIC %sql select count(*) from loyalty_azlab_prod.headroom_etl_data_np_p_tbl  where campaign = 20230720 
+# MAGIC %sql select count(*) from loyalty_azlab_prod.headroom_etl_data_np_p_tbl  where campaign = 20230724
 
 # COMMAND ----------
 
-# MAGIC %sql select count(*) from loyalty_azlab_prod.headroom_etl_data_np_p_tbl  where campaign = 20230720 and l2_id_total_spend_basket > l2_id_total_time_window_spend
+# MAGIC %sql select count(*) from loyalty_azlab_prod.headroom_etl_data_np_p_tbl  where campaign = 20230724 and l2_id_total_spend_basket > l2_id_total_time_window_spend
 
 # COMMAND ----------
 
@@ -749,6 +582,81 @@ etl.display()
 # COMMAND ----------
 
 etl.groupby("cust_id").agg(F.sum("visits").alias("upper_bound_visits")).filter(F.col("upper_bound_visits") < 2).count()
+
+# COMMAND ----------
+
+# MAGIC %md #Visits 
+
+# COMMAND ----------
+
+# MAGIC %md for customer who have low estimated spend, how many times did they shop?
+
+# COMMAND ----------
+
+etl_visits = spark.sql("select distinct cust_id, count_user_basket, count_user_time_window from loyalty_azlab_prod.headroom_etl_data_np_p_tbl where campaign = 20230724")
+etl_visits.cache()
+etl_visits.count()
+
+# COMMAND ----------
+
+visits = (alloc_combined.join(etl_visits, how = 'left', on = 'cust_id'))
+visits.display()
+
+# COMMAND ----------
+
+# for spend less than 30  what was the number of visits by tcol 
+(visits.filter(F.col("spend_plus_headroom") < 30)
+.filter(F.col("count_user_basket") < 5)
+.groupby("cust_band_fd", "count_user_basket").count()).display()
+
+# COMMAND ----------
+
+# for spend less than 30  what was the number of visits by tcol 
+(visits.filter(F.col("spend_plus_headroom") < 30)
+.filter(F.col("count_user_time_window") <10)
+.groupby("cust_band_fd", "count_user_time_window").count()).display()
+
+# COMMAND ----------
+
+(visits.filter(F.col("spend_plus_headroom") < 20)
+.filter(F.col("count_user_basket") < 3)
+.groupby("desc", "cust_band_fd", "count_user_basket").count()).display()
+
+# COMMAND ----------
+
+visits.filter(F.col("spend_plus_headroom") < 20).groupby("desc", "cust_band_fd", "count_user_time_window").count().display()
+
+# COMMAND ----------
+
+# MAGIC %md for customer who had few baskets, what was the offers given?
+
+# COMMAND ----------
+
+visits.filter(F.col("count_user_basket") <=2).groupby("cust_band_fd", "desc").count().display()
+
+# COMMAND ----------
+
+# MAGIC %md for customer who had few time window ind, what was the offers given?
+
+# COMMAND ----------
+
+visits.filter(F.col("count_user_time_window") < 2).groupby("cust_band_fd", "desc").count().display()
+
+# COMMAND ----------
+
+visits.filter(F.col("count_user_time_window").isNull()).count()
+
+# COMMAND ----------
+
+visits.filter(F.col("count_user_basket").isNull()).count()
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+
 
 # COMMAND ----------
 

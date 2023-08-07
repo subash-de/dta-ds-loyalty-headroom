@@ -20,9 +20,9 @@ else:
 # COMMAND ----------
 
 from dtaml.databricks import get_all_widgets
-from customer_headroom.config import load_config
+from customer_headroom.config import load_config, load_config_campaign_type
 
 widgets = get_all_widgets()
-env = widgets.get("environment", 'dev')
-config = load_config(env)
+# env = widgets.get("environment", 'dev')
+config = load_config_campaign_type()
 print(f'Config used is: \n{config.dumps()}')
