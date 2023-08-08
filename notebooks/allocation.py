@@ -172,7 +172,10 @@ if "allocate" in config.steps:
 
     if config['exclude_high_spend'] is not None:
       logger.info(f"Remove customer whos spend_plus_headroom > {config['exclude_high_spend']}")
-      headroom_export = (headroom_export.filter("spend_plus_headroom") <= config['exclude_high_spend'])
+      headroom_export = (
+        headroom_export
+        .filter(F.col("spend_plus_headroom") <= config['exclude_high_spend'])
+      )
 
     if config['min_num_basket'] is not None: 
       logger.info(f"Remove customer who have less than {config['min_num_basket']} basket")
