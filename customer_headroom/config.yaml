@@ -65,7 +65,7 @@ steps: [segmentation, build_dataset, fit_rec, predict, allocate]
 date_format: &date_format '%Y%m%d'
 dates:
   upcoming_campaign: *upcoming_campaign
-  etl_date: &etl_date "today"  # changed 
+  etl_date: &etl_date 20230807 #"today"  # changed 
   lookback_days: &lookback_days 180
   lookback_days_registration: &lookback_days_registration 180
 columns:
@@ -251,8 +251,9 @@ allocation:
   fill_offer: 14140
   # Output
   headroom_export_tbl: *headroom_export_tbl
-  tcol_allocate_separately : True # False for Spend and Save 
-
+  tcol_allocate_separately : False # False 
+  exclude_high_spend: None
+  min_num_basket: None
 
 sections:
   ss:
@@ -331,3 +332,5 @@ sections:
                      '11': [210,230],
                      '12': [230, 250],
                      '13': [250, 270]}
+    exclude_high_spend: 270
+    min_num_basket: 3
