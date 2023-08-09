@@ -263,7 +263,7 @@ if "build_dataset" in config.steps:
         target_tbl_name=etl_data_tbl_name,
         insert_df=all_data,
         add_columns=True,
-        #  insert_append=True,
+        insert_append=True,
         delete_where=f"campaign={campaign}",
     )
 
@@ -333,3 +333,46 @@ logger.info(f"Ordered seg_list: {seg_list}")
 # COMMAND ----------
 
 dbutils.notebook.exit(str({"seg_list": seg_list}))
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+# MAGIC %md # dev 
+
+# COMMAND ----------
+
+# config_bd = config["build_dataset"]
+
+# COMMAND ----------
+
+# persist_utils.get_table_name(
+#             factory_database=config_bd.etl_data_tbl.factory_database,
+#             lab_database=config.dev_database,
+#             table_prefix=config_bd.etl_data_tbl.prefix,
+#             sensitivity=config_bd.etl_data_tbl.sensitivity,
+#         )
+
+# COMMAND ----------
+
+# %sql select * from loyalty_azlab_prod.headroom_etl_data_np_p_tbl
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+# import inspect
+# lines = inspect.getsource(TransactionsManager.get)
+# print(lines)
+
+# COMMAND ----------
+
+

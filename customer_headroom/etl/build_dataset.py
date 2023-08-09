@@ -492,7 +492,7 @@ class TransactionsManager(BaseManager):
         # ================================================
 
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
-                                         .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
+                                        #  .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
                                          .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
                                          .join(customer_overall_count, on = [self.user_key])
                                         #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
