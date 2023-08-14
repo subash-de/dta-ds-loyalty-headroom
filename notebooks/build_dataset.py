@@ -24,7 +24,7 @@ from multiprocessing.pool import ThreadPool
 import seaborn as sns
 from datetime import datetime, timedelta
 from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
+from ast import literal_eval
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -243,6 +243,7 @@ if "build_dataset" in config.steps:
         user_key=config_bd["user_id"],
         window_days=config_bd["window_days"],
         time_window_length=config_bd["time_window_days"],
+        exclude_items = literal_eval(config["exclude_items"]), 
     )
     all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
 

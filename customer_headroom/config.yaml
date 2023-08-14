@@ -65,9 +65,9 @@ steps: [segmentation, build_dataset, fit_rec, predict, allocate]
 date_format: &date_format '%Y%m%d'
 dates:
   upcoming_campaign: *upcoming_campaign
-  etl_date: &etl_date 20230809 #"today"  # changed 
-  lookback_days: &lookback_days 180
-  lookback_days_registration: &lookback_days_registration 180
+  etl_date: &etl_date 20230814 #"today"  # changed 
+  lookback_days: &lookback_days 195 # 28*7-1 
+  lookback_days_registration: &lookback_days_registration 195 # 28*7-1
 columns:
   user_id: &user_id "cust_id"
   item_id: &item_id "l2_id"
@@ -280,57 +280,58 @@ sections:
                     '14190': [140,160],
                     '14191': [160,220]}
   acc:
-    offers_desc_top: {'1': "£5 off when you spend £30 on M&S food in store",
-                    '2': "£5 off when you spend £50 on M&S food in store",
-                    '3': "£7 off when you spend £70 on M&S food in store",
-                    '4': "£9 off when you spend £90 on M&S food in store",
-                    '5': "£11 off when you spend £110 on M&S food in store",
-                    '6': "£13 off when you spend £130 on M&S food in store",
-                    '7': "£15 off when you spend £150 on M&S food in store",
-                    '8': "£17 off when you spend £170 on M&S food in store",
-                    '9': "£19 off when you spend £190 on M&S food in store",
-                    '10': "£21 off when you spend £210 on M&S food in store",
-                    '11': "£23 off when you spend £230 on M&S food in store", 
-                    '12': "£25 off when you spend £250 on M&S food in store",
-                    '13': "£27 off when you spend £270 on M&S food in store",}
-    offer_limits_top: {'1': [0,21],
-                     '2': [21,50],
-                     '3': [50,70],
-                     '4': [70,90],
-                     '5': [90,110],
-                     '6': [110,130],
-                     '7': [130,150],
-                     '8': [150,170],
-                     '9': [170,190],
-                     '10': [190,210],
-                     '11': [210,230],
-                     '12': [230, 250],
-                     '13': [250, 270]}
-    offers_desc: {'1': "£5 off when you spend £30 on M&S food in store",
-                    '2': "£5 off when you spend £50 on M&S food in store",
-                    '3': "£7 off when you spend £70 on M&S food in store",
-                    '4': "£9 off when you spend £90 on M&S food in store",
-                    '5': "£11 off when you spend £110 on M&S food in store",
-                    '6': "£13 off when you spend £130 on M&S food in store",
-                    '7': "£15 off when you spend £150 on M&S food in store",
-                    '8': "£17 off when you spend £170 on M&S food in store",
-                    '9': "£19 off when you spend £190 on M&S food in store",
-                    '10': "£21 off when you spend £210 on M&S food in store",
-                    '11': "£23 off when you spend £230 on M&S food in store", 
-                    '12': "£25 off when you spend £250 on M&S food in store",
-                    '13': "£27 off when you spend £270 on M&S food in store",}
-    offer_limits: {'1': [0,21],
-                     '2': [21,50],
-                     '3': [50,70],
-                     '4': [70,90],
-                     '5': [90,110],
-                     '6': [110,130],
-                     '7': [130,150],
-                     '8': [150,170],
-                     '9': [170,190],
-                     '10': [190,210],
-                     '11': [210,230],
-                     '12': [230, 250],
-                     '13': [250, 270]}
+    offers_desc_top: {'16437': "£5 off when you spend £30 on M&S food in store",
+                    '16441': "£5 off when you spend £50 on M&S food in store",
+                    '16717': "£7 off when you spend £70 on M&S food in store",
+                    '16445': "£9 off when you spend £90 on M&S food in store",
+                    '16442': "£11 off when you spend £110 on M&S food in store",
+                    '16735': "£13 off when you spend £130 on M&S food in store",
+                    '16719': "£15 off when you spend £150 on M&S food in store",
+                    '16736': "£17 off when you spend £170 on M&S food in store",
+                    '16718': "£19 off when you spend £190 on M&S food in store",
+                    '16716': "£21 off when you spend £210 on M&S food in store",
+                    '16734': "£23 off when you spend £230 on M&S food in store", 
+                    '16698': "£25 off when you spend £250 on M&S food in store",
+                    '16699': "£27 off when you spend £270 on M&S food in store",}
+    offer_limits_top: {'16437': [0,21],
+                     '16441': [21,50],
+                     '16717': [50,70],
+                     '16445': [70,90],
+                     '16442': [90,110],
+                     '16735': [110,130],
+                     '16719': [130,150],
+                     '16736': [150,170],
+                     '16718': [170,190],
+                     '16716': [190,210],
+                     '16734': [210,230],
+                     '16698': [230, 250],
+                     '16699': [250, 270]}
+    offers_desc: {'16437': "£5 off when you spend £30 on M&S food in store",
+                    '16441': "£5 off when you spend £50 on M&S food in store",
+                    '16717': "£7 off when you spend £70 on M&S food in store",
+                    '16445': "£9 off when you spend £90 on M&S food in store",
+                    '16442': "£11 off when you spend £110 on M&S food in store",
+                    '16735': "£13 off when you spend £130 on M&S food in store",
+                    '16719': "£15 off when you spend £150 on M&S food in store",
+                    '16736': "£17 off when you spend £170 on M&S food in store",
+                    '16718': "£19 off when you spend £190 on M&S food in store",
+                    '16716': "£21 off when you spend £210 on M&S food in store",
+                    '16734': "£23 off when you spend £230 on M&S food in store", 
+                    '16698': "£25 off when you spend £250 on M&S food in store",
+                    '16699': "£27 off when you spend £270 on M&S food in store",}
+    offer_limits: {'16437': [0,21],
+                     '16441': [21,50],
+                     '16717': [50,70],
+                     '16445': [70,90],
+                     '16442': [90,110],
+                     '16735': [110,130],
+                     '16719': [130,150],
+                     '16736': [150,170],
+                     '16718': [170,190],
+                     '16716': [190,210],
+                     '16734': [210,230],
+                     '16698': [230, 250],
+                     '16699': [250, 270]}
     exclude_high_spend: 270
     min_num_basket: 3
+    exclude_items: None

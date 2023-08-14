@@ -164,9 +164,12 @@ class TransactionsManager(BaseManager):
         """
         Method for removing items from the transaction table. required exclude_items input dictionary.
         """
-        for (k, v) in self.exclude_items.items():
+        if self.exclude_items is None or self.exclude_items == {} or self.exclude_items == "None": 
+          return trx_data
+        else:
+          for (k, v) in self.exclude_items.items():
             trx_data = trx_data.filter(~(F.col(k).isin(v)))
-        return trx_data
+            return trx_data
 
     def get_customer_transactions(self,
                                   trx_line: DataFrame,
