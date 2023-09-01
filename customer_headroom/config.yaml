@@ -65,7 +65,7 @@ steps: [segmentation, build_dataset, fit_rec, predict, allocate]
 date_format: &date_format '%Y%m%d'
 dates:
   upcoming_campaign: *upcoming_campaign
-  etl_date: &etl_date 20230814 #"today"  # changed 
+  etl_date: &etl_date 20230901 #"today"  # changed 
   lookback_days: &lookback_days 195 # 28*7-1 
   lookback_days_registration: &lookback_days_registration 195 # 28*7-1
 columns:
