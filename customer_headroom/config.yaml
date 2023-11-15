@@ -55,7 +55,7 @@ training_table_prefix: "headroom_training"
 prediction_table_prefix: "headroom_prediction"
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
-upcoming_campaign: &upcoming_campaign "{campaign}"
+upcoming_campaign: &upcoming_campaign "20231101"
 verions:
   data: &vdata v0.0.1
   model: &vmodel v0.0.1
@@ -65,7 +65,7 @@ steps: [segmentation, build_dataset, fit_rec, predict, allocate]
 date_format: &date_format '%Y%m%d'
 dates:
   upcoming_campaign: *upcoming_campaign
-  etl_date: &etl_date 20230901 #"today"  # changed 
+  etl_date: &etl_date 20231101 #"today"  # changed 
   lookback_days: &lookback_days 195 # 28*7-1 
   lookback_days_registration: &lookback_days_registration 195 # 28*7-1
 columns:
