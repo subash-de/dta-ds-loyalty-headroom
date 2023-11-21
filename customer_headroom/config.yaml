@@ -46,7 +46,7 @@ mail_storage_account: #storage account for different envs for email attachments 
   
 Email:
   from_email: 'dta.admin@mnscorp.net'
-  to_email: ['dapeng.wang@mnscorp.net']
+  to_email: ['dapeng.wang@mnscorp.net','parthav.x.maheshwari@mnscorp.net']
   to_email_failed: ['dapeng.wang@mnscorp.net']
 
 factory_database: "datascienceoffers_analyse_prod"
@@ -55,7 +55,7 @@ training_table_prefix: "headroom_training"
 prediction_table_prefix: "headroom_prediction"
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
-upcoming_campaign: &upcoming_campaign "20231101"
+upcoming_campaign: &upcoming_campaign "20231121"
 verions:
   data: &vdata v0.0.1
   model: &vmodel v0.0.1
