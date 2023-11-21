@@ -165,14 +165,19 @@ if trx_manager.time_window_length is not None:
 # COMMAND ----------
 
 '''cust_lx_trx.write.parquet("/mnt/centralds/offerallocation/headroom/analysis/231028/filter_cust_lx_trans", mode = "overwrite")
-filter_cust_lx_trans = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/231028/filter_cust_lx_trans", mode = "overwrite")
-filter_cust_lx_trans.display()'''
+'''
+#filter_cust_lx_trans = spark.read.parquet("/mnt/centralds/offerallocation/headroom/analysis/231028/filter_cust_lx_trans", mode = "overwrite")
+#filter_cust_lx_trans.display()
 
 # COMMAND ----------
 
 #get transaction metrics broken down
 customer_lx_transactions = cust_lx_trx
 customer_lx_transactions.cache()
+
+# COMMAND ----------
+
+customer_lx_transactions.display()
 
 # COMMAND ----------
 
@@ -194,6 +199,10 @@ customer_lx_trans_grouped = (customer_lx_transactions
                                   .cast(T.DoubleType()).alias("spend_per_item")
                                   )
                               )
+
+# COMMAND ----------
+
+customer_lx_trans_grouped.display()
 
 # COMMAND ----------
 
@@ -268,11 +277,15 @@ customer_lx_time_window_spend = (
 customer_overall_count = (
   customer_lx_transactions
   .filter(F.col(trx_manager.user_key).isNotNull())
-  .groupby(trx_manager.user_key)
+  .groupby(trx_manager.user_key, f"{trx_manager.lx}_id")
   .agg(F.countDistinct("basket_id").cast(T.IntegerType()).alias("count_user_basket"),
         F.countDistinct("time_window_ind").cast(T.IntegerType()).alias("count_user_time_window")
   )
 )
+
+# COMMAND ----------
+
+customer_overall_count.display()
 
 # COMMAND ----------
 
@@ -285,13 +298,13 @@ customer_lx_trans_grouped_all = (customer_lx_trans_grouped
 
 df_all = (customer_lx_trans_grouped
                                   .join(df, on = [trx_manager.user_key, f"{trx_manager.lx}_id"])
-                                  .join(customer_overall_count, on = [trx_manager.user_key])
+                                  .join(customer_overall_count, on = [trx_manager.user_key, f"{trx_manager.lx}_id"])
                                   )
 
 # COMMAND ----------
 
 cust_lx_trx_metrics = df_all
-trx_timespan = trx_manager.add_timespan_spend(cust_lx_trx)
+trx_timespan = trx_manager.add_timespan_spend(cust_lx_trx) 
 cust_lx_trx_metrics = (cust_lx_trx_metrics
                         .join(trx_timespan, on=trx_manager.user_key, how="left")
                         .fillna(0)
@@ -306,6 +319,14 @@ cust_lx_trx_metrics = cust_lx_trx_metrics.join(cust_seg
 # COMMAND ----------
 
 cust_lx_trx_metrics.display()
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+cust_lx_trx_metrics.select('cust_id', 'l2_id', 'number_of_transactions','count_user_basket','count_user_time_window','l2_id_total_time_window_spend').display()
 
 # COMMAND ----------
 

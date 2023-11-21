@@ -296,6 +296,7 @@ class TransactionsManager(BaseManager):
                                           )
                                      )
 
+
         # Find the sum of transactions and number of transactions
         customer_lx_trans_sum = (customer_lx_transactions
                                  .filter(F.col(self.user_key).isNotNull())
@@ -437,6 +438,22 @@ class TransactionsManager(BaseManager):
 
         # ================================================
         # calculate the weekly total spend 
+
+        #new logic for l2 build datset 
+        df = (
+            customer_lx_transactions.select(
+                self.user_key, f"{self.lx}_id", "time_window_ind", "sales_amt"
+            )
+            # find the spend in time window for each lx_id
+            .groupby(self.user_key, f"{self.lx}_id", "time_window_ind")
+            .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+            # get 85.00 percentile spend in time window for each lx_id
+            .groupby(self.user_key, f"{self.lx}_id")
+            .agg(*self.get_expr_agg("total_spend_time_window"))
+            .select(self.user_key, f"{self.lx}_id", "85percentile_total_spend_time_window")
+            .withColumn(f"{self.lx}_id_total_time_window_spend", F.col('85percentile_total_spend_time_window'))
+        )
+
         percentile_spend_time_window = (  
           customer_lx_transactions
           .select("cust_id", "time_window_ind", "sales_amt")
@@ -496,7 +513,8 @@ class TransactionsManager(BaseManager):
 
         customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                         #  .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
-                                         .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
+                                         .join(df, on = [self.user_key, f"{self.lx}_id"])
+                                        # .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
                                          .join(customer_overall_count, on = [self.user_key])
                                         #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
                                         #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
