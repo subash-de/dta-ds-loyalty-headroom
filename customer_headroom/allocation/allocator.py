@@ -26,6 +26,9 @@ class Allocator(object):
             offer_desc: Optional[Dict[str, str]] = None,
             date_format: Optional[str] = "%Y%m%d",
             prev_not_bought_factor: float = 1,
+            prev_not_bought_factor_l2_id_indpendent: float = 1,
+            aggregate_level: str = 'basket',
+
     ):
         self.feature_col = feature_col
         self.offer_limits = offer_limits
@@ -59,6 +62,9 @@ class Allocator(object):
         self.date_format = date_format
         
         self.prev_not_bought_factor = prev_not_bought_factor
+        self.prev_not_bought_factor_l2_id_indpendent = prev_not_bought_factor_l2_id_indpendent
+        self.aggregate_level = aggregate_level
+
         self.large_lim = max(list(chain(*self.offer_limits.values())))
         self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
         self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
