@@ -120,82 +120,14 @@ allocation_manager = Allocator(feature_col=config_al["feature_col"],
                               headroom_factor=config_al["headroom_factor"],
                               fill_offer=config_al["fill_offer"],
                               prev_not_bought_factor = config_al["prev_not_bought_factor"],
-                              prev_not_bought_factor_l2_id_indpendent: float = 1,
-                              aggregate_level: str = 'basket',
+                              prev_not_bought_factor_l2_id_indpendent = config_al["prev_not_bought_factor_l2_id_indpendent"],
+                              aggregate_level = config_al["aggregate_level"],
                               )
-'''
+
 headroom_export = (allocation_manager.get(predictions)
                   .withColumn("campaign", F.lit(campaign))
                   ).cache()
-'''
 
-# COMMAND ----------
-
-prediction_scores = allocation_manager.get_prediction_scores(predictions)
-
-# COMMAND ----------
-
-prediction_scores_tagged = allocation_manager.tag_outliers(prediction_scores)
-
-# COMMAND ----------
-
-#headroom_predictions = allocation_manager.get_headroom(prediction_scores_tagged)
-
-# COMMAND ----------
-
-data_hrm = (prediction_scores_tagged
-                    .withColumn("used_headroom_frac",
-                                F.when((F.col("pct_error") >= allocation_manager.max_increase) & (F.col("outlier") == 0),
-                                       (1. + allocation_manager.max_increase / 100.))
-                                .when((F.col("pct_error") <= allocation_manager.min_increase) & (F.col("outlier") == 0),
-                                      (1. + allocation_manager.min_increase / 100.))
-                                .when((F.col("pct_error") < allocation_manager.max_increase) &
-                                      (F.col("pct_error") > allocation_manager.min_increase) & (F.col("outlier") == 0),
-                                      1. + F.col("pct_error") / 100.)
-                                .otherwise(allocation_manager.headroom_factor)
-                                )
-                    .withColumn("total_used_headroom_per_id", F.when(F.col(allocation_manager.feature_col) >0, 
-                                                                       F.col(allocation_manager.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * allocation_manager.prev_not_bought_factor)
-                                )
-                    .groupby(allocation_manager.user_key)
-                    .agg(F.sum("total_used_headroom_per_id").alias("total_used_headroom_whole_time_period"),
-                    F.sum(allocation_manager.feature_col).alias("sum_total_spend_whole_period"))
-                    .withColumn("sum_total_spend", F.col("sum_total_spend_whole_period") )
-                    .withColumn("total_used_headroom", F.col("total_used_headroom_whole_time_period") )
-                    .withColumn("rand", F.rand())
-                    .withColumn("offer_id", F.lit(None))
-                    
-)                         
-
-# COMMAND ----------
-
-for k, v in allocation_manager.offer_limits.items():
-            offer_id = int(k)
-            data_hrm = (data_hrm
-                        .withColumn("offer_id", F.when((F.col("total_used_headroom") >= v[0]) &
-                                                       (F.col("total_used_headroom") < v[1]), offer_id)
-                                    .otherwise(F.col("offer_id"))
-                                    )
-                        )
-
-# COMMAND ----------
-
-data_out = (data_hrm
-                    # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
-                    .withColumn("offer_id", F.when((F.col("total_used_headroom") >= allocation_manager.large_lim),
-                                                   allocation_manager.get_large_offer(F.col("rand")))
-                                .otherwise(F.col("offer_id")))
-                    # If offer Id is still null then an outlier. Give a random small offer.
-                    .withColumn("offer_id",
-                                F.when((F.col("offer_id").isNull()), allocation_manager.get_small_offer(F.col("rand")))
-                                .otherwise(F.col("offer_id")))
-                    .withColumn("desc", allocation_manager.get_offer_desc_part(F.col("offer_id")))
-                    )
-
-# COMMAND ----------
-
-headroom_predictions = data_out
-headroom_export = allocation_manager.prepare_export(headroom_predictions)
 
 # COMMAND ----------
 
@@ -203,97 +135,47 @@ headroom_export.display()
 
 # COMMAND ----------
 
-#trying without summing on user level -> on user/l2 pair
+logger.info("Allocating all customers")
+allocation_manager_l2 = Allocator(feature_col=config_al["feature_col"],
+                              offer_limits=config["offer_limits"],
+                              offer_desc=config["offers_desc"],
+                              user_key=config_al["user_key"],
+                              outlier_min=config_al["outlier_min"],
+                              outlier_max=config_al["outlier_max"],
+                              max_increase=config_al["max_increase"],
+                              min_increase=config_al["min_increase"],
+                              headroom_factor=config_al["headroom_factor"],
+                              fill_offer=config_al["fill_offer"],
+                              prev_not_bought_factor = config_al["prev_not_bought_factor"],
+                              prev_not_bought_factor_l2_id_indpendent = config_al["prev_not_bought_factor_l2_id_indpendent"],
+                              aggregate_level = 'l2',
+                              )
+
+headroom_export_l2 = (allocation_manager_l2.get(predictions)
+                  .withColumn("campaign", F.lit(campaign))
+                  ).cache()
 
 # COMMAND ----------
 
-def get_headroom(allocation_manager, data):
-  
-  aggregate_level = 'basket'
+headroom_export_l2.display()
 
-  data_hrm = (data
-              .withColumn("used_headroom_frac",
-                          F.when((F.col("pct_error") >= allocation_manager.max_increase) & (F.col("outlier") == 0),
-                                  (1. + allocation_manager.max_increase / 100.))
-                          .when((F.col("pct_error") <= allocation_manager.min_increase) & (F.col("outlier") == 0),
-                                (1. + allocation_manager.min_increase / 100.))
-                          .when((F.col("pct_error") < allocation_manager.max_increase) &
-                                (F.col("pct_error") > allocation_manager.min_increase) & (F.col("outlier") == 0),
-                                1. + F.col("pct_error") / 100.)
-                          .otherwise(allocation_manager.headroom_factor)
-                          )
-  )
+# COMMAND ----------
 
-  if aggregate_level == 'basket':
-      data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(allocation_manager.feature_col) >0, 
-                                                                       F.col(allocation_manager.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * allocation_manager.prev_not_bought_factor)
-                                )
-                  .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
-                  .withColumnRenamed(allocation_manager.feature_col, 'sum_total_spend')
-                  .select(allocation_manager.user_key, 'l2_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
-                  .groupby(allocation_manager.user_key)
-                  .agg(F.sum("total_used_headroom").alias("total_used_headroom"),
-                  F.sum('sum_total_spend').alias("sum_total_spend"))
-      )
-  else:
-        data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(allocation_manager.feature_col) >0, 
-                                                                        F.col(allocation_manager.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out"))
-                                  )
-                    .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
-                    .withColumnRenamed(allocation_manager.feature_col, 'sum_total_spend')
-                    .select(allocation_manager.user_key, 'l2_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
-        )
-
-  data_hrm = data_hrm.withColumn("rand", F.rand()).withColumn("offer_id", F.lit(None))
-
-  for k, v in allocation_manager.offer_limits.items():
-            offer_id = int(k)
-            data_hrm = (data_hrm
-                        .withColumn("offer_id", F.when((F.col("total_used_headroom") >= v[0]) &
-                                                        (F.col("total_used_headroom") < v[1]), offer_id)
-                                    .otherwise(F.col("offer_id"))
-                                    )
-            )
-
-  data_out = (data_hrm
-              # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
-              .withColumn("offer_id", F.when((F.col("total_used_headroom") >= allocation_manager.large_lim),
-                                              allocation_manager.get_large_offer(F.col("rand")))
-                          .otherwise(F.col("offer_id")))
-              # If offer Id is still null then an outlier. Give a random small offer.
-              .withColumn("offer_id",
-                          F.when((F.col("offer_id").isNull()), allocation_manager.get_small_offer(F.col("rand")))
-                          .otherwise(F.col("offer_id")))
-              .withColumn("desc", allocation_manager.get_offer_desc_part(F.col("offer_id")))
-  )
-  
-  return data_out
-
-def prepare_export(allocation_manager, data):
-  data_export = (data
-                .withColumn("offer_id", F.when(F.col("offer_id").isNull(), F.lit(allocation_manager.fill_offer))
-                                .otherwise(F.col("offer_id"))
-                                )
-                .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
-                .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
-                .withColumn("estimated_headroom",
-                                F.round(F.col("total_used_headroom") - F.col("sum_total_spend"),
-                                        2))
-                .drop('rand', 'sum_total_spend', 'total_used_headroom')
-  )
-
-  return data_export
 
 
 # COMMAND ----------
 
-headroom_predictions = get_headroom(allocation_manager, prediction_scores_tagged)
-
-headroom_export = prepare_export(allocation_manager, headroom_predictions)
+df = headroom_export_l2.groupBy('cust_id').agg(F.sum('spend_plus_headroom').alias('sum_spend_plus_headroom'))
+join_dfs = headroom_export.join(df, on='cust_id', how='inner').select('cust_id','spend_plus_headroom','sum_spend_plus_headroom')
+check = join_dfs.withColumn('diff', F.col('sum_spend_plus_headroom')-F.col('spend_plus_headroom'))
 
 # COMMAND ----------
 
-headroom_export.display()
+check.display()
+
+# COMMAND ----------
+
+check.filter(F.col('diff')<-1).display()
 
 # COMMAND ----------
 

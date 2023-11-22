@@ -153,17 +153,19 @@ if "allocate" in config.steps:
     else : 
       logger.info("Allocating all customers")
       allocation_manager = Allocator(feature_col=config_al["feature_col"],
-                                    offer_limits=config["offer_limits"],
-                                    offer_desc=config["offers_desc"],
-                                    user_key=config_al["user_key"],
-                                    outlier_min=config_al["outlier_min"],
-                                    outlier_max=config_al["outlier_max"],
-                                    max_increase=config_al["max_increase"],
-                                    min_increase=config_al["min_increase"],
-                                    headroom_factor=config_al["headroom_factor"],
-                                    fill_offer=config_al["fill_offer"],
-                                    prev_not_bought_factor = config_al["prev_not_bought_factor"],
-                                    )
+                              offer_limits=config["offer_limits"],
+                              offer_desc=config["offers_desc"],
+                              user_key=config_al["user_key"],
+                              outlier_min=config_al["outlier_min"],
+                              outlier_max=config_al["outlier_max"],
+                              max_increase=config_al["max_increase"],
+                              min_increase=config_al["min_increase"],
+                              headroom_factor=config_al["headroom_factor"],
+                              fill_offer=config_al["fill_offer"],
+                              prev_not_bought_factor = config_al["prev_not_bought_factor"],
+                              prev_not_bought_factor_l2_id_indpendent = config_al["prev_not_bought_factor_l2_id_indpendent"],
+                              aggregate_level = config_al["aggregate_level"],
+                              )
 
       headroom_export = (allocation_manager.get(predictions)
                         .withColumn("campaign", F.lit(campaign))

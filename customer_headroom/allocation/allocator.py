@@ -143,6 +143,7 @@ class Allocator(object):
                        )
         return data_tagged
 
+    '''
     def get_headroom(self, data):
 
         data_hrm = (data
@@ -211,4 +212,80 @@ class Allocator(object):
                                "spend_plus_headroom", "desc")
                        .dropDuplicates(subset=[self.user_key])
                        )
+        return data_export
+    '''
+
+    def get_headroom(self, data):
+  
+        data_hrm = (data
+                    .withColumn("used_headroom_frac",
+                                F.when((F.col("pct_error") >= self.max_increase) & (F.col("outlier") == 0),
+                                        (1. + self.max_increase / 100.))
+                                .when((F.col("pct_error") <= self.min_increase) & (F.col("outlier") == 0),
+                                        (1. + self.min_increase / 100.))
+                                .when((F.col("pct_error") < self.max_increase) &
+                                        (F.col("pct_error") > self.min_increase) & (F.col("outlier") == 0),
+                                        1. + F.col("pct_error") / 100.)
+                                .otherwise(self.headroom_factor)
+                                )
+        )
+
+        if self.aggregate_level == 'basket':
+            data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
+                                                                            F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor)
+                                        )
+                        .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
+                        .withColumnRenamed(self.feature_col, 'sum_total_spend')
+                        .select(self.user_key, 'l2_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
+                        .groupby(self.user_key)
+                        .agg(F.sum("total_used_headroom").alias("total_used_headroom"),
+                        F.sum('sum_total_spend').alias("sum_total_spend"))
+            )
+        else:
+                data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
+                                                                                F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor_l2_id_indpendent)
+                                        )
+                            .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
+                            .withColumnRenamed(self.feature_col, 'sum_total_spend')
+                            .select(self.user_key, 'l2_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
+                )
+
+        data_hrm = data_hrm.withColumn("rand", F.rand()).withColumn("offer_id", F.lit(None))
+
+        for k, v in self.offer_limits.items():
+                    offer_id = int(k)
+                    data_hrm = (data_hrm
+                                .withColumn("offer_id", F.when((F.col("total_used_headroom") >= v[0]) &
+                                                                (F.col("total_used_headroom") < v[1]), offer_id)
+                                            .otherwise(F.col("offer_id"))
+                                            )
+                    )
+
+        data_out = (data_hrm
+                    # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
+                    .withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
+                                                    self.get_large_offer(F.col("rand")))
+                                .otherwise(F.col("offer_id")))
+                    # If offer Id is still null then an outlier. Give a random small offer.
+                    .withColumn("offer_id",
+                                F.when((F.col("offer_id").isNull()), self.get_small_offer(F.col("rand")))
+                                .otherwise(F.col("offer_id")))
+                    .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
+        )
+        
+        return data_out
+
+    def prepare_export(self, data):
+        data_export = (data
+                        .withColumn("offer_id", F.when(F.col("offer_id").isNull(), F.lit(self.fill_offer))
+                                        .otherwise(F.col("offer_id"))
+                                        )
+                        .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
+                        .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
+                        .withColumn("estimated_headroom",
+                                        F.round(F.col("total_used_headroom") - F.col("sum_total_spend"),
+                                                2))
+                        .drop('rand', 'sum_total_spend', 'total_used_headroom')
+        )
+
         return data_export
