@@ -188,22 +188,26 @@ if "allocate" in config.steps:
               .select("cust_id")
               .distinct(), how = 'inner', on = 'cust_id')
         )
-  
+
     headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
-                                                        lab_database=config.dev_database,
-                                                        factory_database=config_al.headroom_export_tbl.factory_database,
-                                                        sensitivity=config_al.headroom_export_tbl.sensitivity,
-                                                        schema=headroom_export,
-                                                        partition_by=config_al.headroom_export_tbl.partitionByList,
-                                                        overwrite_table=True,
-                                                        assert_equality=False,
-                                                        add_load_timestamp=True
-                                                        )
+                                                  lab_database=config.dev_database,
+                                                  factory_database=config_al.headroom_export_tbl.factory_database,
+                                                  sensitivity=config_al.headroom_export_tbl.sensitivity,
+                                                  schema=headroom_export,
+                                                  partition_by=config_al.headroom_export_tbl.partitionByList,
+                                                  overwrite_table=True,
+                                                  assert_equality=False,
+                                                  add_load_timestamp=True
+                                                  )
     logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
 
     persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
-                                       insert_df=headroom_export,
-                                       delete_where=f"campaign={campaign}")
+                                  insert_df=headroom_export,
+                                  delete_where=f"campaign={campaign}",
+                                  #insert_append=True,
+                                  #add_columns=True,
+                                  )
+    
 
 # COMMAND ----------
 
