@@ -55,7 +55,7 @@ training_table_prefix: "headroom_training"
 prediction_table_prefix: "headroom_prediction"
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
-upcoming_campaign: &upcoming_campaign "20231121"
+upcoming_campaign: &upcoming_campaign "20231127"
 verions:
   data: &vdata v0.0.1
   model: &vmodel v0.0.1
@@ -65,16 +65,16 @@ steps: [segmentation, build_dataset, fit_rec, predict, allocate]
 date_format: &date_format '%Y%m%d'
 dates:
   upcoming_campaign: *upcoming_campaign
-  etl_date: &etl_date 20231101 #"today"  # changed 
+  etl_date: &etl_date 20231127 #"today"  # changed 
   lookback_days: &lookback_days 195 # 28*7-1 
   lookback_days_registration: &lookback_days_registration 195 # 28*7-1
 columns:
   user_id: &user_id "cust_id"
-  item_id: &item_id "l2_id"
+  item_id: &item_id "l3_id"
   l1_ids: &l1_ids ["FD"]
   # ["GM"]
-  lx: &lx "l2"
-  feature_col: &feature_col "l2_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+  lx: &lx "l3"
+  feature_col: &feature_col "l3_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
   # "mean_spend_timespan"
   # "average_basket_value" "mean_total_spend_basket"
   #"total_spend" #"number_of_transactions"

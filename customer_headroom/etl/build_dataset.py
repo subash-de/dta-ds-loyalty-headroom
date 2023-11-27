@@ -186,7 +186,7 @@ class TransactionsManager(BaseManager):
                                  )
         # Find article ids of specific LX items
         lx_all = (lu_article
-                  .filter(lu_article[f"{self.lx}_id"].isin(list(self.lx_ids)))
+                  .filter(lu_article["l2_id"].isin(list(self.lx_ids)))
                   .select(["article_id"] +
                           [f"l{i}_id" for i in range(1, 7)] +
                           [f"l{i}_name" for i in range(1, 7)]
