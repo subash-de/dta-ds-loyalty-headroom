@@ -14,6 +14,7 @@ class Allocator(object):
             feature_col: str,
             offer_limits: Dict[str, Tuple[float]],
             user_key: str = "cust_id",
+            lx_key: str = "l2_id",
             outlier_min: float = -0.5,
             outlier_max: float = 200.,
             max_increase: float = 80.,
@@ -33,6 +34,7 @@ class Allocator(object):
         self.feature_col = feature_col
         self.offer_limits = offer_limits
         self.user_key = user_key
+        self.lx_key = lx_key
         self.outlier_min = outlier_min
         self.outlier_max = outlier_max
         self.max_increase = max_increase
@@ -236,7 +238,7 @@ class Allocator(object):
                                         )
                         .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
                         .withColumnRenamed(self.feature_col, 'sum_total_spend')
-                        .select(self.user_key, 'l2_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
+                        .select(self.user_key, f'{self.lx_key}_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
                         .groupby(self.user_key)
                         .agg(F.sum("total_used_headroom").alias("total_used_headroom"),
                         F.sum('sum_total_spend').alias("sum_total_spend"))
@@ -247,7 +249,7 @@ class Allocator(object):
                                         )
                             .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
                             .withColumnRenamed(self.feature_col, 'sum_total_spend')
-                            .select(self.user_key, 'l2_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
+                            .select(self.user_key, f'{self.lx_key}_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
                 )
 
         data_hrm = data_hrm.withColumn("rand", F.rand()).withColumn("offer_id", F.lit(None))

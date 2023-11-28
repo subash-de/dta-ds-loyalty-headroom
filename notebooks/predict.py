@@ -94,6 +94,11 @@ if "predict" in config.steps:
     config_pd = config["predict"]
     partitionByList = config_pd["partitionByList"]
 
+    #get list of pred items depending on lx id
+    lu_article = spark.read.table('analytics_trans_prod.lu_article')
+    pred_items = lu_article.filter(F.col('l2_id').isin(config_pd["pred_items"])).select(f'{config_pd["pred_key"]}_id').distinct().toPandas()
+    list_pred_items = list(pred_items[f'{config_pd["pred_key"]}_id'])
+
     etl_data_tbl_name = persist_utils.get_table_name(
         factory_database=config_pd.etl_data_tbl.factory_database,
         lab_database=config.dev_database,
@@ -123,7 +128,7 @@ if "predict" in config.steps:
         predictor_manager = Predictor(
             feature_col=config_pd["feature_col"],
             pred_key=f'{config_pd["pred_key"]}_id',
-            pred_items=config_pd["pred_items"],
+            pred_items=list_pred_items,
             min_col=data_processor.min_col,
             max_col=data_processor.max_col,
         )

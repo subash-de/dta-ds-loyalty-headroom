@@ -241,6 +241,7 @@ allocation:
                   '14190': [140,160],
                   '14191': [160,220]}
   user_key: *user_id
+  lx_key: *lx
   prediction_row_name: "85percentile_time_window_max_spend_basket"
   outlier_min: -0.5
   outlier_max: 200.
