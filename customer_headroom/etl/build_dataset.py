@@ -81,6 +81,7 @@ class TransactionsManager(BaseManager):
             lx: str = "l2",
             lx_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
             user_key: str = "cust_id",
+            aggregation_level: str = "basket",
             date_format: Optional[str] = "%Y%m%d",
             # In store purchases only
             channels: List[str] = ["POS"],
@@ -89,6 +90,7 @@ class TransactionsManager(BaseManager):
             window_days: Optional[int] = None,
             christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101"),
             time_window_length: Optional[int] = None,
+            
     ):
         self.etl_date = etl_date
         self.lookback_days = lookback_days
@@ -104,6 +106,7 @@ class TransactionsManager(BaseManager):
         self.window_days = window_days
         self.christmas_remove_range = christmas_remove_range
         self.time_window_length = time_window_length
+        self.aggregation_level = aggregation_level
 
     def get(self,
             trx_line: DataFrame,
@@ -510,11 +513,11 @@ class TransactionsManager(BaseManager):
           )
         )
         # ================================================
-
-        customer_lx_trans_grouped_all = (customer_lx_trans_grouped
+        if self.aggregation_level == 'basket':
+          customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                         #  .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
-                                         .join(df, on = [self.user_key, f"{self.lx}_id"])
-                                        # .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
+                                        # .join(df, on = [self.user_key, f"{self.lx}_id"])
+                                         .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
                                          .join(customer_overall_count, on = [self.user_key])
                                         #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
                                         #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
@@ -525,6 +528,24 @@ class TransactionsManager(BaseManager):
                                         #  .join(customer_lx_trans_time_window, on = [self.user_key, f"{self.lx}_id"])
                                         #  .join(customer_lx_trans_weekly_max_basket, on = [self.user_key, f"{self.lx}_id"])
                                          )
+        
+        else:
+          customer_lx_trans_grouped_all = (customer_lx_trans_grouped
+                                          #  .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
+                                          .join(df, on = [self.user_key, f"{self.lx}_id"])
+                                          # .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
+                                          .join(customer_overall_count, on = [self.user_key])
+                                          #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
+                                          #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
+                                          #  .join(customer_lx_trans_sum, on=[self.user_key])
+                                          #  .join(customer_lx_trans_count, on=[self.user_key])
+                                          #  .join(customer_lx_trans_count_basket, on=[self.user_key])
+                                          #  .join(customer_lx_trans_baskets_full, on=[self.user_key])
+                                          #  .join(customer_lx_trans_time_window, on = [self.user_key, f"{self.lx}_id"])
+                                          #  .join(customer_lx_trans_weekly_max_basket, on = [self.user_key, f"{self.lx}_id"])
+                                          )
+        
+
         return customer_lx_trans_grouped_all
 
 

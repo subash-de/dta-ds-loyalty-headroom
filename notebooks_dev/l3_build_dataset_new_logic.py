@@ -118,6 +118,7 @@ trx_manager = TransactionsManager(
   window_days=config_bd["window_days"],
   time_window_length=config_bd["time_window_days"],
   exclude_items = literal_eval(config["exclude_items"]), 
+  aggregation_level = config_bd["aggregation_level"],
 )
 
 # COMMAND ----------
@@ -126,30 +127,77 @@ all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
 
 # COMMAND ----------
 
-l3_build_data.display()
+all_data.display()
 
 # COMMAND ----------
 
-#distinct l3 ids bought in
-
-l3_ids_bought_in = l3_build_data.groupBy('cust_id').agg(F.countDistinct('l3_id').alias('l3s_bought_in')).select('l3s_bought_in').toPandas()
-
-import plotly.express as px
-fig = px.box(l3_ids_bought_in, y="l3s_bought_in")
-fig.show()
+all_data.count()
 
 # COMMAND ----------
 
-#l2/l3
-
-articles = spark.read.table('analytics_trans_prod.lu_article')
-df = l3_build_data.join(articles, on = 'l3_id', how = 'inner').select('cust_id','l2_id','l3_id').distinct()
-df_ = df.groupBy('cust_id','l2_id').agg(F.countDistinct('l3_id').alias('l3s_bought_in_within_l2'))
-df_pd = df_.toPandas()
+trx_manager_2 = TransactionsManager(
+  etl_date=get_date(config_bd["etl_date"]),
+  lookback_days=config_bd["lookback_days"],
+  l1_ids=config_bd["l1_ids"],
+  lx=config_bd["lx"],
+  lx_ids=config_bd["lx_ids"],  # getting all the products in this l2 id
+  user_key=config_bd["user_id"],
+  window_days=config_bd["window_days"],
+  time_window_length=config_bd["time_window_days"],
+  exclude_items = literal_eval(config["exclude_items"]), 
+  aggregation_level = 'no-basket',
+)
 
 # COMMAND ----------
 
-df_.display()
+all_data_2 = trx_manager_2.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
+
+# COMMAND ----------
+
+all_data_2.display()
+
+# COMMAND ----------
+
+all_data_2.count()
+
+# COMMAND ----------
+
+all_data_2.filter(F.col("cust_id") == -1002363184190046024).select(
+    "cust_id", "l2_id", "85percentile_total_spend_time_window"
+).join(
+    all_data.select("cust_id", "l2_id", "l2_id_total_time_window_spend"),
+    on=["cust_id", "l2_id"],
+    how="left",
+).display()
+
+# COMMAND ----------
+
+trx_manager_l4 = TransactionsManager(
+  etl_date=get_date(config_bd["etl_date"]),
+  lookback_days=config_bd["lookback_days"],
+  l1_ids=config_bd["l1_ids"],
+  lx='l4',
+  lx_ids=config_bd["lx_ids"],  # getting all the products in this l2 id
+  user_key=config_bd["user_id"],
+  window_days=config_bd["window_days"],
+  time_window_length=config_bd["time_window_days"],
+  exclude_items = literal_eval(config["exclude_items"]), 
+  aggregation_level = 'no-basket',
+)
+
+all_data_l4 = trx_manager_l4.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
+
+# COMMAND ----------
+
+all_data_l4.display()
+
+# COMMAND ----------
+
+all_data_l4.count()
+
+# COMMAND ----------
+
+print(1)
 
 # COMMAND ----------
 
@@ -235,6 +283,10 @@ if config_al["aggregate_level"] is None:
 # COMMAND ----------
 
 headroom_export.display()
+
+# COMMAND ----------
+
+print(1)
 
 # COMMAND ----------
 

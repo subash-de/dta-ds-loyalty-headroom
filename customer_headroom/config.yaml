@@ -70,11 +70,11 @@ dates:
   lookback_days_registration: &lookback_days_registration 195 # 28*7-1
 columns:
   user_id: &user_id "cust_id"
-  item_id: &item_id "l3_id"
+  item_id: &item_id "l4_id"
   l1_ids: &l1_ids ["FD"]
   # ["GM"]
-  lx: &lx "l3"
-  feature_col: &feature_col "l3_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+  lx: &lx "l4"
+  feature_col: &feature_col "l4_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
   # "mean_spend_timespan"
   # "average_basket_value" "mean_total_spend_basket"
   #"total_spend" #"number_of_transactions"
@@ -127,6 +127,7 @@ build_dataset:
   # output
   etl_data_tbl: *etl_data_tbl
   partitionByList: *segPartition
+  aggregation_level: &aggregation_level 'basket'
 fit_rec:
   # input
   etl_data_tbl: *etl_data_tbl
@@ -143,10 +144,10 @@ fit_rec:
   max_lim: 500
   cat_cols: *seg_cat_cols
   partitionByList: *segPartition
-  params: None
+  params: {'n_factors': 50, 'n_epochs': 30, 'lr_all': 0.01, 'reg_all': 0.1} #None
 #      {'n_factors': 100, 'n_epochs': 20, 'biased': True, 'init_mean': 0, 'init_std_dev': 0.1, 'lr_bu': 0.005,
 #       'lr_bi': 0.005, 'lr_pu': 0.005, 'lr_qi': 0.005, 'reg_bu': 0.02, 'reg_bi': 0.02, 'reg_pu': 0.02,'reg_qi': 0.02}
-  param_grid: {'n_factors':[50,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
+  param_grid: None # {'n_factors':[50,150],'n_epochs':[20,30],  'lr_all':[0.005,0.01],'reg_all':[0.02,0.1]}
   # param_grid: {'n_factors':[100],'n_epochs':[20,30],  'lr_all':[0.005],'reg_all':[0.1]}
   # params : {'n_factors': 100, 'n_epochs': 20, 'lr_all': 0.005, 'reg_all':0.1}
   # param_grid : None
@@ -250,7 +251,7 @@ allocation:
   prev_not_bought_factor: 0. # 0 means don't use categories that wasn't bought 
   prev_not_bought_factor_l2_id_indpendent: 1
   headroom_factor: 1.2
-  aggregate_level: 'basket' 
+  aggregate_level: *aggregation_level 
   fill_offer: 14140
   # Output
   headroom_export_tbl: *headroom_export_tbl

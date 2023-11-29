@@ -243,7 +243,8 @@ if "build_dataset" in config.steps:
         user_key=config_bd["user_id"],
         window_days=config_bd["window_days"],
         time_window_length=config_bd["time_window_days"],
-        exclude_items = literal_eval(config["exclude_items"]), 
+        exclude_items = literal_eval(config["exclude_items"]),
+        aggregation_level = config_bd["aggregation_level"], 
     )
     all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
 
