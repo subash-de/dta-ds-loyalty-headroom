@@ -115,6 +115,7 @@ if "allocate" in config.steps:
                                     offer_limits=config["offer_limits_top"], # change this for new top offer 
                                     offer_desc=config["offers_desc_top"], # change this for new top offer 
                                     user_key=config_al["user_key"],
+                                    lx_key = config_al["lx_key"],
                                     outlier_min=config_al["outlier_min"],
                                     outlier_max=config_al["outlier_max"],
                                     max_increase=config_al["max_increase"],
@@ -156,6 +157,7 @@ if "allocate" in config.steps:
                               offer_limits=config["offer_limits"],
                               offer_desc=config["offers_desc"],
                               user_key=config_al["user_key"],
+                              lx_key = config_al["lx_key"],
                               outlier_min=config_al["outlier_min"],
                               outlier_max=config_al["outlier_max"],
                               max_increase=config_al["max_increase"],

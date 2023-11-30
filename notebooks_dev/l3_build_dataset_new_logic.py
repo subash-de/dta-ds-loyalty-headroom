@@ -197,10 +197,6 @@ all_data_l4.count()
 
 # COMMAND ----------
 
-print(1)
-
-# COMMAND ----------
-
 #predict breakdown
 
 # COMMAND ----------
