@@ -127,7 +127,7 @@ build_dataset:
   # output
   etl_data_tbl: *etl_data_tbl
   partitionByList: *segPartition
-  aggregation_level: &aggregation_level 'basket'
+  aggregation_level: &aggregation_level 'l4'
 fit_rec:
   # input
   etl_data_tbl: *etl_data_tbl
