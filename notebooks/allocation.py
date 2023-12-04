@@ -206,8 +206,8 @@ if "allocate" in config.steps:
     persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
                                 insert_df=headroom_export,
                                 delete_where=f"campaign={campaign}",
-                                #insert_append=True,
-                                #add_columns=True,
+                                insert_append=True,
+                                add_columns=True,
                                 )
     
 
