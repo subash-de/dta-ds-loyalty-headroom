@@ -55,7 +55,7 @@ training_table_prefix: "headroom_training"
 prediction_table_prefix: "headroom_prediction"
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
-upcoming_campaign: &upcoming_campaign "20231127"
+upcoming_campaign: &upcoming_campaign "20231201"
 verions:
   data: &vdata v0.0.1
   model: &vmodel v0.0.1
