@@ -96,6 +96,9 @@ if "allocate" in config.steps:
                     .withColumn("prediction_out_orig", F.lit(F.col("prediction_out")))
                     .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col(config_al['feature_col']), F.col(config_al['feature_col'])*under_predict_adjustment_factor).otherwise(F.col("prediction_out_orig")))
                     )
+    predictions_cnt = predictions.count()
+    logger.info(f"""predictions_cnt: {predictions_cnt}""")
+
     # spend and save feature column l2_id_total_spend_basket
 
     # allocate for spend and save 
@@ -190,6 +193,9 @@ if "allocate" in config.steps:
                 .select("cust_id")
                 .distinct(), how = 'inner', on = 'cust_id')
           )
+
+    headroom_export_cnt = headroom_export.count()
+    logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
 
     headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
                                             lab_database=config.dev_database,
