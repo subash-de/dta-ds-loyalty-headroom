@@ -174,7 +174,7 @@ if "allocate" in config.steps:
 
       headroom_export = (allocation_manager.get(predictions)
                         .withColumn("campaign", F.lit(campaign))
-                        ).cache()
+                        )
 
     if config_al["aggregate_level"] == 'basket':
       if config['exclude_high_spend'] is not None:
