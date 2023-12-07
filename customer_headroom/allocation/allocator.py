@@ -272,7 +272,16 @@ class Allocator(object):
                     #.withColumn("offer_id",
                     #            F.when((F.col("offer_id").isNull()), self.get_small_offer(F.col("rand")))
                     #            .otherwise(F.col("offer_id")))
-                    .withColumn("offer_id",F.when((F.col("offer_id").isNull()),F.lit(16437)).otherwise(F.col("offer_id")))
+                    .withColumn("large_offers", F.array([F.lit(x) for x in self.large_offers]))
+                    .withColumn("small_offers", F.array([F.lit(x) for x in self.small_offers]))
+                    .withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
+                                                   F.col("large_offers")[F.lit(F.expr("cast((rand * size(large_offers)) as int)"))])
+                                .otherwise(F.col("offer_id")))
+                    .withColumn("offer_id",
+                               F.when((F.col("offer_id").isNull()), 
+                                      F.col("small_offers")[F.lit(F.expr("cast((rand * size(small_offers)) as int)"))])
+                               .otherwise(F.col("offer_id")))
+                    # .withColumn("offer_id",F.when((F.col("offer_id").isNull()),F.lit(16437)).otherwise(F.col("offer_id")))
                     .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
                     #.withColumn("desc", F.lit('offer_desc'))
         )
