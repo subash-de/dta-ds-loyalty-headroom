@@ -70,7 +70,7 @@ class Allocator(object):
         self.large_lim = max(list(chain(*self.offer_limits.values())))
         #self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
         #self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
-        #self.get_offer_desc_part = F.udf(partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType())
+        self.get_offer_desc_part = F.udf(partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType())
 
     @staticmethod
     def get_offer(rand, offers):
