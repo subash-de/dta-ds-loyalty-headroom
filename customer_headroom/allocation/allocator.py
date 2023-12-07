@@ -68,9 +68,9 @@ class Allocator(object):
         self.aggregate_level = aggregate_level
 
         self.large_lim = max(list(chain(*self.offer_limits.values())))
-        self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
-        self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
-        self.get_offer_desc_part = F.udf(partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType())
+        #self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
+        #self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
+        #self.get_offer_desc_part = F.udf(partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType())
 
     @staticmethod
     def get_offer(rand, offers):
@@ -265,14 +265,15 @@ class Allocator(object):
 
         data_out = (data_hrm
                     # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
-                    .withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
-                                                    self.get_large_offer(F.col("rand")))
-                                .otherwise(F.col("offer_id")))
+                    #.withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
+                    #                                self.get_large_offer(F.col("rand")))
+                    #            .otherwise(F.col("offer_id")))
                     # If offer Id is still null then an outlier. Give a random small offer.
-                    .withColumn("offer_id",
-                                F.when((F.col("offer_id").isNull()), self.get_small_offer(F.col("rand")))
-                                .otherwise(F.col("offer_id")))
-                    .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
+                    #.withColumn("offer_id",
+                    #            F.when((F.col("offer_id").isNull()), self.get_small_offer(F.col("rand")))
+                    #            .otherwise(F.col("offer_id")))
+                    #.withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
+                    .withColumn("desc", F.lit('offer_desc'))
         )
         
         return data_out
