@@ -272,8 +272,9 @@ class Allocator(object):
                     #.withColumn("offer_id",
                     #            F.when((F.col("offer_id").isNull()), self.get_small_offer(F.col("rand")))
                     #            .otherwise(F.col("offer_id")))
-                    #.withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
-                    .withColumn("desc", F.lit('offer_desc'))
+                    .withColumn("offer_id",F.when((F.col("offer_id").isNull()),F.lit(16437)).otherwise(F.col("offer_id")))
+                    .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
+                    #.withColumn("desc", F.lit('offer_desc'))
         )
         
         return data_out
