@@ -1,3 +1,4 @@
+import numpy as np
 from typing import Optional, Dict, Tuple, List
 from pyspark.sql import functions as F, DataFrame, types as T
 from functools import partial
@@ -252,7 +253,9 @@ class Allocator(object):
                             .select(self.user_key, f'{self.lx_key}_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
                 )
 
-        data_hrm = data_hrm.withColumn("rand", F.rand()).withColumn("offer_id", F.lit(None))
+        data_hrm = data_hrm.withColumn("rand", F.rand())
+        data_hrm_cnt = data_hrm.count()
+        data_hrm = (data_hrm.withColumn("offer_id", F.lit(None)))
 
         for k, v in self.offer_limits.items():
                     offer_id = int(k)
@@ -262,30 +265,25 @@ class Allocator(object):
                                             .otherwise(F.col("offer_id"))
                                             )
                     )
-
+        
+        
+                
         data_out = (data_hrm
                     # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
-                    #.withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
-                    #                                self.get_large_offer(F.col("rand")))
-                    #            .otherwise(F.col("offer_id")))
-                    # If offer Id is still null then an outlier. Give a random small offer.
-                    #.withColumn("offer_id",
-                    #            F.when((F.col("offer_id").isNull()), self.get_small_offer(F.col("rand")))
-                    #            .otherwise(F.col("offer_id")))
+                    # If still values are null, give them a random small offer.
                     .withColumn("large_offers", F.array([F.lit(x) for x in self.large_offers]))
                     .withColumn("small_offers", F.array([F.lit(x) for x in self.small_offers]))
                     .withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
-                                                   F.col("large_offers")[F.lit(F.expr("cast((rand * size(large_offers)) as int)"))])
-                                .otherwise(F.col("offer_id")))
+                                                    F.col("large_offers")[((F.col("rand") * F.size(F.col("large_offers"))).cast("int"))])
+                                 .otherwise(F.col("offer_id")))
                     .withColumn("offer_id",
-                               F.when((F.col("offer_id").isNull()), 
-                                      F.col("small_offers")[F.lit(F.expr("cast((rand * size(small_offers)) as int)"))])
-                               .otherwise(F.col("offer_id")))
-                    # .withColumn("offer_id",F.when((F.col("offer_id").isNull()),F.lit(16437)).otherwise(F.col("offer_id")))
+                                F.when((F.col("offer_id").isNull()), 
+                                       F.col("small_offers")[((F.col("rand") * F.size(F.col("small_offers"))).cast("int"))])
+                                .otherwise(F.col("offer_id")))
                     .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
-                    #.withColumn("desc", F.lit('offer_desc'))
         )
         
+
         return data_out
 
     def prepare_export(self, data):
@@ -298,7 +296,7 @@ class Allocator(object):
                         .withColumn("estimated_headroom",
                                         F.round(F.col("total_used_headroom") - F.col("sum_total_spend"),
                                                 2))
-                        .drop('rand', 'sum_total_spend', 'total_used_headroom')
+                        .drop('sum_total_spend', 'total_used_headroom')
         )
 
         return data_export

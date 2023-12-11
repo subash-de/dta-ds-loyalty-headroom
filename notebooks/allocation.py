@@ -239,7 +239,3 @@ headroom_tbl.groupBy('desc').count()\
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
-
-# COMMAND ----------
-
-
