@@ -296,7 +296,7 @@ class Allocator(object):
                         .withColumn("estimated_headroom",
                                         F.round(F.col("total_used_headroom") - F.col("sum_total_spend"),
                                                 2))
-                        .drop('sum_total_spend', 'total_used_headroom')
+                        .drop('sum_total_spend', 'total_used_headroom','large_offers','small_offers','rand')
         )
 
         return data_export
