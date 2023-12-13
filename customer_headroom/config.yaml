@@ -70,10 +70,10 @@ dates:
   lookback_days_registration: &lookback_days_registration 195 # 28*7-1
 columns:
   user_id: &user_id "cust_id"
-  item_id: &item_id "l2_id"
+  item_id: &item_id "l2_id" #change to different lx id
   l1_ids: &l1_ids ["FD"]
   # ["GM"]
-  lx: &lx "l2"
+  lx: &lx "l2" #change to different lx id
   feature_col: &feature_col "l2_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
   # "mean_spend_timespan"
   # "average_basket_value" "mean_total_spend_basket"
@@ -127,7 +127,7 @@ build_dataset:
   # output
   etl_data_tbl: *etl_data_tbl
   partitionByList: *segPartition
-  aggregation_level: &aggregation_level 'basket'
+  aggregation_level: &aggregation_level 'basket' #change to basket or lx id
 fit_rec:
   # input
   etl_data_tbl: *etl_data_tbl

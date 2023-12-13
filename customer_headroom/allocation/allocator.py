@@ -219,7 +219,7 @@ class Allocator(object):
     '''
 
     def get_headroom(self, data):
-  
+        #get used_headroom_fraction
         data_hrm = (data
                     .withColumn("used_headroom_frac",
                                 F.when((F.col("pct_error") >= self.max_increase) & (F.col("outlier") == 0),
@@ -232,7 +232,7 @@ class Allocator(object):
                                 .otherwise(self.headroom_factor)
                                 )
         )
-
+        #Different way of calculating headroom basked on aggregation level
         if self.aggregate_level == 'basket':
             data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
                                                                             F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor)
@@ -257,6 +257,7 @@ class Allocator(object):
         data_hrm_cnt = data_hrm.count()
         data_hrm = (data_hrm.withColumn("offer_id", F.lit(None)))
 
+        #Allocate offers based on offer limits
         for k, v in self.offer_limits.items():
                     offer_id = int(k)
                     data_hrm = (data_hrm
