@@ -168,7 +168,7 @@ if "allocate" in config.steps:
                               headroom_factor=config_al["headroom_factor"],
                               fill_offer=config_al["fill_offer"],
                               prev_not_bought_factor = config_al["prev_not_bought_factor"],
-                              prev_not_bought_factor_l2_id_indpendent = config_al["prev_not_bought_factor_l2_id_indpendent"],
+                              prev_not_bought_factor_lx_id_indpendent = config_al["prev_not_bought_factor_lx_id_indpendent"],
                               aggregate_level = config_al["aggregate_level"],
                               )
 

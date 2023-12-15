@@ -28,7 +28,7 @@ class Allocator(object):
             offer_desc: Optional[Dict[str, str]] = None,
             date_format: Optional[str] = "%Y%m%d",
             prev_not_bought_factor: float = 1,
-            prev_not_bought_factor_l2_id_indpendent: float = 1,
+            prev_not_bought_factor_lx_id_indpendent: float = 1,
             aggregate_level: str = 'basket',
 
     ):
@@ -65,7 +65,7 @@ class Allocator(object):
         self.date_format = date_format
         
         self.prev_not_bought_factor = prev_not_bought_factor
-        self.prev_not_bought_factor_l2_id_indpendent = prev_not_bought_factor_l2_id_indpendent
+        self.prev_not_bought_factor_lx_id_indpendent = prev_not_bought_factor_lx_id_indpendent
         self.aggregate_level = aggregate_level
 
         self.large_lim = max(list(chain(*self.offer_limits.values())))
@@ -246,7 +246,7 @@ class Allocator(object):
             )
         else:
                 data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
-                                                                                F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor_l2_id_indpendent)
+                                                                                F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor_lx_id_indpendent)
                                         )
                             .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
                             .withColumnRenamed(self.feature_col, 'sum_total_spend')

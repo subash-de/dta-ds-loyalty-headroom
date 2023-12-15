@@ -249,7 +249,7 @@ allocation:
   max_increase: 80.
   min_increase: 5.
   prev_not_bought_factor: 0. # 0 means don't use categories that wasn't bought 
-  prev_not_bought_factor_l2_id_indpendent: 1
+  prev_not_bought_factor_lx_id_indpendent: 1
   headroom_factor: 1.2
   aggregate_level: *aggregation_level 
   fill_offer: 14140

@@ -442,8 +442,8 @@ class TransactionsManager(BaseManager):
         # ================================================
         # calculate the weekly total spend 
 
-        #new logic for l2 build datset 
-        df = (
+        #new logic for build dataset 
+        lx_id_time_window_spend = (
             customer_lx_transactions.select(
                 self.user_key, f"{self.lx}_id", "time_window_ind", "sales_amt"
             )
@@ -532,7 +532,7 @@ class TransactionsManager(BaseManager):
         else:
           customer_lx_trans_grouped_all = (customer_lx_trans_grouped
                                           #  .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
-                                          .join(df, on = [self.user_key, f"{self.lx}_id"])
+                                          .join(lx_id_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
                                           # .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
                                           .join(customer_overall_count, on = [self.user_key])
                                           #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
