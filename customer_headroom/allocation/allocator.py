@@ -283,6 +283,12 @@ class Allocator(object):
                                 .otherwise(F.col("offer_id")))
                     .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
         )
+
+        #asserting that large spenders get large offers
+        large_spenders = data_out.filter(F.col("total_used_headroom") > 270)
+        if large_spenders.count() > 0:
+            cnt = large_spenders.select('offer_id').filter(~F.col('offer_id').isin(self.large_offers)).count()
+            assert cnt == 0, f'wrong offers given to large spenders (>270)'
         
 
         return data_out
