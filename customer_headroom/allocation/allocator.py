@@ -1,11 +1,12 @@
+import numpy as np
 from typing import Optional, Dict, Tuple, List
 from pyspark.sql import functions as F, DataFrame, types as T
 from functools import partial
 from itertools import chain
 
-from dtaml.databricks import get_spark
+#from dtaml.databricks import get_spark
 
-spark = get_spark()
+#spark = get_spark()
 
 
 class Allocator(object):
@@ -14,6 +15,7 @@ class Allocator(object):
             feature_col: str,
             offer_limits: Dict[str, Tuple[float]],
             user_key: str = "cust_id",
+            lx_key: str = "l2_id",
             outlier_min: float = -0.5,
             outlier_max: float = 200.,
             max_increase: float = 80.,
@@ -26,10 +28,14 @@ class Allocator(object):
             offer_desc: Optional[Dict[str, str]] = None,
             date_format: Optional[str] = "%Y%m%d",
             prev_not_bought_factor: float = 1,
+            prev_not_bought_factor_lx_id_indpendent: float = 1,
+            aggregate_level: str = 'basket',
+
     ):
         self.feature_col = feature_col
         self.offer_limits = offer_limits
         self.user_key = user_key
+        self.lx_key = lx_key
         self.outlier_min = outlier_min
         self.outlier_max = outlier_max
         self.max_increase = max_increase
@@ -59,9 +65,12 @@ class Allocator(object):
         self.date_format = date_format
         
         self.prev_not_bought_factor = prev_not_bought_factor
+        self.prev_not_bought_factor_lx_id_indpendent = prev_not_bought_factor_lx_id_indpendent
+        self.aggregate_level = aggregate_level
+
         self.large_lim = max(list(chain(*self.offer_limits.values())))
-        self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
-        self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
+        #self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
+        #self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
         self.get_offer_desc_part = F.udf(partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType())
 
     @staticmethod
@@ -137,6 +146,7 @@ class Allocator(object):
                        )
         return data_tagged
 
+    '''
     def get_headroom(self, data):
 
         data_hrm = (data
@@ -205,4 +215,95 @@ class Allocator(object):
                                "spend_plus_headroom", "desc")
                        .dropDuplicates(subset=[self.user_key])
                        )
+        return data_export
+    '''
+
+    def get_headroom(self, data):
+        #get used_headroom_fraction
+        data_hrm = (data
+                    .withColumn("used_headroom_frac",
+                                F.when((F.col("pct_error") >= self.max_increase) & (F.col("outlier") == 0),
+                                        (1. + self.max_increase / 100.))
+                                .when((F.col("pct_error") <= self.min_increase) & (F.col("outlier") == 0),
+                                        (1. + self.min_increase / 100.))
+                                .when((F.col("pct_error") < self.max_increase) &
+                                        (F.col("pct_error") > self.min_increase) & (F.col("outlier") == 0),
+                                        1. + F.col("pct_error") / 100.)
+                                .otherwise(self.headroom_factor)
+                                )
+        )
+        #Different way of calculating headroom basked on aggregation level
+        if self.aggregate_level == 'basket':
+            data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
+                                                                            F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor)
+                                        )
+                        .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
+                        .withColumnRenamed(self.feature_col, 'sum_total_spend')
+                        .select(self.user_key, f'{self.lx_key}_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
+                        .groupby(self.user_key)
+                        .agg(F.sum("total_used_headroom").alias("total_used_headroom"),
+                        F.sum('sum_total_spend').alias("sum_total_spend"))
+            )
+        else:
+                data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
+                                                                                F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor_lx_id_indpendent)
+                                        )
+                            .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
+                            .withColumnRenamed(self.feature_col, 'sum_total_spend')
+                            .select(self.user_key, f'{self.lx_key}_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
+                )
+
+        data_hrm = data_hrm.withColumn("rand", F.rand())
+        data_hrm_cnt = data_hrm.count()
+        data_hrm = (data_hrm.withColumn("offer_id", F.lit(None)))
+
+        #Allocate offers based on offer limits
+        for k, v in self.offer_limits.items():
+                    offer_id = int(k)
+                    data_hrm = (data_hrm
+                                .withColumn("offer_id", F.when((F.col("total_used_headroom") >= v[0]) &
+                                                                (F.col("total_used_headroom") < v[1]), offer_id)
+                                            .otherwise(F.col("offer_id"))
+                                            )
+                    )
+        
+        
+                
+        data_out = (data_hrm
+                    # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
+                    # If still values are null, give them a random small offer.
+                    .withColumn("large_offers", F.array([F.lit(x) for x in self.large_offers]))
+                    .withColumn("small_offers", F.array([F.lit(x) for x in self.small_offers]))
+                    .withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
+                                                    F.col("large_offers")[((F.col("rand") * F.size(F.col("large_offers"))).cast("int"))])
+                                 .otherwise(F.col("offer_id")))
+                    .withColumn("offer_id",
+                                F.when((F.col("offer_id").isNull()), 
+                                       F.col("small_offers")[((F.col("rand") * F.size(F.col("small_offers"))).cast("int"))])
+                                .otherwise(F.col("offer_id")))
+                    .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
+        )
+
+        #asserting that large spenders get large offers
+        large_spenders = data_out.filter(F.col("total_used_headroom") > 270)
+        if large_spenders.count() > 0:
+            cnt = large_spenders.select('offer_id').filter(~F.col('offer_id').isin(self.large_offers)).count()
+            assert cnt == 0, f'wrong offers given to large spenders (>270)'
+        
+
+        return data_out
+
+    def prepare_export(self, data):
+        data_export = (data
+                        .withColumn("offer_id", F.when(F.col("offer_id").isNull(), F.lit(self.fill_offer))
+                                        .otherwise(F.col("offer_id"))
+                                        )
+                        .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
+                        .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
+                        .withColumn("estimated_headroom",
+                                        F.round(F.col("total_used_headroom") - F.col("sum_total_spend"),
+                                                2))
+                        .drop('sum_total_spend', 'total_used_headroom','large_offers','small_offers','rand')
+        )
+
         return data_export

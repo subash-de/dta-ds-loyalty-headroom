@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ./bootstrap 
+# MAGIC %run ../notebooks/bootstrap 
 
 # COMMAND ----------
 
@@ -66,7 +66,7 @@ last_registration_date = int(
     ).strftime(date_format)
 )
 
-# campaign = 20230807
+campaign = 20230720
 
 logger.info(
     f"""
@@ -75,6 +75,14 @@ campaign: {campaign}
 last_registration_date: {last_registration_date}
 """
 )
+
+# COMMAND ----------
+
+ config["allocation"]
+
+# COMMAND ----------
+
+# MAGIC %md # Allocation 
 
 # COMMAND ----------
 
@@ -96,9 +104,6 @@ if "allocate" in config.steps:
                     .withColumn("prediction_out_orig", F.lit(F.col("prediction_out")))
                     .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col(config_al['feature_col']), F.col(config_al['feature_col'])*under_predict_adjustment_factor).otherwise(F.col("prediction_out_orig")))
                     )
-    predictions_cnt = predictions.count()
-    logger.info(f"""predictions_cnt: {predictions_cnt}""")
-
     # spend and save feature column l2_id_total_spend_basket
 
     # allocate for spend and save 
@@ -108,17 +113,16 @@ if "allocate" in config.steps:
       segtco_history_ = tmo_utils.get_preceding_segtco_history(segtco_history_df, campaign)
 
       predictions = (predictions.join(segtco_history_.select("cust_id", "cust_band_fd"), on = "cust_id", how = "left"))
-      prediction_top = (predictions.filter(F.col("cust_band_fd").contains("Top"))) 
-      prediction_not_top = (predictions.filter(~F.col("cust_band_fd").contains("Top"))) 
+      prediction_top = (predictions.filter(F.col("cust_band_fd").contains("Top")))
+      prediction_not_top = (predictions.filter(~F.col("cust_band_fd").contains("Top")))
       assert prediction_top.count() > 0, f"No of rows for customer in top group, got {prediction_top.count()}"
 
       # top allocation 
       logger.info(f"Allocation top customer, number of top customers {prediction_top.select('cust_id').distinct().count()}")
       allocation_manager_top = Allocator(feature_col=config_al["feature_col"],
-                                    offer_limits=config["offer_limits_top"], # change this for new top offer 
-                                    offer_desc=config["offers_desc_top"], # change this for new top offer 
+                                    offer_limits=config_al["offer_limits"], # change this for new top offer 
+                                    offer_desc=config_al["offers_desc"], # change this for new top offer 
                                     user_key=config_al["user_key"],
-                                    lx_key = config_al["lx_key"],
                                     outlier_min=config_al["outlier_min"],
                                     outlier_max=config_al["outlier_max"],
                                     max_increase=config_al["max_increase"],
@@ -127,7 +131,7 @@ if "allocate" in config.steps:
                                     fill_offer=config_al["fill_offer"], # change this for top customer
                                     prev_not_bought_factor = config_al["prev_not_bought_factor"],
                                     )
-      headroom_export_top = (allocation_manager_top.get(prediction_top)
+      headroom_export_top = (allocation_manager.get(prediction_top)
                         .withColumn("campaign", F.lit(campaign))
                         )
       logger.info(f"Allocation top customer - finished")
@@ -135,8 +139,8 @@ if "allocate" in config.steps:
       # non-top allocation 
       logger.info(f"Allocation NOT top customer, number of none top customers {prediction_not_top.select('cust_id').distinct().count()}")
       allocation_manager_not_top = Allocator(feature_col=config_al["feature_col"],
-                                    offer_limits=config["offer_limits"],
-                                    offer_desc=config["offers_desc"],  
+                                    offer_limits=config_al["offer_limits"],
+                                    offer_desc=config_al["offers_desc"],  
                                     user_key=config_al["user_key"],
                                     outlier_min=config_al["outlier_min"],
                                     outlier_max=config_al["outlier_max"],
@@ -146,7 +150,7 @@ if "allocate" in config.steps:
                                     fill_offer=config_al["fill_offer"], 
                                     prev_not_bought_factor = config_al["prev_not_bought_factor"],
                                     )
-      headroom_export_not_top = (allocation_manager_not_top.get(prediction_not_top)
+      headroom_export_not_top = (allocation_manager.get(prediction_not_top)
                         .withColumn("campaign", F.lit(campaign))
                         )
       logger.info(f"Allocation NOT top customer - finished")
@@ -155,67 +159,38 @@ if "allocate" in config.steps:
 
 
     else : 
-      logger.info("Allocating all customers")
       allocation_manager = Allocator(feature_col=config_al["feature_col"],
-                              offer_limits=config["offer_limits"],
-                              offer_desc=config["offers_desc"],
-                              user_key=config_al["user_key"],
-                              lx_key = config_al["lx_key"],
-                              outlier_min=config_al["outlier_min"],
-                              outlier_max=config_al["outlier_max"],
-                              max_increase=config_al["max_increase"],
-                              min_increase=config_al["min_increase"],
-                              headroom_factor=config_al["headroom_factor"],
-                              fill_offer=config_al["fill_offer"],
-                              prev_not_bought_factor = config_al["prev_not_bought_factor"],
-                              prev_not_bought_factor_lx_id_indpendent = config_al["prev_not_bought_factor_lx_id_indpendent"],
-                              aggregate_level = config_al["aggregate_level"],
-                              )
+                                    offer_limits=config_al["offer_limits"],
+                                    offer_desc=config_al["offers_desc"],
+                                    user_key=config_al["user_key"],
+                                    outlier_min=config_al["outlier_min"],
+                                    outlier_max=config_al["outlier_max"],
+                                    max_increase=config_al["max_increase"],
+                                    min_increase=config_al["min_increase"],
+                                    headroom_factor=config_al["headroom_factor"],
+                                    fill_offer=config_al["fill_offer"],
+                                    prev_not_bought_factor = config_al["prev_not_bought_factor"],
+                                    )
 
       headroom_export = (allocation_manager.get(predictions)
                         .withColumn("campaign", F.lit(campaign))
                         )
 
-    if config_al["aggregate_level"] == 'basket':
-      if config['exclude_high_spend'] is not None:
-        logger.info(f"Remove customer whos spend_plus_headroom > {config['exclude_high_spend']}")
-        headroom_export = (
-          headroom_export
-          .filter(F.col("spend_plus_headroom") <= config['exclude_high_spend'])
-        )
+    # headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
+    #                                                     lab_database=config.dev_database,
+    #                                                     factory_database=config_al.headroom_export_tbl.factory_database,
+    #                                                     sensitivity=config_al.headroom_export_tbl.sensitivity,
+    #                                                     schema=headroom_export,
+    #                                                     partition_by=config_al.headroom_export_tbl.partitionByList,
+    #                                                     overwrite_table=True,
+    #                                                     assert_equality=False,
+    #                                                     add_load_timestamp=True
+    #                                                     )
+    # logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
 
-      if config['min_num_basket'] is not None: 
-        logger.info(f"Remove customer who have less than {config['min_num_basket']} basket")
-        headroom_export = (
-          headroom_export
-          .join(predictions
-                .filter(F.col("count_user_basket") >= config['min_num_basket'] )
-                .select("cust_id")
-                .distinct(), how = 'inner', on = 'cust_id')
-          )
-
-    headroom_export_cnt = headroom_export.count()
-    logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
-
-    headroom_tbl_name = persist_utils.create_beam_table(table_prefix=config_al.headroom_export_tbl.prefix,
-                                            lab_database=config.dev_database,
-                                            factory_database=config_al.headroom_export_tbl.factory_database,
-                                            sensitivity=config_al.headroom_export_tbl.sensitivity,
-                                            schema=headroom_export,
-                                            partition_by=config_al.headroom_export_tbl.partitionByList,
-                                            overwrite_table=True,
-                                            assert_equality=False,
-                                            add_load_timestamp=True
-                                            )
-    logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
-
-    persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
-                                insert_df=headroom_export,
-                                delete_where=f"campaign={campaign}",
-                                insert_append=True,
-                                add_columns=True,
-                                )
-    
+    # persist_utils.insert_df_into_table(target_tbl_name=headroom_tbl_name,
+    #                                    insert_df=headroom_export,
+    #                                    delete_where=f"campaign={campaign}")
 
 # COMMAND ----------
 
@@ -239,3 +214,31 @@ headroom_tbl.groupBy('desc').count()\
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+headroom_export.groupBy('desc').count()\
+  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
+  .over(W.partitionBy()),3)).display()
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+headroom_export.groupBy('desc').count()\
+  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
+  .over(W.partitionBy()),3)).display()
+
+# COMMAND ----------
+
+

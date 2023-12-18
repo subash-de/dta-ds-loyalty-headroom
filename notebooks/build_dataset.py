@@ -24,7 +24,7 @@ from multiprocessing.pool import ThreadPool
 import seaborn as sns
 from datetime import datetime, timedelta
 from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
+from ast import literal_eval
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -243,6 +243,8 @@ if "build_dataset" in config.steps:
         user_key=config_bd["user_id"],
         window_days=config_bd["window_days"],
         time_window_length=config_bd["time_window_days"],
+        exclude_items = literal_eval(config["exclude_items"]),
+        aggregation_level = config_bd["aggregation_level"], 
     )
     all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
 
@@ -333,3 +335,46 @@ logger.info(f"Ordered seg_list: {seg_list}")
 # COMMAND ----------
 
 dbutils.notebook.exit(str({"seg_list": seg_list}))
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+# MAGIC %md # dev 
+
+# COMMAND ----------
+
+# config_bd = config["build_dataset"]
+
+# COMMAND ----------
+
+# persist_utils.get_table_name(
+#             factory_database=config_bd.etl_data_tbl.factory_database,
+#             lab_database=config.dev_database,
+#             table_prefix=config_bd.etl_data_tbl.prefix,
+#             sensitivity=config_bd.etl_data_tbl.sensitivity,
+#         )
+
+# COMMAND ----------
+
+# %sql select * from loyalty_azlab_prod.headroom_etl_data_np_p_tbl
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+# import inspect
+# lines = inspect.getsource(TransactionsManager.get)
+# print(lines)
+
+# COMMAND ----------
+
+

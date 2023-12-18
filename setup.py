@@ -9,6 +9,7 @@ setup(
     author="Benjamin Tunbridge",
     install_requires=[
         "dtaml==1.*",
+        "azureml-sdk==1.53.0",
         "scikit-surprise==1.1.1",
         "scikit-learn",
         "seaborn==0.11.1",

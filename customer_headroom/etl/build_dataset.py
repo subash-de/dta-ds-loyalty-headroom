@@ -81,6 +81,7 @@ class TransactionsManager(BaseManager):
             lx: str = "l2",
             lx_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
             user_key: str = "cust_id",
+            aggregation_level: str = "basket",
             date_format: Optional[str] = "%Y%m%d",
             # In store purchases only
             channels: List[str] = ["POS"],
@@ -89,6 +90,7 @@ class TransactionsManager(BaseManager):
             window_days: Optional[int] = None,
             christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101"),
             time_window_length: Optional[int] = None,
+            
     ):
         self.etl_date = etl_date
         self.lookback_days = lookback_days
@@ -104,6 +106,7 @@ class TransactionsManager(BaseManager):
         self.window_days = window_days
         self.christmas_remove_range = christmas_remove_range
         self.time_window_length = time_window_length
+        self.aggregation_level = aggregation_level
 
     def get(self,
             trx_line: DataFrame,
@@ -164,9 +167,12 @@ class TransactionsManager(BaseManager):
         """
         Method for removing items from the transaction table. required exclude_items input dictionary.
         """
-        for (k, v) in self.exclude_items.items():
+        if self.exclude_items is None or self.exclude_items == {} or self.exclude_items == "None": 
+          return trx_data
+        else:
+          for (k, v) in self.exclude_items.items():
             trx_data = trx_data.filter(~(F.col(k).isin(v)))
-        return trx_data
+            return trx_data
 
     def get_customer_transactions(self,
                                   trx_line: DataFrame,
@@ -183,7 +189,7 @@ class TransactionsManager(BaseManager):
                                  )
         # Find article ids of specific LX items
         lx_all = (lu_article
-                  .filter(lu_article[f"{self.lx}_id"].isin(list(self.lx_ids)))
+                  .filter(lu_article["l2_id"].isin(list(self.lx_ids)))
                   .select(["article_id"] +
                           [f"l{i}_id" for i in range(1, 7)] +
                           [f"l{i}_name" for i in range(1, 7)]
@@ -272,6 +278,8 @@ class TransactionsManager(BaseManager):
         - sum_baskets (count per lx & total over all lx)
         """
 
+        customer_lx_transactions.cache()
+
         # Find number of transactions per customer per l2 category
         customer_lx_trans_grouped = (customer_lx_transactions
                                      .filter(F.col(self.user_key).isNotNull())
@@ -290,6 +298,7 @@ class TransactionsManager(BaseManager):
                                           .cast(T.DoubleType()).alias("spend_per_item")
                                           )
                                      )
+
 
         # Find the sum of transactions and number of transactions
         customer_lx_trans_sum = (customer_lx_transactions
@@ -430,8 +439,86 @@ class TransactionsManager(BaseManager):
           .groupby("cust_id", f"{self.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{self.lx}_id_total_spend_basket"))
         )
 
-        customer_lx_trans_grouped_all = (customer_lx_trans_grouped
-                                         .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
+        # ================================================
+        # calculate the weekly total spend 
+
+        #new logic for build dataset 
+        lx_id_time_window_spend = (
+            customer_lx_transactions.select(
+                self.user_key, f"{self.lx}_id", "time_window_ind", "sales_amt"
+            )
+            # find the spend in time window for each lx_id
+            .groupby(self.user_key, f"{self.lx}_id", "time_window_ind")
+            .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+            # get 85.00 percentile spend in time window for each lx_id
+            .groupby(self.user_key, f"{self.lx}_id")
+            .agg(*self.get_expr_agg("total_spend_time_window"))
+            .select(self.user_key, f"{self.lx}_id", "85percentile_total_spend_time_window")
+            .withColumn(f"{self.lx}_id_total_time_window_spend", F.col('85percentile_total_spend_time_window'))
+        )
+
+        percentile_spend_time_window = (  
+          customer_lx_transactions
+          .select("cust_id", "time_window_ind", "sales_amt")
+          # find the spend in time window 
+          .groupby("cust_id", "time_window_ind")
+          .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+          # find the weeky max basket amount 
+          # .groupby("cust_id", "time_window_ind")
+          # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+          .groupby("cust_id")
+          .agg(*self.get_expr_agg("total_spend_time_window"))
+          .select("cust_id", "85percentile_total_spend_time_window")  ) # add to config ================
+
+
+        # get the time window ind id that is closest to the 85th percentile
+        time_window_ind_id = (
+          customer_lx_transactions
+          .select("cust_id", "time_window_ind", "sales_amt")
+          # find the basket amount 
+          .groupby("cust_id", "time_window_ind")
+          .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+          # find the weeky max basket amount 
+          # .groupby("cust_id", "WEEK_ID")
+          # .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
+          # .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
+          # .withColumn("percentile", F.lit(34.94))
+          .join(percentile_spend_time_window, how = 'left', on = "cust_id")
+          .where(F.col("total_spend_time_window") >= F.col("85percentile_total_spend_time_window"))
+          # .orderBy("time_window_max_spend_basket")
+          .withColumn("row", F.row_number().over(W.partitionBy("cust_id").orderBy(F.col("total_spend_time_window"))))
+          .filter(F.col("row") == 1)
+        )
+
+        time_window_ind_id.cache()
+
+        # find the l2 id spend for the given time window
+        customer_lx_time_window_spend = (
+          customer_lx_transactions
+          .join(time_window_ind_id.select("cust_id", "time_window_ind"), how = 'inner', on = ["cust_id", "time_window_ind"])
+          .groupby("cust_id", f"{self.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{self.lx}_id_total_time_window_spend"))
+        )
+        # ================================================
+
+
+        # ================================================
+        # calculate the count distinct basket and time window. 
+        # noticed that for accumulator, there are people who had very few baskets 
+        customer_overall_count = (
+          customer_lx_transactions
+          .filter(F.col(self.user_key).isNotNull())
+          .groupby(self.user_key)
+          .agg(F.countDistinct("basket_id").cast(T.IntegerType()).alias("count_user_basket"),
+               F.countDistinct("time_window_ind").cast(T.IntegerType()).alias("count_user_time_window")
+          )
+        )
+        # ================================================
+        if self.aggregation_level == 'basket':
+          customer_lx_trans_grouped_all = (customer_lx_trans_grouped
+                                        #  .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
+                                        # .join(df, on = [self.user_key, f"{self.lx}_id"])
+                                         .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
+                                         .join(customer_overall_count, on = [self.user_key])
                                         #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
                                         #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
                                         #  .join(customer_lx_trans_sum, on=[self.user_key])
@@ -441,6 +528,24 @@ class TransactionsManager(BaseManager):
                                         #  .join(customer_lx_trans_time_window, on = [self.user_key, f"{self.lx}_id"])
                                         #  .join(customer_lx_trans_weekly_max_basket, on = [self.user_key, f"{self.lx}_id"])
                                          )
+        
+        else:
+          customer_lx_trans_grouped_all = (customer_lx_trans_grouped
+                                          #  .join(customer_lx_basket_spend, on = [self.user_key, f"{self.lx}_id"])
+                                          .join(lx_id_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
+                                          # .join(customer_lx_time_window_spend, on = [self.user_key, f"{self.lx}_id"])
+                                          .join(customer_overall_count, on = [self.user_key])
+                                          #  .join(customer_weekly_max_transaction, on = [self.user_key], how = "outer")
+                                          #  .join(customer_lx_trans_baskets, on=[self.user_key, f"{self.lx}_id"])
+                                          #  .join(customer_lx_trans_sum, on=[self.user_key])
+                                          #  .join(customer_lx_trans_count, on=[self.user_key])
+                                          #  .join(customer_lx_trans_count_basket, on=[self.user_key])
+                                          #  .join(customer_lx_trans_baskets_full, on=[self.user_key])
+                                          #  .join(customer_lx_trans_time_window, on = [self.user_key, f"{self.lx}_id"])
+                                          #  .join(customer_lx_trans_weekly_max_basket, on = [self.user_key, f"{self.lx}_id"])
+                                          )
+        
+
         return customer_lx_trans_grouped_all
 
 
