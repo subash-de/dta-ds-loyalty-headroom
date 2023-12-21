@@ -4,8 +4,7 @@ from pyspark.sql import functions as F, DataFrame, types as T
 from functools import partial
 from itertools import chain
 
-#from dtaml.databricks import get_spark
-
+#from dtaml._internals.databricks import get_spark
 #spark = get_spark()
 
 

@@ -17,7 +17,7 @@ from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
 from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.allocation.allocator import Allocator
-import offerallocationv2.utils.persist_utils as persist_utils
+import customer_headroom.utils.persist_utils as persist_utils
 from dtaml.logging import get_logger
 from cdsutils.io_utils import file_exists, save_object, load_object
 from multiprocessing.pool import ThreadPool

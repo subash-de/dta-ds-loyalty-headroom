@@ -53,7 +53,7 @@ else:
 
 # COMMAND ----------
 
-from dtaml.databricks import get_all_widgets
+from dtaml.databricks.runtime import get_all_widgets
 from customer_headroom.config import load_config, load_config_campaign_type
 
 widgets = get_all_widgets()
