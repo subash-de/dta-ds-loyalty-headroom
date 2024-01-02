@@ -5,8 +5,7 @@ import math
 from functools import partial
 from sklearn.model_selection import train_test_split
 from dtaml.logging import get_logger
-from dtaml.databricks import get_spark
-
+from dtaml._internals.databricks import get_spark
 import seaborn as sns
 from surprise.model_selection import KFold
 from scipy import stats

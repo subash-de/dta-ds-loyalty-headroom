@@ -1,8 +1,7 @@
 from typing import Any, Iterable, Optional
 from pyspark.sql import functions as F, DataFrame, types as T, Window as W
 from functools import partial
-from dtaml.databricks import get_spark
-
+from dtaml._internals.databricks import get_spark
 
 spark = get_spark()
 

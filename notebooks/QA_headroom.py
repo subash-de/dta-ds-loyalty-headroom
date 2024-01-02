@@ -18,7 +18,7 @@ import seaborn as sns
 import shutil
 import os 
 
-import offerallocationv2.utils.persist_utils as persist_utils
+import customer_headroom.utils.persist_utils as persist_utils
 from dtaml.logging import get_logger
 
 

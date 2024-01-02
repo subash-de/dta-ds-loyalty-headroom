@@ -8,7 +8,7 @@ setup(
     description="Predicting a customer's category purchase Headroom.",
     author="Benjamin Tunbridge",
     install_requires=[
-        "dtaml==1.*",
+        "dtaml[azureml]==2.*",
         "azureml-sdk==1.53.0",
         "scikit-surprise==1.1.1",
         "scikit-learn",
@@ -20,7 +20,8 @@ setup(
         "scipy==1.6.3",
         "pytest==6.2.4",
         "pyspark",
-        "offerallocationv2==2.0.120"
+        "cdsutils==0.0.8",
+        #"offerallocationv2==2.0.120"
     ],
     packages=find_packages(exclude=['tests', 'tests.*']),
     include_package_data=True,
