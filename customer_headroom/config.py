@@ -5,22 +5,6 @@ import os
 import yaml
 from dtaml.config import load_section_config, Config
 
-
-def load_config(section, file_name="config.yaml"):
-    return load_section_config(
-        file_path=os.path.join(os.path.dirname(__file__), file_name),
-        section=section,
-        use_databricks=False,
-    )
-
-
-def load_config_databricks(section, file_name="config.yaml"):
-    return load_section_config(
-        file_path=os.path.join(os.path.dirname(__file__), file_name),
-        section=section,
-        use_databricks=True,
-    )
-
 def load_config_campaign_type(file_name: str = "config.yaml") -> Config:
     """Loads config.yaml file and selects the appropriate section based on the value of campaign type
     Also formats the pipeline names
@@ -46,8 +30,50 @@ def load_config_campaign_type(file_name: str = "config.yaml") -> Config:
         except yaml.YAMLError as exc:
             raise exc
     campaign_type = config_yml["comms_flag"]
-    config = load_section_config(
+    config = load_config(
         file_path=file_path,
         section=campaign_type,
     )
+    return config
+
+
+import os
+
+from dtaml.config import get_env_map, load_section_config
+from dtaml.databricks.runtime import get_all_widgets, get_spark
+from dtaml.pipeline.steps import init_jinja
+from dtaml.utils.table import set_default_dbs
+
+
+def load_config(section, file_name="config.yaml"):
+    config = load_section_config(
+        file_path=os.path.join(os.path.dirname(__file__), file_name),
+        section=section,
+    )
+    config.envs = get_env_map()
+    config.render(config.envs)
+    return config
+
+
+def set_spark_config():
+    spark = get_spark()
+    for k, v in {
+        "spark.sql.sources.partitionOverwriteMode": "dynamic",
+        "spark.databricks.delta.optimizeWrite.enabled": "true",
+        "spark.databricks.delta.autoCompact.enabled": "true",
+    }.items():
+        spark.conf.set(k, v)
+
+
+def initialize():
+    widgets = get_all_widgets()
+    env = widgets.get("environment", "dev")
+
+    config = load_config(env)
+    init_jinja(config.package_name)
+    set_spark_config()
+    set_default_dbs(
+        config.factory_database, config.lab_database, config.staging_database
+    )
+
     return config

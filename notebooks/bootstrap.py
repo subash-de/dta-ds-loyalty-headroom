@@ -3,52 +3,34 @@
 
 # COMMAND ----------
 
-
-
-import shutil
-import subprocess
 from pathlib import Path
- 
 
 devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
 pip_url = PIP_URL.format(token=devops_token)
- 
+
 %pip config set global.extra-index-url "{pip_url}"
 if PACKAGE_SOURCE=="repos":
     try:
       lib_root = dbutils.widgets.get('folder')
     except:
       lib_root = '..'
-    py_root = (Path.cwd() / lib_root).resolve()
-    egg_base = ('/tmp' / py_root.relative_to('/'))
-    shutil.rmtree(egg_base, ignore_errors=True)
-    egg_base.mkdir(parents=True, exist_ok=True)
-    subprocess.run(f"python '{py_root}/setup.py' egg_info --egg-base '{egg_base}'", shell=True, check=True)
-    req_file = list(egg_base.glob('**/requires.txt'))[0]
-    %pip install -r "{req_file}"
+    py_root = (Path('/Workspace') / Path(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().lstrip('/')).parent / lib_root).resolve()
+    %pip install "{py_root}"
 else:
     %pip install "{PACKAGE_NAME}=={PACKAGE_VERSION}"
+
+dbutils.library.restartPython()
+
 
     
 
 # COMMAND ----------
 
-'''
-devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
-pip_url = PIP_URL.format(token=devops_token).replace('%40prerelease', '')
 
-%pip config set global.extra-index-url "{pip_url}"
+from customer_headroom.config import initialize
 
-if PACKAGE_SOURCE=="repos":
-    try:
-        %pip install -e "{'/Workspace'+'/'.join(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().split('/', 4)[:4])}"
-    except:
-        pass
-else:
-    %pip install "{PACKAGE_NAME}=={PACKAGE_VERSION}"
-
-    
-'''   
+config = initialize()
+print(f'Config used is: \n{config.dumps()}')
 
 
 # COMMAND ----------
