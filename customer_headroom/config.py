@@ -31,7 +31,7 @@ def load_config_campaign_type(file_name: str = "config.yaml") -> Config:
             raise exc
     campaign_type = config_yml["comms_flag"]
     config = load_config(
-        file_path=file_path,
+        file_name=file_path,
         section=campaign_type,
     )
     return config
@@ -64,7 +64,7 @@ def set_spark_config():
     }.items():
         spark.conf.set(k, v)
 
-
+# TODO check if we can get this to work
 def initialize():
     widgets = get_all_widgets()
     env = widgets.get("environment", "dev")
