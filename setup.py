@@ -21,9 +21,9 @@ setup(
         "pytest==6.2.4",
         "pyspark",
         "cdsutils==0.0.8",
-        #"offerallocationv2==2.0.120"
+        # "offerallocationv2==2.0.120"
     ],
-    packages=find_packages(exclude=['tests', 'tests.*']),
+    packages=find_packages(exclude=["tests", "tests.*"]),
     include_package_data=True,
     package_data={"": ["config.yaml"]},
 )

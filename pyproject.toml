@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "customer-headroom"
+version = "0.1.0"
+description = ""
+authors = ["AntonioMoraisMNS <antonio.morais@mnscorp.net>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10,<3.11"
+scikit-surprise = "^1.1.4"
+
+
+[[tool.poetry.source]]
+name = "mlops"
+url = "https://pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

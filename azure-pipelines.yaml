@@ -18,7 +18,6 @@ trigger:
       - main
       - develop
       - feature/*
-      - hotfix/*
 
 pool:
   vmImage: "ubuntu-latest"
@@ -41,13 +40,13 @@ stages:
       
       python:
         enable: true
-      
-        enable_tests: false
-        tests_flake8: false
-        tests_prospector: false
+        dependencies: poetry
+        enable_tests: true
+        tests_flake8: true
+        tests_prospector: true
       
       databricks:
-        enable: true
+        enable: false
         lab_workspace: loyalty # enterprise / marketing / loyalty
         folder_name: headroom
         clean: true
@@ -64,16 +63,4 @@ stages:
       #   enable: true
       #   image_name: dummy
       
-      # aks:
-      #   enable: true
-      #   app_name: dummy
-      #   values_file_dev: values.yaml
-      #   values_file_prod: values.yaml
-      
-      # adf:
-      #   enable_tests: false
-      #   test_pipeline_name: my_adf_pipeline
-      #   test_pipeline_params:
-      #     param1: value1
-      #     param2: value2
     
