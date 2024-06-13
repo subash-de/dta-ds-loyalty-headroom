@@ -8,7 +8,12 @@ from pathlib import Path
 devops_token = dbutils.secrets.get("dta-eun-kv-dsc-01", "access-token-devops-artifacts")
 pip_url = PIP_URL.format(token=devops_token)
 
-%pip config set global.extra-index-url "{pip_url}"
+# COMMAND ----------
+
+# MAGIC  %pip config set global.extra-index-url "{pip_url}"
+
+# COMMAND ----------
+
 if PACKAGE_SOURCE=="repos":
     try:
       lib_root = dbutils.widgets.get('folder')
