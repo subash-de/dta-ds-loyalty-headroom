@@ -12,10 +12,6 @@ from typing import Any, Dict, List, Union
 
 import joblib
 import pandas as pd
-from azureml.core import Dataset, Datastore
-from azureml.core.model import Model
-from azureml.data.datapath import DataPath
-from azureml.exceptions import UserErrorException
 from delta.exceptions import MetadataChangedException, ProtocolChangedException
 from delta.tables import DeltaTable
 from dtaml import constants, utils
