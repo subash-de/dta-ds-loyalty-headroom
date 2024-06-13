@@ -2,8 +2,10 @@
 
 # from dtaml.config import load_section_config
 import os
+
 import yaml
-from dtaml.config import load_section_config, Config
+from dtaml.config import Config, load_section_config
+
 
 def load_config_campaign_type(file_name: str = "config.yaml") -> Config:
     """Loads config.yaml file and selects the appropriate section based on the value of campaign type
@@ -63,6 +65,7 @@ def set_spark_config():
         "spark.databricks.delta.autoCompact.enabled": "true",
     }.items():
         spark.conf.set(k, v)
+
 
 # TODO check if we can get this to work
 def initialize():

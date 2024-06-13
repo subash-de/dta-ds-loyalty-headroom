@@ -23,34 +23,34 @@ pool:
   vmImage: "ubuntu-latest"
 
 stages:
-  
+
   # - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/pull/') }}:
   #     - stage: tests
   #       jobs:
   #         - job: test
   #           steps:
   #             - bash: echo "Add some tests you might want to do"
-  
+
 
   - template: /devops/project_flow/v2/stage-multi-project.yaml@templates
     parameters:
       root_dir: "." # No need to edit this mostly, check the docs for details
 
       version_file: version.py
-      
+
       python:
         enable: true
         dependencies: poetry
         enable_tests: true
         tests_flake8: true
         tests_prospector: true
-      
+
       databricks:
         enable: false
         lab_workspace: loyalty # enterprise / marketing / loyalty
         folder_name: headroom
         clean: true
-      
+
         enable_tests: false
         test_notebook_path: sample_query
         test_worker_type: Standard_F4s_v2
@@ -58,9 +58,7 @@ stages:
         test_notebook_params:
           key1: value1
           key2: value2
-      
+
       # docker:
       #   enable: true
       #   image_name: dummy
-      
-    

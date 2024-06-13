@@ -8,24 +8,28 @@
 # COMMAND ----------
 
 import os
+from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing.pool import ThreadPool
+
+import offerallocationv2.utils.persist_utils as persist_utils
 import pandas as pd
-from datetime import datetime
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import SegmentationDataManager, SegmentationManager
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import offerallocationv2.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
-from datetime import datetime, timedelta
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -52,13 +56,13 @@ prediction_month = prediction_time_span/30.
 
 # COMMAND ----------
 
-prediction_period = prediction_week  # want weekly 
+prediction_period = prediction_week  # want weekly
 prediction_period
 
 # COMMAND ----------
 
 class Allocator2(Allocator):
-  
+
   def get_prediction_scores(self, predictions):
       pred_scores = (predictions
                       .withColumn("pct_error",
@@ -451,7 +455,7 @@ def run_fit_rec(seg, config, database):
 
     data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
     logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
-    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
+    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager,
                                  tags=model_tags,
                                  description="Headroom: Registered Data Processor Object")
 
@@ -466,13 +470,13 @@ def run_fit_rec(seg, config, database):
 
     rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
-    persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
+    persist_utils.register_model(model_name=rec_name, model_object=rec_algo,
                                  tags=model_tags,
                                  description="Headroom: Registered Recommender Model")
 
     param_name = (config.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
-    persist_utils.register_model(model_name=param_name, model_object=fit_params, 
+    persist_utils.register_model(model_name=param_name, model_object=fit_params,
                                  tags=model_tags,
                                  description="Headroom: Registered Parameters Object")
 
@@ -645,7 +649,7 @@ headroom_tbl.groupBy('desc').count()\
 
 # COMMAND ----------
 
-0.651 + 0.154 + 0.1 
+0.651 + 0.154 + 0.1
 
 # COMMAND ----------
 

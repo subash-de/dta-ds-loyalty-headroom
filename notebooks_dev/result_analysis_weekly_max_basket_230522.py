@@ -12,21 +12,23 @@ config
 # COMMAND ----------
 
 # from offerallocationv2.utils import tmo_utils
-import pandas as pd 
+import pandas as pd
 import plotly
 import plotly.express as px
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
 import seaborn as sns
-
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 # COMMAND ----------
 
-# MAGIC %md # Data 
+# MAGIC %md # Data
 
 # COMMAND ----------
 
-# MAGIC %md ## Food segmentation 
-# MAGIC - using fci_azlab_dev.ls_food_segment_20230429 instead of fci_azlab_dev.sg_segmentation_cust_base_scores_all for segmentation, was told there was some issue with the original table 
+# MAGIC %md ## Food segmentation
+# MAGIC - using fci_azlab_dev.ls_food_segment_20230429 instead of fci_azlab_dev.sg_segmentation_cust_base_scores_all for segmentation, was told there was some issue with the original table
 
 # COMMAND ----------
 
@@ -61,7 +63,7 @@ food_segmentation.groupby("segment_desc").count().orderBy(F.col("segment_desc"))
 
 # COMMAND ----------
 
-# MAGIC %md ## TCOL segmentation 
+# MAGIC %md ## TCOL segmentation
 
 # COMMAND ----------
 
@@ -88,12 +90,12 @@ segtco_history_.display()
 
 # COMMAND ----------
 
-# %sql select * from loyalty_azlab_prod.headroom_allocation_p_tbl 
-# %sql select campaign, count (distinct campaign) from loyalty_azlab_prod.headroom_allocation_p_tbl group by campaign  
+# %sql select * from loyalty_azlab_prod.headroom_allocation_p_tbl
+# %sql select campaign, count (distinct campaign) from loyalty_azlab_prod.headroom_allocation_p_tbl group by campaign
 
 # COMMAND ----------
 
-# %sql select campaign, count (distinct campaign) from loyalty_azlab_prod.headroom_allocation_p_tbl group by campaign  
+# %sql select campaign, count (distinct campaign) from loyalty_azlab_prod.headroom_allocation_p_tbl group by campaign
 
 # COMMAND ----------
 
@@ -129,7 +131,7 @@ alloc.filter(( F.col("estimated_headroom") / F.col("estimated_spend") >= 0.1999)
 
 # COMMAND ----------
 
-# MAGIC %md ## Combine data 
+# MAGIC %md ## Combine data
 
 # COMMAND ----------
 
@@ -152,11 +154,11 @@ alloc_combined.display()
 
 # COMMAND ----------
 
-# MAGIC %md ## offer by segment 
+# MAGIC %md ## offer by segment
 # MAGIC
-# MAGIC basket builder's offer are different compared with the other segments   
+# MAGIC basket builder's offer are different compared with the other segments
 # MAGIC
-# MAGIC Basket builder have more proporition of higher offers 
+# MAGIC Basket builder have more proporition of higher offers
 
 # COMMAND ----------
 
@@ -178,11 +180,11 @@ alloc_combined.groupBy('desc', 'cust_band_fd').count().display()
 
 # COMMAND ----------
 
-# MAGIC %md # Analysis 
+# MAGIC %md # Analysis
 
 # COMMAND ----------
 
-# MAGIC %md ## how many users have null segments? 
+# MAGIC %md ## how many users have null segments?
 
 # COMMAND ----------
 
@@ -193,8 +195,8 @@ alloc_combined.groupBy('desc', 'cust_band_fd').count().display()
 predictions = spark.sql("select * from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519 ")
 predictions = (
   predictions
-  .select("cust_id", "50percentile_time_window_max_spend_basket", 
-  "75percentile_time_window_max_spend_basket", "85percentile_time_window_max_spend_basket", 
+  .select("cust_id", "50percentile_time_window_max_spend_basket",
+  "75percentile_time_window_max_spend_basket", "85percentile_time_window_max_spend_basket",
   "90percentile_time_window_max_spend_basket")
   .groupby("cust_id")
   .sum()
@@ -203,7 +205,7 @@ predictions.display()
 
 # COMMAND ----------
 
-# MAGIC %sql select count (distinct cust_id) from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519 and (experian_hh_composition is null or segmentation is null) 
+# MAGIC %sql select count (distinct cust_id) from loyalty_azlab_prod.predictions_p_tbl where campaign = 20230519 and (experian_hh_composition is null or segmentation is null)
 
 # COMMAND ----------
 
@@ -215,8 +217,8 @@ prediction.filter((F.col("experian_hh_composition").isNull()) | (F.col("segmenta
 
 # COMMAND ----------
 
-# MAGIC %md ## without the null segment, how many distinct segment are there per user 
-# MAGIC - everyone have unqiue segmentation 
+# MAGIC %md ## without the null segment, how many distinct segment are there per user
+# MAGIC - everyone have unqiue segmentation
 
 # COMMAND ----------
 
@@ -264,17 +266,17 @@ fig.show()
 # COMMAND ----------
 
 # MAGIC %md ## Segmentaiton
-# MAGIC what is the overlap between TCOL and food segmentation 
+# MAGIC what is the overlap between TCOL and food segmentation
 
 # COMMAND ----------
 
-# MAGIC %md 
-# MAGIC - What is the minimun spend needed to get the offer 
+# MAGIC %md
+# MAGIC - What is the minimun spend needed to get the offer
 # MAGIC
-# MAGIC - What is the markdown of the offer 
+# MAGIC - What is the markdown of the offer
 # MAGIC
-# MAGIC - Ratio of minimun spend / markdown for the offer,  if its >1 its good 
-# MAGIC If its < 1 means losing money 
+# MAGIC - Ratio of minimun spend / markdown for the offer,  if its >1 its good
+# MAGIC If its < 1 means losing money
 
 # COMMAND ----------
 
@@ -297,7 +299,7 @@ offer_value = pd.DataFrame({'offer_id': [i for i in offer_dict.keys()],
 "markdown": [offer_dict[i].split(" off")[0].replace("£", "") for i in offer_dict.keys()],
 "offer_spend_value":[offer_dict[i].split("spend ")[1].split(" on")[0].replace("£", "") for i in offer_dict.keys()]
 })
-offer_value = spark.createDataFrame(offer_value) 
+offer_value = spark.createDataFrame(offer_value)
 offer_value.display()
 
 alloc_spend_gt_x = (alloc_spend_gt_x.join(offer_value, on = "offer_id", how = "left"))
@@ -327,7 +329,7 @@ alloc_spend_gt_x.groupBy('desc').count()\
 
 # COMMAND ----------
 
-# MAGIC %md ## By Food Segmentation 
+# MAGIC %md ## By Food Segmentation
 
 # COMMAND ----------
 
@@ -339,11 +341,11 @@ alloc_spend_gt_x.count()
 
 # COMMAND ----------
 
-# MAGIC %md how many negative spend, we shouldn't expect this unless its the top 2 offers 
+# MAGIC %md how many negative spend, we shouldn't expect this unless its the top 2 offers
 
 # COMMAND ----------
 
-# how many negative spend, we shouldn't expect this unless its the top 2 offers 
+# how many negative spend, we shouldn't expect this unless its the top 2 offers
 alloc_spend_gt_x.filter(F.col("spend_needed_to_redeem") <0).count()
 
 # COMMAND ----------
@@ -446,7 +448,7 @@ F.count("*").alias("count"))
 
 # COMMAND ----------
 
-# MAGIC %md # VIP list 
+# MAGIC %md # VIP list
 
 # COMMAND ----------
 
@@ -489,7 +491,7 @@ display(alloc.filter(F.col("cust_id") == 6872732896086312431))
 
 # COMMAND ----------
 
-# MAGIC %md # Investigate individual 
+# MAGIC %md # Investigate individual
 
 # COMMAND ----------
 
@@ -501,7 +503,7 @@ display(alloc.filter(F.col("cust_id") == 6872732896086312431))
 
 # COMMAND ----------
 
-# MAGIC %md # investigate outliers 
+# MAGIC %md # investigate outliers
 
 # COMMAND ----------
 
@@ -529,8 +531,8 @@ display(outlier
   .withColumn("outlier", F.when(((F.col("pct_error") >= -0.5) &
                                                     (F.col("pct_error") <= 200)
                                                     ), 0).otherwise(1))
-  
-  .groupby("outlier", "campaign").count() 
+
+  .groupby("outlier", "campaign").count()
 )
 
 # COMMAND ----------
@@ -545,7 +547,7 @@ display(outlier
   .withColumn("outlier_direction", F.when( F.col("pct_error") < -0.5, -1)
               .when(F.col("pct_error") > 200, 1).otherwise(0)
   )
-  .groupby("outlier", "campaign", "outlier_direction").count() 
+  .groupby("outlier", "campaign", "outlier_direction").count()
 )
 
 # COMMAND ----------
@@ -576,7 +578,7 @@ fig.show()
 
 # COMMAND ----------
 
-outlier2 = (outlier 
+outlier2 = (outlier
         .withColumn("pct_error",
                                    100. * (F.col("prediction_out") - F.col("weekly_max_basket_percentile")) / (
                                        F.col("weekly_max_basket_percentile")))
@@ -614,5 +616,3 @@ predictions.filter(F.col("l2_id") == "85percentile_time_window_max_spend_basket"
 display(outlier.filter((F.col("experian_hh_composition") == 'Cat_08') & (F.col("segmentation") == 1 ) ))
 
 # COMMAND ----------
-
-

@@ -1,27 +1,26 @@
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
+
 import surprise
-from surprise.model_selection import KFold
-from surprise.model_selection import GridSearchCV
+from surprise.model_selection import GridSearchCV, KFold
 
 
-def update_parameters(algo: any,
-                      param_dict: Dict[str, Any]
-                      ) -> Any:
+def update_parameters(algo: any, param_dict: Dict[str, Any]) -> Any:
     for (k, v) in param_dict.items():
         algo.__setattr__(k, v)
     return algo
 
 
 def build_recommender(
-        X: Any,
-        method: str,
-        build_trainset: bool = True,
-        measure: str = 'rmse',
-        n_splits: int = 3,
-        shuffle: bool = True,
-        random_state: int = 42,
-        params: Optional[Dict[str, Any]] = None,
-        param_grid: Optional[Dict[str, Any]] = None) -> Any:
+    X: Any,
+    method: str,
+    build_trainset: bool = True,
+    measure: str = "rmse",
+    n_splits: int = 3,
+    shuffle: bool = True,
+    random_state: int = 42,
+    params: Optional[Dict[str, Any]] = None,
+    param_grid: Optional[Dict[str, Any]] = None,
+) -> Any:
     """
     Build Surprise Recommender
 
@@ -61,9 +60,7 @@ def build_recommender(
             # Build the training dataset
             X = X.build_full_trainset()
 
-        algorithm.fit(
-            X
-        )
+        algorithm.fit(X)
         params_used = algorithm.__dict__
         return algorithm, params_used
     else:

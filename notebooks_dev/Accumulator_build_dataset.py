@@ -4,32 +4,34 @@
 # COMMAND ----------
 
 import os
+from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing.pool import ThreadPool
+
+import offerallocationv2.utils.persist_utils as persist_utils
 import pandas as pd
-from datetime import datetime
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (
-    SegmentationDataManager,
-    SegmentationManager,
-)
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import offerallocationv2.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
-from datetime import datetime, timedelta
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
 
 # COMMAND ----------
+
 
 def find_all_segments(data, partitionByList):
     segs = (
@@ -182,22 +184,22 @@ if "segmentation" in config.steps:
 
 # COMMAND ----------
 
-# test 
+# test
 config_use = config["use_segments"]
 
 # COMMAND ----------
 
 # test
 persist_utils.get_table_name(
-            factory_database=config_use.segmentations_tbl.factory_database,
-            lab_database=config.dev_database,
-            table_prefix=config_use.segmentations_tbl.prefix,
-            sensitivity=config_use.segmentations_tbl.sensitivity,
-        )
+    factory_database=config_use.segmentations_tbl.factory_database,
+    lab_database=config.dev_database,
+    table_prefix=config_use.segmentations_tbl.prefix,
+    sensitivity=config_use.segmentations_tbl.sensitivity,
+)
 
 # COMMAND ----------
 
-# MAGIC %sql select distinct campaign from loyalty_azlab_prod.headroom_segmentations_np_p_tbl 
+# MAGIC %sql select distinct campaign from loyalty_azlab_prod.headroom_segmentations_np_p_tbl
 
 # COMMAND ----------
 
@@ -244,11 +246,11 @@ type(get_date(config_bd["etl_date"]))
 
 # COMMAND ----------
 
-get_date('today')
+get_date("today")
 
 # COMMAND ----------
 
-type(get_date('today'))
+type(get_date("today"))
 
 # COMMAND ----------
 
@@ -257,7 +259,7 @@ if "build_dataset" in config.steps:
     logger.info("Begin building dataset")
     config_bd = config["build_dataset"]
 
-    # change ====== 
+    # change ======
     # config_bd['etl_date'] = 20230602
 
     # load factory tables
@@ -338,10 +340,9 @@ display(all_data)
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
-# MAGIC %md ## Generate the transaction manager tables 
+# MAGIC %md ## Generate the transaction manager tables
 
 # COMMAND ----------
 
@@ -349,20 +350,22 @@ trx_manager.etl_date, trx_manager.lookback_date
 
 # COMMAND ----------
 
-trx_line = (trx_manager._add_date(trx_line_df)
-                .filter(F.col("date") <= trx_manager.etl_date)
-                .filter(F.col("date") >= trx_manager.lookback_date)
-                .filter(F.col("PURCHASE_CHANNEL").isin(trx_manager.channels))
-                .filter(F.col("l1_id").isin(list(trx_manager.l1_ids)))
-                .filter(trx_manager.get_common_filters())
-        )
+trx_line = (
+    trx_manager._add_date(trx_line_df)
+    .filter(F.col("date") <= trx_manager.etl_date)
+    .filter(F.col("date") >= trx_manager.lookback_date)
+    .filter(F.col("PURCHASE_CHANNEL").isin(trx_manager.channels))
+    .filter(F.col("l1_id").isin(list(trx_manager.l1_ids)))
+    .filter(trx_manager.get_common_filters())
+)
 # time_window_ind_df = trx_manager.add_time_window_ind(cust_lx_trx = trx_line_df)
 # display(time_window_ind_df)
 
 # COMMAND ----------
 
-trx_line = trx_manager.remove_christmas_transactions(trx_line,
-                                                          christmas_range=trx_manager.christmas_remove_range)
+trx_line = trx_manager.remove_christmas_transactions(
+    trx_line, christmas_range=trx_manager.christmas_remove_range
+)
 
 # COMMAND ----------
 
@@ -370,7 +373,9 @@ trx_line = trx_manager.remove_items(trx_line)
 
 # COMMAND ----------
 
-trx_line = trx_line.join(segmentations_tbl.select(trx_manager.user_key).distinct(), on=trx_manager.user_key)
+trx_line = trx_line.join(
+    segmentations_tbl.select(trx_manager.user_key).distinct(), on=trx_manager.user_key
+)
 
 # COMMAND ----------
 
@@ -378,12 +383,10 @@ cust_lx_trx = trx_manager.get_customer_transactions(trx_line, articles_df)
 
 # COMMAND ----------
 
-time_window_ind_df = trx_manager.add_time_window_ind(cust_lx_trx = cust_lx_trx)
-cust_lx_trx = (cust_lx_trx
-                        .join(time_window_ind_df, on = "date", how = 'left'))
+time_window_ind_df = trx_manager.add_time_window_ind(cust_lx_trx=cust_lx_trx)
+cust_lx_trx = cust_lx_trx.join(time_window_ind_df, on="date", how="left")
 
 # COMMAND ----------
-
 
 
 # COMMAND ----------
@@ -392,18 +395,18 @@ display(cust_lx_trx)
 
 # COMMAND ----------
 
-percentile_spend_time_window = (  
-  cust_lx_trx
-  .select("cust_id", "time_window_ind", "sales_amt")
-  # find the spend in time window 
-  .groupby("cust_id", "time_window_ind")
-  .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
-  # find the weeky max basket amount 
-  # .groupby("cust_id", "time_window_ind")
-  # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
-  .groupby("cust_id")
-  .agg(*trx_manager.get_expr_agg("total_spend_time_window"))
-  .select("cust_id", "85percentile_total_spend_time_window")  ) # add to config ================
+percentile_spend_time_window = (
+    cust_lx_trx.select("cust_id", "time_window_ind", "sales_amt")
+    # find the spend in time window
+    .groupby("cust_id", "time_window_ind")
+    .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+    # find the weeky max basket amount
+    # .groupby("cust_id", "time_window_ind")
+    # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+    .groupby("cust_id")
+    .agg(*trx_manager.get_expr_agg("total_spend_time_window"))
+    .select("cust_id", "85percentile_total_spend_time_window")
+)  # add to config ================
 
 
 # COMMAND ----------
@@ -413,21 +416,28 @@ display(percentile_spend_time_window)
 # COMMAND ----------
 
 time_window_ind_id = (
-  cust_lx_trx
-  .select("cust_id", "time_window_ind", "sales_amt")
-  # find the basket amount 
-  .groupby("cust_id", "time_window_ind")
-  .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
-  # find the weeky max basket amount 
-  # .groupby("cust_id", "WEEK_ID")
-  # .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
-  # .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
-  # .withColumn("percentile", F.lit(34.94))
-  .join(percentile_spend_time_window, how = 'left', on = "cust_id")
-  .where(F.col("total_spend_time_window") >= F.col("85percentile_total_spend_time_window"))
-  # .orderBy("time_window_max_spend_basket")
-  .withColumn("row", F.row_number().over(W.partitionBy("cust_id").orderBy(F.col("total_spend_time_window"))))
-  .filter(F.col("row") == 1)
+    cust_lx_trx.select("cust_id", "time_window_ind", "sales_amt")
+    # find the basket amount
+    .groupby("cust_id", "time_window_ind")
+    .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
+    # find the weeky max basket amount
+    # .groupby("cust_id", "WEEK_ID")
+    # .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
+    # .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
+    # .withColumn("percentile", F.lit(34.94))
+    .join(percentile_spend_time_window, how="left", on="cust_id")
+    .where(
+        F.col("total_spend_time_window")
+        >= F.col("85percentile_total_spend_time_window")
+    )
+    # .orderBy("time_window_max_spend_basket")
+    .withColumn(
+        "row",
+        F.row_number().over(
+            W.partitionBy("cust_id").orderBy(F.col("total_spend_time_window"))
+        ),
+    )
+    .filter(F.col("row") == 1)
 )
 
 # COMMAND ----------
@@ -446,9 +456,17 @@ time_window_ind_id.cache()
 
 # find the l2 id spend for the given time window
 customer_lx_time_window_spend = (
-  cust_lx_trx
-  .join(time_window_ind_id.select("cust_id", "time_window_ind"), how = 'inner', on = ["cust_id", "time_window_ind"])
-  .groupby("cust_id", f"{trx_manager.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{trx_manager.lx}_id_total_time_window_spend"))
+    cust_lx_trx.join(
+        time_window_ind_id.select("cust_id", "time_window_ind"),
+        how="inner",
+        on=["cust_id", "time_window_ind"],
+    )
+    .groupby("cust_id", f"{trx_manager.lx}_id")
+    .agg(
+        F.sum("sales_amt")
+        .cast(T.DoubleType())
+        .alias(f"{trx_manager.lx}_id_total_time_window_spend")
+    )
 )
 
 # COMMAND ----------
@@ -466,24 +484,22 @@ display(customer_lx_time_window_spend)
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
 
+# COMMAND ----------
+
+# MAGIC %md ## max basket spend
 
 # COMMAND ----------
 
-# MAGIC %md ## max basket spend 
-
-# COMMAND ----------
-
-# percentile_spend_time_window = (  
+# percentile_spend_time_window = (
 #   cust_lx_trx
 #   .select("cust_id", "time_window_ind", "sales_amt")
-#   # find the spend in time window 
+#   # find the spend in time window
 #   .groupby("cust_id", "time_window_ind")
 #   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
-#   # find the weeky max basket amount 
+#   # find the weeky max basket amount
 #   # .groupby("cust_id", "time_window_ind")
 #   # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
 #   .groupby("cust_id")
@@ -493,10 +509,10 @@ display(customer_lx_time_window_spend)
 #   time_window_ind_id = (
 #   cust_lx_trx
 #   .select("cust_id", "time_window_ind", "sales_amt")
-#   # find the basket amount 
+#   # find the basket amount
 #   .groupby("cust_id", "time_window_ind")
 #   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_time_window"))
-#   # find the weeky max basket amount 
+#   # find the weeky max basket amount
 #   # .groupby("cust_id", "WEEK_ID")
 #   # .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
 #   # .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
@@ -511,43 +527,65 @@ display(customer_lx_time_window_spend)
 
 # COMMAND ----------
 
-percentile_spend = (  
-  cust_lx_trx
-  .select("cust_id", "basket_id", "time_window_ind", "sales_amt")
-  # find the basket amount 
-  .groupby("cust_id", "basket_id", "time_window_ind")
-  .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
-  .groupby("cust_id", "time_window_ind")
-  .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
-  .groupby("cust_id")
-  .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))
-  .select("cust_id", "85percentile_time_window_max_spend_basket")  ) # add to config ================
+percentile_spend = (
+    cust_lx_trx.select("cust_id", "basket_id", "time_window_ind", "sales_amt")
+    # find the basket amount
+    .groupby("cust_id", "basket_id", "time_window_ind")
+    .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
+    # find the weeky max basket amount
+    .groupby("cust_id", "time_window_ind")
+    .agg(
+        F.max("total_spend_basket")
+        .cast(T.DoubleType())
+        .alias("time_window_max_spend_basket")
+    )
+    .groupby("cust_id")
+    .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))
+    .select("cust_id", "85percentile_time_window_max_spend_basket")
+)  # add to config ================
 
 # get the basket id that is closest to the 85th percentile
 max_basket_id = (
-  cust_lx_trx
-  .select("cust_id", "basket_id", "time_window_ind", "sales_amt")
-  # find the basket amount 
-  .groupby("cust_id", "basket_id", "time_window_ind")
-  .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
-  # .groupby("cust_id", "WEEK_ID")
-  .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
-  .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
-  # .withColumn("percentile", F.lit(34.94))
-  .join(percentile_spend, how = 'left', on = "cust_id")
-  .where(F.col("time_window_max_spend_basket") >= F.col("85percentile_time_window_max_spend_basket"))
-  # .orderBy("time_window_max_spend_basket")
-  .withColumn("row", F.row_number().over(W.partitionBy("cust_id").orderBy(F.col("time_window_max_spend_basket"))))
-  .filter(F.col("row") == 1)
+    cust_lx_trx.select("cust_id", "basket_id", "time_window_ind", "sales_amt")
+    # find the basket amount
+    .groupby("cust_id", "basket_id", "time_window_ind")
+    .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
+    # find the weeky max basket amount
+    # .groupby("cust_id", "WEEK_ID")
+    .withColumn(
+        "time_window_max_spend_basket",
+        F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind")),
+    )
+    .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
+    # .withColumn("percentile", F.lit(34.94))
+    .join(percentile_spend, how="left", on="cust_id")
+    .where(
+        F.col("time_window_max_spend_basket")
+        >= F.col("85percentile_time_window_max_spend_basket")
+    )
+    # .orderBy("time_window_max_spend_basket")
+    .withColumn(
+        "row",
+        F.row_number().over(
+            W.partitionBy("cust_id").orderBy(F.col("time_window_max_spend_basket"))
+        ),
+    )
+    .filter(F.col("row") == 1)
 )
 
 # find the l2 id spend for the given basket
 customer_lx_basket_spend = (
-  cust_lx_trx
-  .join(max_basket_id.select("cust_id", "basket_id"), how = 'inner', on = ["cust_id", "basket_id"])
-  .groupby("cust_id", f"{trx_manager.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{trx_manager.lx}_id_total_spend_basket"))
+    cust_lx_trx.join(
+        max_basket_id.select("cust_id", "basket_id"),
+        how="inner",
+        on=["cust_id", "basket_id"],
+    )
+    .groupby("cust_id", f"{trx_manager.lx}_id")
+    .agg(
+        F.sum("sales_amt")
+        .cast(T.DoubleType())
+        .alias(f"{trx_manager.lx}_id_total_spend_basket")
+    )
 )
 
 # COMMAND ----------
@@ -557,20 +595,18 @@ display(customer_lx_basket_spend)
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
-# percentile_spend_temp = (  
+# percentile_spend_temp = (
 #   cust_lx_trx
 #   .select("cust_id", "basket_id", "time_window_ind", "sales_amt")
-#   # find the basket amount 
+#   # find the basket amount
 #   .groupby("cust_id", "basket_id", "time_window_ind")
 #   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-#   # find the weeky max basket amount 
+#   # find the weeky max basket amount
 #   .groupby("cust_id", "time_window_ind")
 #   .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
 #   .groupby("cust_id")
@@ -581,10 +617,10 @@ display(customer_lx_basket_spend)
 # max_basket_id_temp = (
 #   cust_lx_trx
 #   .select("cust_id", "basket_id", "time_window_ind", "sales_amt")
-#   # find the basket amount 
+#   # find the basket amount
 #   .groupby("cust_id", "basket_id", "time_window_ind")
 #   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-#   # find the weeky max basket amount 
+#   # find the weeky max basket amount
 #   # .groupby("cust_id", "WEEK_ID")
 #   .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
 #   .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
@@ -602,44 +638,59 @@ display(customer_lx_basket_spend)
 #   .join(max_basket_id_temp.select("cust_id", "basket_id"), how = 'inner', on = ["cust_id", "basket_id"])
 #   .groupby("cust_id", f"{trx_manager.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{trx_manager.lx}_id_total_spend_basket"))
 # )
-percentile_spend_temp = (  
-  cust_lx_trx
-  .select("cust_id", "time_window_ind", "sales_amt")
-  # find the basket amount 
-  .groupby("cust_id","time_window_ind")
-  .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
-  # .groupby("cust_id", "time_window_ind")
-  # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
-  .groupby("cust_id")
-  .agg(*trx_manager.get_expr_agg("total_spend_basket"))
-  .select("cust_id", "85percentile_total_spend_basket")  ) # add to config ================
+percentile_spend_temp = (
+    cust_lx_trx.select("cust_id", "time_window_ind", "sales_amt")
+    # find the basket amount
+    .groupby("cust_id", "time_window_ind")
+    .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
+    # find the weeky max basket amount
+    # .groupby("cust_id", "time_window_ind")
+    # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
+    .groupby("cust_id")
+    .agg(*trx_manager.get_expr_agg("total_spend_basket"))
+    .select("cust_id", "85percentile_total_spend_basket")
+)  # add to config ================
 
 # get the basket id that is closest to the 85th percentile
 max_basket_id_temp = (
-  cust_lx_trx
-  .select("cust_id", "time_window_ind", "sales_amt")
-  # find the basket amount 
-  .groupby("cust_id", "time_window_ind")
-  .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
-  # .groupby("cust_id", "WEEK_ID")
-  # .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
-  # .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
-  # .withColumn("percentile", F.lit(34.94))
-  .join(percentile_spend_temp, how = 'left', on = "cust_id")
-  .where(F.col("total_spend_basket") >= F.col("85percentile_total_spend_basket"))
-  # .orderBy("time_window_max_spend_basket")
-  .withColumn("row", F.row_number().over(W.partitionBy("cust_id").orderBy(F.col("total_spend_basket"))))
-  .filter(F.col("row") == 1)
-  .withColumn("time_window_ind_join", F.col("time_window_ind").cast(T.StringType()))
+    cust_lx_trx.select("cust_id", "time_window_ind", "sales_amt")
+    # find the basket amount
+    .groupby("cust_id", "time_window_ind")
+    .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
+    # find the weeky max basket amount
+    # .groupby("cust_id", "WEEK_ID")
+    # .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "time_window_ind") ))
+    # .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
+    # .withColumn("percentile", F.lit(34.94))
+    .join(percentile_spend_temp, how="left", on="cust_id")
+    .where(F.col("total_spend_basket") >= F.col("85percentile_total_spend_basket"))
+    # .orderBy("time_window_max_spend_basket")
+    .withColumn(
+        "row",
+        F.row_number().over(
+            W.partitionBy("cust_id").orderBy(F.col("total_spend_basket"))
+        ),
+    )
+    .filter(F.col("row") == 1)
+    .withColumn("time_window_ind_join", F.col("time_window_ind").cast(T.StringType()))
 )
 
 # find the l2 id spend for the given basket
 customer_lx_basket_spend_temp = (
-  cust_lx_trx.withColumn("time_window_ind_join", F.col("time_window_ind").cast(T.StringType()))
-  .join(max_basket_id_temp.select("cust_id", "time_window_ind_join"), how = 'inner', on = ["cust_id", "time_window_ind_join"])
-  .groupby("cust_id", f"{trx_manager.lx}_id").agg(F.sum("sales_amt").cast(T.DoubleType()).alias(f"{trx_manager.lx}_id_total_spend_basket"))
+    cust_lx_trx.withColumn(
+        "time_window_ind_join", F.col("time_window_ind").cast(T.StringType())
+    )
+    .join(
+        max_basket_id_temp.select("cust_id", "time_window_ind_join"),
+        how="inner",
+        on=["cust_id", "time_window_ind_join"],
+    )
+    .groupby("cust_id", f"{trx_manager.lx}_id")
+    .agg(
+        F.sum("sales_amt")
+        .cast(T.DoubleType())
+        .alias(f"{trx_manager.lx}_id_total_spend_basket")
+    )
 )
 
 # COMMAND ----------
@@ -649,9 +700,7 @@ display(customer_lx_basket_spend_temp)
 # COMMAND ----------
 
 
-
 # COMMAND ----------
-
 
 
 # COMMAND ----------
@@ -669,9 +718,7 @@ display(customer_lx_time_window_spend)
 # COMMAND ----------
 
 
-
 # COMMAND ----------
-
 
 
 # COMMAND ----------
@@ -686,30 +733,27 @@ display(cust_lx_trx_metrics)
 # COMMAND ----------
 
 
-
 # COMMAND ----------
-
-
-
-# COMMAND ----------
-
 
 
 # COMMAND ----------
 
 
+# COMMAND ----------
+
 
 # COMMAND ----------
 
-trx_line_df = (trx_manager._add_date(trx_line_df)
-                .filter(F.col("date") <= trx_manager.etl_date)
-                .filter(F.col("date") >= trx_manager.lookback_date)
-                .filter(F.col("PURCHASE_CHANNEL").isin(trx_manager.channels))
-                .filter(F.col("l1_id").isin(list(trx_manager.l1_ids)))
-                .filter(trx_manager.get_common_filters())
-        )
+trx_line_df = (
+    trx_manager._add_date(trx_line_df)
+    .filter(F.col("date") <= trx_manager.etl_date)
+    .filter(F.col("date") >= trx_manager.lookback_date)
+    .filter(F.col("PURCHASE_CHANNEL").isin(trx_manager.channels))
+    .filter(F.col("l1_id").isin(list(trx_manager.l1_ids)))
+    .filter(trx_manager.get_common_filters())
+)
 
-time_window_ind_df = trx_manager.add_time_window_ind(cust_lx_trx = trx_line_df)
+time_window_ind_df = trx_manager.add_time_window_ind(cust_lx_trx=trx_line_df)
 display(time_window_ind_df)
 
 # COMMAND ----------
@@ -768,13 +812,11 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
 import inspect
+
 lines = inspect.getsource(TransactionsManager.get_transaction_metrics)
 print(lines)
 
 # COMMAND ----------
-
-

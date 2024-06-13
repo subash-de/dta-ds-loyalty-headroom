@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ./bootstrap 
+# MAGIC %run ./bootstrap
 
 # COMMAND ----------
 
@@ -8,27 +8,28 @@ dbutils.widgets.text("seg", "{}", "")
 # COMMAND ----------
 
 import os
+from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing.pool import ThreadPool
+
 import pandas as pd
-from datetime import datetime
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+import customer_headroom.utils.persist_utils as persist_utils
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (
-    SegmentationDataManager,
-    SegmentationManager,
-)
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import customer_headroom.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
-from datetime import datetime, timedelta
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -43,6 +44,7 @@ else:
     logger.info(f"seg: {seg}")
 
 # COMMAND ----------
+
 
 def find_all_segments(data, partitionByList):
     segs = (
@@ -89,10 +91,11 @@ last_registration_date: {last_registration_date}
 
 # COMMAND ----------
 
+
 def run_fit_rec(seg, config, database):
     partitionByList = config["partitionByList"]
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-    ext_str = "_".join([str(seg[k]) for k in partitionByList ])
+    ext_str = "_".join([str(seg[k]) for k in partitionByList])
 
     model_tags = {**config.get("model_tags", {}), **{"campaign": campaign}}
     etl_data_tbl_name = persist_utils.get_table_name(
@@ -162,6 +165,7 @@ def run_fit_rec(seg, config, database):
         tags=model_tags,
         description="Headroom: Registered Parameters Object",
     )
+
 
 # COMMAND ----------
 

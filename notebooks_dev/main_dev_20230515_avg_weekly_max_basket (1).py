@@ -1,10 +1,10 @@
 # Databricks notebook source
-# MAGIC %md # Average weekly max basket approach 
-# MAGIC This notebook uses the 85th percentile of weekly max basket approach to do recomendation and headroom 
+# MAGIC %md # Average weekly max basket approach
+# MAGIC This notebook uses the 85th percentile of weekly max basket approach to do recomendation and headroom
 
 # COMMAND ----------
 
-# MAGIC %run ./bootstrap 
+# MAGIC %run ./bootstrap
 
 # COMMAND ----------
 
@@ -15,24 +15,28 @@
 # COMMAND ----------
 
 import os
+from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing.pool import ThreadPool
+
+import offerallocationv2.utils.persist_utils as persist_utils
 import pandas as pd
-from datetime import datetime
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import SegmentationDataManager, SegmentationManager
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import offerallocationv2.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
-from datetime import datetime, timedelta
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -59,7 +63,7 @@ prediction_month = prediction_time_span/30.
 
 # COMMAND ----------
 
-prediction_period = prediction_week  # want weekly 
+prediction_period = prediction_week  # want weekly
 prediction_period
 
 # COMMAND ----------
@@ -68,9 +72,9 @@ prediction_period
 # #   def add_time_window_ind(self, cust_lx_trx):
 # #     @F.udf(T.IntegerType())
 # #     def time_window_back(date):
-# #       days_diff = (datetime.strptime(str(self.etl_date), self.date_format) - 
+# #       days_diff = (datetime.strptime(str(self.etl_date), self.date_format) -
 # #                             datetime.strptime(str(date), self.date_format)).days // self.time_window_length
-# #       return days_diff 
+# #       return days_diff
 
 # #     trx_time_window = (cust_lx_trx.select("date").withColumn("time_window_ind", time_window_back("date")))
 # #     return trx_time_window
@@ -79,16 +83,16 @@ prediction_period
 #   def add_time_window_ind(self, cust_lx_trx) -> DataFrame:
 #       @F.udf(T.IntegerType())
 #       def time_window_back(date):
-#           days_diff = (datetime.strptime(str(self.etl_date), self.date_format) - 
+#           days_diff = (datetime.strptime(str(self.etl_date), self.date_format) -
 #                           datetime.strptime(str(date), self.date_format)).days // self.time_window_length
-#           return days_diff 
+#           return days_diff
 
 #       trx_time_window = (
 #           cust_lx_trx
 #           .select("date")
 #           .distinct()
 #           .withColumn("time_window_ind", time_window_back("date"))
-#           )  
+#           )
 
 #       # add a comment line to test package version
 #       return trx_time_window
@@ -200,7 +204,7 @@ prediction_period
 # COMMAND ----------
 
 class Allocator2(Allocator):
-  
+
   def get_prediction_scores(self, predictions):
       pred_scores = (predictions
                       .withColumn("pct_error",
@@ -544,6 +548,7 @@ segmentations_tbl.filter(F.col("cust_id") == "6872732896086312431").display()
 # COMMAND ----------
 
 import inspect
+
 lines = inspect.getsource(trx_manager.add_time_window_ind)
 print(lines)
 
@@ -556,6 +561,7 @@ print(lines)
 # COMMAND ----------
 
 import inspect
+
 lines = inspect.getsource(trx_manager.get_transaction_metrics)
 print(lines)
 
@@ -580,7 +586,7 @@ print(lines)
 # cust_lx_trx = trx_manager.get_customer_transactions(trx_line, articles_df)
 
 
-# if trx_manager.time_window_length is not None: 
+# if trx_manager.time_window_length is not None:
 #     time_window_ind_df = trx_manager.add_time_window_ind(cust_lx_trx = cust_lx_trx)
 #     # cust_lx_trx = (cust_lx_trx
 #     #                         .join(time_window_ind_df, on = "date", how = 'left'))
@@ -636,7 +642,7 @@ if "build_dataset" in config.steps:
                                                      lab_database=config.dev_database,
                                                      table_prefix=config_bd.etl_data_tbl.prefix,
                                                      sensitivity=config_bd.etl_data_tbl.sensitivity)
-    
+
     logger.info(f"""etl_data_tbl_name: {etl_data_tbl_name}""")
 
     etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=f"campaign={campaign}")
@@ -645,7 +651,7 @@ if "build_dataset" in config.steps:
 
 # COMMAND ----------
 
-# MAGIC %md # Fit recommendation 
+# MAGIC %md # Fit recommendation
 
 # COMMAND ----------
 
@@ -689,7 +695,7 @@ def run_fit_rec(seg, config, database):
 
     data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
     logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
-    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
+    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager,
                                  tags=model_tags,
                                  description="Headroom: Registered Data Processor Object")
 
@@ -704,13 +710,13 @@ def run_fit_rec(seg, config, database):
 
     rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
-    persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
+    persist_utils.register_model(model_name=rec_name, model_object=rec_algo,
                                  tags=model_tags,
                                  description="Headroom: Registered Recommender Model")
 
     param_name = (config.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
-    persist_utils.register_model(model_name=param_name, model_object=fit_params, 
+    persist_utils.register_model(model_name=param_name, model_object=fit_params,
                                  tags=model_tags,
                                  description="Headroom: Registered Parameters Object")
 
@@ -728,7 +734,7 @@ if "fit_rec" in config.steps:
 
 # COMMAND ----------
 
-# MAGIC %md # Predict 
+# MAGIC %md # Predict
 
 # COMMAND ----------
 
@@ -801,7 +807,7 @@ if "predict" in config.steps:
 
 # COMMAND ----------
 
-# MAGIC %md # Allocation 
+# MAGIC %md # Allocation
 
 # COMMAND ----------
 
@@ -951,9 +957,12 @@ display(headroom_tbl.filter(F.col("cust_id") == '6872732896086312431'))
 
 # COMMAND ----------
 
-from offerallocationv2.utils import tmo_utils
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
 import seaborn as sns
+from offerallocationv2.utils import tmo_utils
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 # COMMAND ----------
 
@@ -978,7 +987,7 @@ lab_segment.groupby("cust_band_fd", "desc").count().display()
 
 # COMMAND ----------
 
-# MAGIC %md # investigate allocation 
+# MAGIC %md # investigate allocation
 
 # COMMAND ----------
 
@@ -1131,7 +1140,7 @@ headroom_export.display()
 # COMMAND ----------
 
 class Allocator2(Allocator):
-  
+
   def get_prediction_scores(self, predictions):
       pred_scores = (predictions
                       .withColumn("pct_error",
@@ -1228,12 +1237,10 @@ class Allocator2(Allocator):
 
 # COMMAND ----------
 
-# MAGIC %md # investigate build dataset 
+# MAGIC %md # investigate build dataset
 
 # COMMAND ----------
 
 
 
 # COMMAND ----------
-
-

@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ./bootstrap 
+# MAGIC %run ./bootstrap
 
 # COMMAND ----------
 
@@ -8,27 +8,28 @@ dbutils.widgets.text("seg_list", "[]", "")
 # COMMAND ----------
 
 import os
+from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing.pool import ThreadPool
+
 import pandas as pd
-from datetime import datetime
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+import customer_headroom.utils.persist_utils as persist_utils
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (
-    SegmentationDataManager,
-    SegmentationManager,
-)
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import customer_headroom.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
-from datetime import datetime, timedelta
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -43,6 +44,7 @@ else:
     logger.info(f"seg_list: {seg_list}")
 
 # COMMAND ----------
+
 
 def find_all_segments(data, partitionByList):
     segs = (
@@ -94,9 +96,14 @@ if "predict" in config.steps:
     config_pd = config["predict"]
     partitionByList = config_pd["partitionByList"]
 
-    #get list of pred items depending on lx id
-    lu_article = spark.read.table('analytics_trans_prod.lu_article')
-    pred_items = lu_article.filter(F.col('l2_id').isin(config_pd["pred_items"])).select(f'{config_pd["pred_key"]}_id').distinct().toPandas()
+    # get list of pred items depending on lx id
+    lu_article = spark.read.table("analytics_trans_prod.lu_article")
+    pred_items = (
+        lu_article.filter(F.col("l2_id").isin(config_pd["pred_items"]))
+        .select(f'{config_pd["pred_key"]}_id')
+        .distinct()
+        .toPandas()
+    )
     list_pred_items = list(pred_items[f'{config_pd["pred_key"]}_id'])
 
     etl_data_tbl_name = persist_utils.get_table_name(
@@ -108,8 +115,8 @@ if "predict" in config.steps:
 
     for seg in seg_list:
         seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-        ext_str = "_".join([str(seg[k]) for k in partitionByList ])
-        
+        ext_str = "_".join([str(seg[k]) for k in partitionByList])
+
         data = persist_utils.read_table(
             table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
         )
@@ -134,15 +141,16 @@ if "predict" in config.steps:
         )
 
         predictions = predictor_manager.get(data=data, algo=rec_algo)
-        # add the segment here !!! or else the rows are note deleted when inserting 
+        # add the segment here !!! or else the rows are note deleted when inserting
         # new rows are added in the predict step for l2 ids not in etl
-        predictions = (predictions
-                       .withColumn("campaign", F.lit(campaign))
-                       .drop("load_timestamp")
-                       .withColumn("experian_hh_composition", F.lit(seg["experian_hh_composition"]) )
-                       .withColumn("segmentation", F.lit(seg["segmentation"]) )
-         ) # ----------------------------------------------
-
+        predictions = (
+            predictions.withColumn("campaign", F.lit(campaign))
+            .drop("load_timestamp")
+            .withColumn(
+                "experian_hh_composition", F.lit(seg["experian_hh_composition"])
+            )
+            .withColumn("segmentation", F.lit(seg["segmentation"]))
+        )  # ----------------------------------------------
 
         prediction_tbl_name = persist_utils.create_beam_table(
             table_prefix=config_pd.prediction_tbl.prefix,

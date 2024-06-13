@@ -1,15 +1,16 @@
-from typing import Any, Optional, Tuple, List
-import pandas as pd
-import numpy as np
 import math
 from functools import partial
-from sklearn.model_selection import train_test_split
-from dtaml.logging import get_logger
-from dtaml._internals.databricks import get_spark
+from typing import Any, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
 import seaborn as sns
-from surprise.model_selection import KFold
+from dtaml._internals.databricks import get_spark
+from dtaml.logging import get_logger
 from scipy import stats
 from sklearn import metrics
+from sklearn.model_selection import train_test_split
+from surprise.model_selection import KFold
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -18,17 +19,17 @@ spark = get_spark()
 
 class Evaluator(object):
     def __init__(
-            self,
-            algorithm: Any,
-            data_processor: Any,
-            user_key: str,
-            pred_key: str,
-            pred_items: str,
-            dev_size: float,
-            test_size: float,
-            split_col: str,
-            sample: Optional[int] = None,
-            random_state: Optional[int] = None
+        self,
+        algorithm: Any,
+        data_processor: Any,
+        user_key: str,
+        pred_key: str,
+        pred_items: str,
+        dev_size: float,
+        test_size: float,
+        split_col: str,
+        sample: Optional[int] = None,
+        random_state: Optional[int] = None,
     ):
         self.algorithm = algorithm
         self.data_processor = data_processor
@@ -42,8 +43,7 @@ class Evaluator(object):
         self.random_state = random_state
 
     def _train_dev_test_split(
-            self,
-            data: pd.DataFrame
+        self, data: pd.DataFrame
     ) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """
         Splitting `data` into train, dev and test sets
@@ -56,19 +56,24 @@ class Evaluator(object):
             unique_ids, test_size=self.test_size, random_state=self.random_state
         )
         train_ids, dev_ids = train_test_split(
-            train_ids, test_size=self.dev_size / (1 - self.test_size), random_state=self.random_state
+            train_ids,
+            test_size=self.dev_size / (1 - self.test_size),
+            random_state=self.random_state,
         )
 
         train_data = data.loc[data.loc[:, self.split_col].isin(train_ids), :]
         dev_data = data.loc[data.loc[:, self.split_col].isin(dev_ids), :]
         test_data = data.loc[data.loc[:, self.split_col].isin(test_ids), :]
 
-        assert len(set(train_data.index) & set(dev_data.index)) == 0, \
-            "There is overlap between train and dev sets"
-        assert len(set(train_data.index) & set(test_data.index)) == 0, \
-            "There is overlap between train and test sets"
-        assert len(set(test_data.index) & set(dev_data.index)) == 0, \
-            "There is overlap between dev and test sets"
+        assert (
+            len(set(train_data.index) & set(dev_data.index)) == 0
+        ), "There is overlap between train and dev sets"
+        assert (
+            len(set(train_data.index) & set(test_data.index)) == 0
+        ), "There is overlap between train and test sets"
+        assert (
+            len(set(test_data.index) & set(dev_data.index)) == 0
+        ), "There is overlap between dev and test sets"
         logger.info(
             f"training set size: {train_data.shape}, "
             f"dev set size: {dev_data.shape}, "
@@ -77,8 +82,8 @@ class Evaluator(object):
         return train_data, dev_data, test_data
 
     def _process_data(
-            self,
-            data: pd.DataFrame,
+        self,
+        data: pd.DataFrame,
     ) -> pd.DataFrame:
         """
         Transform data using the loaded in data_processor object
@@ -87,10 +92,7 @@ class Evaluator(object):
         return rec_data
 
     def _preprocess_dataframes(
-            self,
-            train_data: pd.DataFrame,
-            dev_data: pd.DataFrame,
-            test_data: pd.DataFrame
+        self, train_data: pd.DataFrame, dev_data: pd.DataFrame, test_data: pd.DataFrame
     ) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """
         Preprocess train/dev/test sets
@@ -104,10 +106,9 @@ class Evaluator(object):
 
         return train_data_prep, dev_data_prep, test_data_prep
 
-    def _build_predict_dataframe(self,
-                                 data_idx: List[Tuple],
-                                 full_range: bool = False
-                                 ) -> pd.DataFrame:
+    def _build_predict_dataframe(
+        self, data_idx: List[Tuple], full_range: bool = False
+    ) -> pd.DataFrame:
         """
         Build Prediciton Datasets from the List of Tuples output from the surprise Datasets.
         """
@@ -118,16 +119,18 @@ class Evaluator(object):
         if full_range:
             accs = {acc[0] for acc in data_tuples}
             pred_dataframe = pred_dataframe.merge(
-                pd.DataFrame([(acc, item) for acc in accs for item in self.pred_items],
-                             columns=[self.user_key, self.pred_key]),
-                on=[self.user_key, self.pred_key], how="outer")
+                pd.DataFrame(
+                    [(acc, item) for acc in accs for item in self.pred_items],
+                    columns=[self.user_key, self.pred_key],
+                ),
+                on=[self.user_key, self.pred_key],
+                how="outer",
+            )
         return pred_dataframe
 
-    def _predict(self,
-                 algorithm: Any,
-                 data_tuple: Tuple,
-                 full_range: bool = False
-                 ) -> pd.DataFrame:
+    def _predict(
+        self, algorithm: Any, data_tuple: Tuple, full_range: bool = False
+    ) -> pd.DataFrame:
         """
         Find algorithm predictions from the data tuples -> pandas Dataframes.
         """
@@ -135,75 +138,91 @@ class Evaluator(object):
         data_ = self._build_predict_dataframe(data_tuple, full_range=full_range)
 
         data_["prediction"] = data_.apply(
-            lambda row: algorithm.predict(uid=str(row[self.user_key]), iid=str(row[self.pred_key])).est, axis=1)
+            lambda row: algorithm.predict(
+                uid=str(row[self.user_key]), iid=str(row[self.pred_key])
+            ).est,
+            axis=1,
+        )
         return data_
 
     def _predict_set(
-            self,
-            algorithm: Any,
-            train_data: Tuple,
-            dev_data: Tuple,
-            test_data: Tuple,
-            full_range: bool = False
+        self,
+        algorithm: Any,
+        train_data: Tuple,
+        dev_data: Tuple,
+        test_data: Tuple,
+        full_range: bool = False,
     ) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """
         Make predictions on train/dev/test sets
         """
 
-        train_data_ = self._predict(algorithm, train_data.build_testset(), full_range=full_range)
-        dev_data_ = self._predict(algorithm, dev_data.build_testset(), full_range=full_range)
-        test_data_ = self._predict(algorithm, test_data.build_testset(), full_range=full_range)
+        train_data_ = self._predict(
+            algorithm, train_data.build_testset(), full_range=full_range
+        )
+        dev_data_ = self._predict(
+            algorithm, dev_data.build_testset(), full_range=full_range
+        )
+        test_data_ = self._predict(
+            algorithm, test_data.build_testset(), full_range=full_range
+        )
 
         return train_data_, dev_data_, test_data_
 
-    def evaluate(self,
-                 data: pd.DataFrame,
-                 run_tag: Optional[str] = None
-                 ) -> pd.DataFrame:
+    def evaluate(
+        self, data: pd.DataFrame, run_tag: Optional[str] = None
+    ) -> pd.DataFrame:
         """
         Evaluate model performance with train/dev/test split
         """
         if self.sample:
             logger.info(f"Apply Sample by Factor of {self.sample}")
-            data = data.sample(frac=self.sample, axis=0., random_state=self.random_state)
+            data = data.sample(
+                frac=self.sample, axis=0.0, random_state=self.random_state
+            )
 
         logger.info("Splitting `data` into train/dev/test")
         train_data, dev_data, test_data = self._train_dev_test_split(data)
 
         logger.info("Preprocessing train/dev/test datasets")
-        train_data_prep, dev_data_prep, test_data_prep = \
-            self._preprocess_dataframes(train_data, dev_data, test_data)
+        train_data_prep, dev_data_prep, test_data_prep = self._preprocess_dataframes(
+            train_data, dev_data, test_data
+        )
 
         logger.info("Building Recommender Algorithm with Training Data")
         algo = self.algorithm(train_data_prep, build_trainset=False)
 
         logger.info("Get train/dev/test Predictions")
-        train_pred, dev_pred, test_pred = self._predict_set(algo,
-                                                            train_data=train_data_prep,
-                                                            dev_data=dev_data_prep,
-                                                            test_data=test_data_prep,
-                                                            full_range=True)
+        train_pred, dev_pred, test_pred = self._predict_set(
+            algo,
+            train_data=train_data_prep,
+            dev_data=dev_data_prep,
+            test_data=test_data_prep,
+            full_range=True,
+        )
 
         logger.info("Evaluate train/dev/test Datasets")
-        evaluations = self._evaluate_set(algo,
-                                         train_pred, dev_pred, test_pred)
+        evaluations = self._evaluate_set(algo, train_pred, dev_pred, test_pred)
         if run_tag:
             evaluations.loc[:, "run"] = run_tag
 
         return evaluations
 
-    def evaluate_kfold(self,
-                       data: pd.DataFrame,
-                       n_splits: int = 3,
-                       shuffle: bool = False,
-                       run_tag: Optional[str] = None
-                       ) -> pd.DataFrame:
+    def evaluate_kfold(
+        self,
+        data: pd.DataFrame,
+        n_splits: int = 3,
+        shuffle: bool = False,
+        run_tag: Optional[str] = None,
+    ) -> pd.DataFrame:
         """
         Evaluate model performance with K-Fold
         """
         if self.sample:
             logger.info(f"Apply Sample by Factor of {self.sample}")
-            data = data.sample(frac=self.sample, axis=0., random_state=self.random_state)
+            data = data.sample(
+                frac=self.sample, axis=0.0, random_state=self.random_state
+            )
 
         logger.info("Construct K-FOLDs")
         kf = KFold(n_splits=n_splits, shuffle=shuffle, random_state=self.random_state)
@@ -222,11 +241,9 @@ class Evaluator(object):
             evaluations.loc[:, "run"] = run_tag
         return evaluations
 
-    def _evaluate(self,
-                  algorithm: Any,
-                  pred_data: pd.DataFrame,
-                  tag: Optional[str] = None
-                  ) -> pd.DataFrame:
+    def _evaluate(
+        self, algorithm: Any, pred_data: pd.DataFrame, tag: Optional[str] = None
+    ) -> pd.DataFrame:
         """
         Run evaluations on the prediction pandas DataFrame.
         Current metrics are:
@@ -252,11 +269,11 @@ class Evaluator(object):
         return results_df
 
     def _evaluate_set(
-            self,
-            algorithm: Any,
-            train_pred: pd.DataFrame,
-            dev_pred: pd.DataFrame,
-            test_pred: pd.DataFrame
+        self,
+        algorithm: Any,
+        train_pred: pd.DataFrame,
+        dev_pred: pd.DataFrame,
+        test_pred: pd.DataFrame,
     ) -> pd.DataFrame:
         """
         Run Evaluation function on the train/dev/test datasets.
@@ -270,20 +287,31 @@ class Evaluator(object):
 
         return results
 
-    def get_arhr(self,
-                 algorithm: Any,
-                 df: pd.DataFrame) -> float:
+    def get_arhr(self, algorithm: Any, df: pd.DataFrame) -> float:
         """
         Calculate the AVERAGE RECIPROCAL HIT RANK (ARHR) Metric from the input DataFrame given recommendation Algorithm
         """
         get_true_vals_part = partial(self.get_true_vals, catCols=self.pred_items)
-        get_sim_scores_part = partial(self.get_sim_scores, algorithm=algorithm, catCols=self.pred_items)
-        cust_vals = df.groupby(self.user_key).apply(lambda x: dict(zip(x[self.pred_key], x['val']))).reset_index(
-            name='mapping')
-        cust_vals["vals"] = cust_vals.apply(lambda x: get_true_vals_part(x['mapping']), axis=1)
-        cust_vals["scores"] = cust_vals.apply(lambda x: get_sim_scores_part(x['cust_id']), axis=1)
-        cust_vals["rank_vals"] = cust_vals.apply(lambda x: self.get_ranks(x["vals"]), axis=1)
-        cust_vals["rank_scores"] = cust_vals.apply(lambda x: self.get_ranks(x["scores"]), axis=1)
+        get_sim_scores_part = partial(
+            self.get_sim_scores, algorithm=algorithm, catCols=self.pred_items
+        )
+        cust_vals = (
+            df.groupby(self.user_key)
+            .apply(lambda x: dict(zip(x[self.pred_key], x["val"])))
+            .reset_index(name="mapping")
+        )
+        cust_vals["vals"] = cust_vals.apply(
+            lambda x: get_true_vals_part(x["mapping"]), axis=1
+        )
+        cust_vals["scores"] = cust_vals.apply(
+            lambda x: get_sim_scores_part(x["cust_id"]), axis=1
+        )
+        cust_vals["rank_vals"] = cust_vals.apply(
+            lambda x: self.get_ranks(x["vals"]), axis=1
+        )
+        cust_vals["rank_scores"] = cust_vals.apply(
+            lambda x: self.get_ranks(x["scores"]), axis=1
+        )
         arhr = self.arhr_metric(cust_vals)
         return arhr
 
@@ -327,7 +355,7 @@ class Evaluator(object):
             row_test = row["rank_vals"]
             row_predict = row["rank_scores"]
             row_bool = [False if np.isnan(i) else True for i in row_test]
-            return (1. / np.asarray(row_predict)[row_bool]).sum()
+            return (1.0 / np.asarray(row_predict)[row_bool]).sum()
 
         df["reciprocal_sum_rank"] = df.apply(get_reciprocal_rank_sum, axis=1)
         return 1 / (len(df)) * df["reciprocal_sum_rank"].sum()

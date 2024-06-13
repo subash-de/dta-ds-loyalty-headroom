@@ -1,26 +1,29 @@
 # Databricks notebook source
-# MAGIC %md # QA notebook 
+# MAGIC %md # QA notebook
 # MAGIC
 
 # COMMAND ----------
 
-# MAGIC %run ./bootstrap 
+# MAGIC %run ./bootstrap
 
 # COMMAND ----------
 
+import os
+import shutil
 # from offerallocationv2.utils import tmo_utils
 from datetime import datetime, timedelta
-import pandas as pd 
+
+import pandas as pd
 import plotly
 import plotly.express as px
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
 import seaborn as sns
-import shutil
-import os 
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 import customer_headroom.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-
 
 # COMMAND ----------
 
@@ -44,6 +47,7 @@ except:
 
 # COMMAND ----------
 
+
 def get_date(date):
     if str(date).lower() == "today":
         date = datetime.now().strftime("%Y%m%d")
@@ -60,20 +64,26 @@ config_dates = config["dates"]
 campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
 
 date_format = "%Y%m%d"
-last_registration_date = int((datetime.strptime(str(campaign), date_format) -
-                                  timedelta(days=config_dates['lookback_days_registration'])).strftime(date_format))
+last_registration_date = int(
+    (
+        datetime.strptime(str(campaign), date_format)
+        - timedelta(days=config_dates["lookback_days_registration"])
+    ).strftime(date_format)
+)
 env = os.environ["ENVIRONMENT"]
 
 
 # campaign = 20230531
 campaign_type = "headroom"
 
-logger.info(f"""
+logger.info(
+    f"""
 config_dates: {config_dates}
 campaign: {campaign}
 last_registration_date: {last_registration_date}
 env: {env}
-""")
+"""
+)
 
 # COMMAND ----------
 
@@ -88,19 +98,23 @@ out_path
 
 # COMMAND ----------
 
-# MAGIC %md # Allocation 
+# MAGIC %md # Allocation
 
 # COMMAND ----------
 
 if "allocate" in config.steps:
     config_al = config["allocation"]
-    headroom_tbl_name = persist_utils.get_table_name(factory_database=config_al.headroom_export_tbl.factory_database,
-                                                     lab_database=config.dev_database,
-                                                     table_prefix=config_al.headroom_export_tbl.prefix,
-                                                     sensitivity=config_al.headroom_export_tbl.sensitivity)
+    headroom_tbl_name = persist_utils.get_table_name(
+        factory_database=config_al.headroom_export_tbl.factory_database,
+        lab_database=config.dev_database,
+        table_prefix=config_al.headroom_export_tbl.prefix,
+        sensitivity=config_al.headroom_export_tbl.sensitivity,
+    )
     logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
 
-    headroom_tbl = persist_utils.read_table(table_name=headroom_tbl_name, where=f"campaign={campaign}")
+    headroom_tbl = persist_utils.read_table(
+        table_name=headroom_tbl_name, where=f"campaign={campaign}"
+    )
     display(headroom_tbl.orderBy(F.rand()))
 
 # COMMAND ----------
@@ -109,22 +123,24 @@ headroom_tbl.count()
 
 # COMMAND ----------
 
-allocation_grouped = (headroom_tbl.groupBy('desc').count()\
-  .withColumn('percentage', F.round(F.col('count') / F.sum('count')\
-  .over(W.partitionBy()),3)
-)
+allocation_grouped = (
+    headroom_tbl.groupBy("desc")
+    .count()
+    .withColumn(
+        "percentage", F.round(F.col("count") / F.sum("count").over(W.partitionBy()), 3)
+    )
 )
 allocation_grouped.display()
 
 # COMMAND ----------
 
 allocation_grouped.toPandas().to_csv(
-            os.path.join(out_path, "offer_count.csv"), header=True, mode="w", index=False
-        )
+    os.path.join(out_path, "offer_count.csv"), header=True, mode="w", index=False
+)
 
 # COMMAND ----------
 
-# MAGIC %md # TCOL split 
+# MAGIC %md # TCOL split
 
 # COMMAND ----------
 
@@ -154,10 +170,9 @@ allocation_grouped.toPandas().to_csv(
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
-# MAGIC %md # VIP list 
+# MAGIC %md # VIP list
 
 # COMMAND ----------
 
@@ -269,5 +284,3 @@ else:
     )
 
 # COMMAND ----------
-
-

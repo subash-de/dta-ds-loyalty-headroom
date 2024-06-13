@@ -17,22 +17,26 @@ print(f'Config used is: \n{config.dumps()}')
 # COMMAND ----------
 
 import os
-from functools import partial
-import pandas as pd
 from datetime import datetime
+from functools import partial
+from multiprocessing.pool import ThreadPool
+
+import offerallocationv2.utils.persist_utils as persist_utils
+import pandas as pd
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import SegmentationDataManager, SegmentationManager
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import offerallocationv2.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from pyspark.sql import DataFrame, functions as F
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -300,8 +304,8 @@ def run_fit_rec(seg, config, database):
 
     data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
     logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
-    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
-                                 tags={"campaign": campaign}, 
+    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager,
+                                 tags={"campaign": campaign},
                                  description="Headroom: Registered Data Processor Object")
 
     logger.info(f"{seg}: Build Recommender")
@@ -315,14 +319,14 @@ def run_fit_rec(seg, config, database):
 
     rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
-    persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
-                                 tags={"campaign": campaign}, 
+    persist_utils.register_model(model_name=rec_name, model_object=rec_algo,
+                                 tags={"campaign": campaign},
                                  description="Headroom: Registered Recommender Model")
 
     param_name = (config.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
-    persist_utils.register_model(model_name=param_name, model_object=fit_params, 
-                                 tags={"campaign": campaign}, 
+    persist_utils.register_model(model_name=param_name, model_object=fit_params,
+                                 tags={"campaign": campaign},
                                  description="Headroom: Registered Parameters Object")
 
 

@@ -1,11 +1,13 @@
 import logging
+from collections import defaultdict
+from functools import reduce
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from functools import reduce
-from collections import defaultdict
-from typing import Optional, Dict, Tuple, List
-from pyspark.sql import DataFrame, SparkSession, functions as F, types as T
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 logger = logging.getLogger("offerallocation")
 

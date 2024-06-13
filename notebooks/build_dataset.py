@@ -4,32 +4,35 @@
 # COMMAND ----------
 
 import os
+from ast import literal_eval
+from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing.pool import ThreadPool
+
 import pandas as pd
-from datetime import datetime
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+import customer_headroom.utils.persist_utils as persist_utils
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (
-    SegmentationDataManager,
-    SegmentationManager,
-)
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import customer_headroom.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
-from datetime import datetime, timedelta
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-from ast import literal_eval
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
 
 # COMMAND ----------
+
 
 def find_all_segments(data, partitionByList):
     segs = (
@@ -243,8 +246,8 @@ if "build_dataset" in config.steps:
         user_key=config_bd["user_id"],
         window_days=config_bd["window_days"],
         time_window_length=config_bd["time_window_days"],
-        exclude_items = literal_eval(config["exclude_items"]),
-        aggregation_level = config_bd["aggregation_level"], 
+        exclude_items=literal_eval(config["exclude_items"]),
+        aggregation_level=config_bd["aggregation_level"],
     )
     all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
 
@@ -303,6 +306,7 @@ if "build_dataset" in config.steps:
 
 # COMMAND ----------
 
+
 def get_count(seg, config, database):
     partitionByList = seg.keys()
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
@@ -322,12 +326,13 @@ def get_count(seg, config, database):
 
     return (seg, cnt)
 
+
 seg_cnt = []
 for seg in seg_list:
     config_bd = config["build_dataset"]
     seg_cnt.append(get_count(seg, config=config_bd, database=config.dev_database))
 
-seg_cnt.sort(key = lambda i:i[1], reverse = True)
+seg_cnt.sort(key=lambda i: i[1], reverse=True)
 
 seg_list = [seg[0] for seg in seg_cnt]
 logger.info(f"Ordered seg_list: {seg_list}")
@@ -339,14 +344,12 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
-# MAGIC %md # dev 
+# MAGIC %md # dev
 
 # COMMAND ----------
 
@@ -368,7 +371,6 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
 # import inspect
@@ -376,5 +378,3 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # print(lines)
 
 # COMMAND ----------
-
-

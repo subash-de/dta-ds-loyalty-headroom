@@ -1,5 +1,0 @@
-[flake8]
-ignore = E226,E302,E41,W504
-max-line-length = 160
-max-complexity = 10
-exclude = notebooks/*, notebooks_dev/*, venv/*, build/*, .idea/*, *.egg-info/*

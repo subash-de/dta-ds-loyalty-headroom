@@ -1,35 +1,37 @@
-import numpy as np
-from typing import Optional, Dict, Tuple, List
-from pyspark.sql import functions as F, DataFrame, types as T
 from functools import partial
 from itertools import chain
+from typing import Dict, List, Optional, Tuple
 
-#from dtaml._internals.databricks import get_spark
-#spark = get_spark()
+import numpy as np
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+# from dtaml._internals.databricks import get_spark
+# spark = get_spark()
 
 
 class Allocator(object):
     def __init__(
-            self,
-            feature_col: str,
-            offer_limits: Dict[str, Tuple[float]],
-            user_key: str = "cust_id",
-            lx_key: str = "l2_id",
-            outlier_min: float = -0.5,
-            outlier_max: float = 200.,
-            max_increase: float = 80.,
-            min_increase: float = 5.,
-            headroom_factor: float = 1.2,
-            N_offer_fill: int = 2,
-            large_offers: Optional[List[int]] = None,
-            small_offers: Optional[List[int]] = None,
-            fill_offer: Optional[int] = None,
-            offer_desc: Optional[Dict[str, str]] = None,
-            date_format: Optional[str] = "%Y%m%d",
-            prev_not_bought_factor: float = 1,
-            prev_not_bought_factor_lx_id_indpendent: float = 1,
-            aggregate_level: str = 'basket',
-
+        self,
+        feature_col: str,
+        offer_limits: Dict[str, Tuple[float]],
+        user_key: str = "cust_id",
+        lx_key: str = "l2_id",
+        outlier_min: float = -0.5,
+        outlier_max: float = 200.0,
+        max_increase: float = 80.0,
+        min_increase: float = 5.0,
+        headroom_factor: float = 1.2,
+        N_offer_fill: int = 2,
+        large_offers: Optional[List[int]] = None,
+        small_offers: Optional[List[int]] = None,
+        fill_offer: Optional[int] = None,
+        offer_desc: Optional[Dict[str, str]] = None,
+        date_format: Optional[str] = "%Y%m%d",
+        prev_not_bought_factor: float = 1,
+        prev_not_bought_factor_lx_id_indpendent: float = 1,
+        aggregate_level: str = "basket",
     ):
         self.feature_col = feature_col
         self.offer_limits = offer_limits
@@ -42,14 +44,20 @@ class Allocator(object):
         self.headroom_factor = headroom_factor
         self.N_offer_fill = N_offer_fill
         if large_offers is None:
-            offer_limit_maxes = dict(sorted(self.offer_limits.items(), key=lambda x: max(x[1]),
-                                            reverse=True)[:self.N_offer_fill])
+            offer_limit_maxes = dict(
+                sorted(
+                    self.offer_limits.items(), key=lambda x: max(x[1]), reverse=True
+                )[: self.N_offer_fill]
+            )
             self.large_offers = list((offer_limit_maxes.keys()))
         else:
             self.large_offers = large_offers
         if small_offers is None:
-            offer_limit_mins = dict(sorted(self.offer_limits.items(), key=lambda x: min(x[1]),
-                                           reverse=False)[:self.N_offer_fill])
+            offer_limit_mins = dict(
+                sorted(
+                    self.offer_limits.items(), key=lambda x: min(x[1]), reverse=False
+                )[: self.N_offer_fill]
+            )
             self.small_offers = list((offer_limit_mins.keys()))
         else:
             self.small_offers = small_offers
@@ -62,15 +70,19 @@ class Allocator(object):
         else:
             self.offer_desc = None
         self.date_format = date_format
-        
+
         self.prev_not_bought_factor = prev_not_bought_factor
-        self.prev_not_bought_factor_lx_id_indpendent = prev_not_bought_factor_lx_id_indpendent
+        self.prev_not_bought_factor_lx_id_indpendent = (
+            prev_not_bought_factor_lx_id_indpendent
+        )
         self.aggregate_level = aggregate_level
 
         self.large_lim = max(list(chain(*self.offer_limits.values())))
-        #self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
-        #self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
-        self.get_offer_desc_part = F.udf(partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType())
+        # self.get_large_offer = F.udf(partial(self.get_offer, offers=self.large_offers), T.IntegerType())
+        # self.get_small_offer = F.udf(partial(self.get_offer, offers=self.small_offers), T.IntegerType())
+        self.get_offer_desc_part = F.udf(
+            partial(self.get_offer_desc, offer_desc=self.offer_desc), T.StringType()
+        )
 
     @staticmethod
     def get_offer(rand, offers):
@@ -87,19 +99,16 @@ class Allocator(object):
         else:
             return "Missing"
 
-    def get(self,
-            predictions: DataFrame,
-            audience: Optional[DataFrame] = None
-            ) -> DataFrame:
+    def get(
+        self, predictions: DataFrame, audience: Optional[DataFrame] = None
+    ) -> DataFrame:
         """
         Allocate customers from Headroom predictions.
         """
         if audience:
-            predictions = (predictions
-                           .join(audience
-                                 .select(self.user_key)
-                                 .distinct(), on=self.user_key, how='right')
-                           )
+            predictions = predictions.join(
+                audience.select(self.user_key).distinct(), on=self.user_key, how="right"
+            )
 
         prediction_scores = self.get_prediction_scores(predictions)
 
@@ -112,40 +121,49 @@ class Allocator(object):
         return headroom_export
 
     def get_prediction_scores(self, predictions):
-        pred_scores = (predictions
-                      #  .withColumn("pct_error",
-                      #              100. * (F.col("prediction_out") - F.col(self.feature_col)) / (
-                      #                  F.col(self.feature_col)))
-
-                      # set pct error to 0 if there is no purchase (value of 0 in feature col)
-                      .withColumn("pct_error", F.when(F.col(self.feature_col) >0, 
-                                   100. * (F.col("prediction_out") - F.col(self.feature_col)) / (
-                                       F.col(self.feature_col))).otherwise(0)
-                                   )
-                      #  .groupby(self.user_key, "experian_hh_composition", "segmentation")
-                      #  .agg(F.mean(self.feature_col).alias("mean_input"),
-                      #       F.sum(self.feature_col).alias("sum_input"),
-                      #       F.sum("prediction_out").alias("sum_prediction"),
-                      #       F.mean("pct_error").alias("mean_pct_error"),
-                      #       (F.sum(F.col(self.feature_col) * F.col("visits")) / F.sum(
-                      #           F.col("visits"))).alias("weightedmean_input"),
-                      #       (F.sum(F.col("pct_error") * F.col("visits")) / F.sum(F.col("visits"))).alias(
-                      #           "weightedmean_pct_error")
-                      #       )
-                    
-                       .withColumn("offer_id", F.lit(None))
-                       )
+        pred_scores = (
+            predictions
+            #  .withColumn("pct_error",
+            #              100. * (F.col("prediction_out") - F.col(self.feature_col)) / (
+            #                  F.col(self.feature_col)))
+            # set pct error to 0 if there is no purchase (value of 0 in feature col)
+            .withColumn(
+                "pct_error",
+                F.when(
+                    F.col(self.feature_col) > 0,
+                    100.0
+                    * (F.col("prediction_out") - F.col(self.feature_col))
+                    / (F.col(self.feature_col)),
+                ).otherwise(0),
+            )
+            #  .groupby(self.user_key, "experian_hh_composition", "segmentation")
+            #  .agg(F.mean(self.feature_col).alias("mean_input"),
+            #       F.sum(self.feature_col).alias("sum_input"),
+            #       F.sum("prediction_out").alias("sum_prediction"),
+            #       F.mean("pct_error").alias("mean_pct_error"),
+            #       (F.sum(F.col(self.feature_col) * F.col("visits")) / F.sum(
+            #           F.col("visits"))).alias("weightedmean_input"),
+            #       (F.sum(F.col("pct_error") * F.col("visits")) / F.sum(F.col("visits"))).alias(
+            #           "weightedmean_pct_error")
+            #       )
+            .withColumn("offer_id", F.lit(None))
+        )
         return pred_scores
 
     def tag_outliers(self, data):
-        data_tagged = (data
-                       .withColumn("outlier", F.when(((F.col("pct_error") >= self.outlier_min) &
-                                                      (F.col("pct_error") <= self.outlier_max)
-                                                      ), 0).otherwise(1))
-                       )
+        data_tagged = data.withColumn(
+            "outlier",
+            F.when(
+                (
+                    (F.col("pct_error") >= self.outlier_min)
+                    & (F.col("pct_error") <= self.outlier_max)
+                ),
+                0,
+            ).otherwise(1),
+        )
         return data_tagged
 
-    '''
+    """
     def get_headroom(self, data):
 
         data_hrm = (data
@@ -162,7 +180,7 @@ class Allocator(object):
                     # .withColumn("total_used_headroom_per_id",
                     #             F.col(self.feature_col) * F.col("used_headroom_frac"))
                     # set the headroom of non purchase to the prediction
-                    .withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
+                    .withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0,
                                                                        F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor)
                                 )
                     # .groupby(self.user_key, "experian_hh_composition", "segmentation") # there are null segmentations, which result in random offer being assigned
@@ -215,94 +233,152 @@ class Allocator(object):
                        .dropDuplicates(subset=[self.user_key])
                        )
         return data_export
-    '''
+    """
 
     def get_headroom(self, data):
-        #get used_headroom_fraction
-        data_hrm = (data
-                    .withColumn("used_headroom_frac",
-                                F.when((F.col("pct_error") >= self.max_increase) & (F.col("outlier") == 0),
-                                        (1. + self.max_increase / 100.))
-                                .when((F.col("pct_error") <= self.min_increase) & (F.col("outlier") == 0),
-                                        (1. + self.min_increase / 100.))
-                                .when((F.col("pct_error") < self.max_increase) &
-                                        (F.col("pct_error") > self.min_increase) & (F.col("outlier") == 0),
-                                        1. + F.col("pct_error") / 100.)
-                                .otherwise(self.headroom_factor)
-                                )
+        # get used_headroom_fraction
+        data_hrm = data.withColumn(
+            "used_headroom_frac",
+            F.when(
+                (F.col("pct_error") >= self.max_increase) & (F.col("outlier") == 0),
+                (1.0 + self.max_increase / 100.0),
+            )
+            .when(
+                (F.col("pct_error") <= self.min_increase) & (F.col("outlier") == 0),
+                (1.0 + self.min_increase / 100.0),
+            )
+            .when(
+                (F.col("pct_error") < self.max_increase)
+                & (F.col("pct_error") > self.min_increase)
+                & (F.col("outlier") == 0),
+                1.0 + F.col("pct_error") / 100.0,
+            )
+            .otherwise(self.headroom_factor),
         )
-        #Different way of calculating headroom basked on aggregation level
-        if self.aggregate_level == 'basket':
-            data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
-                                                                            F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor)
-                                        )
-                        .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
-                        .withColumnRenamed(self.feature_col, 'sum_total_spend')
-                        .select(self.user_key, f'{self.lx_key}_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
-                        .groupby(self.user_key)
-                        .agg(F.sum("total_used_headroom").alias("total_used_headroom"),
-                        F.sum('sum_total_spend').alias("sum_total_spend"))
+        # Different way of calculating headroom basked on aggregation level
+        if self.aggregate_level == "basket":
+            data_hrm = (
+                data_hrm.withColumn(
+                    "total_used_headroom_per_id",
+                    F.when(
+                        F.col(self.feature_col) > 0,
+                        F.col(self.feature_col) * F.col("used_headroom_frac"),
+                    ).otherwise(F.col("prediction_out") * self.prev_not_bought_factor),
+                )
+                .withColumnRenamed("total_used_headroom_per_id", "total_used_headroom")
+                .withColumnRenamed(self.feature_col, "sum_total_spend")
+                .select(
+                    self.user_key,
+                    f"{self.lx_key}_id",
+                    "sum_total_spend",
+                    "total_used_headroom",
+                    "used_headroom_frac",
+                )
+                .groupby(self.user_key)
+                .agg(
+                    F.sum("total_used_headroom").alias("total_used_headroom"),
+                    F.sum("sum_total_spend").alias("sum_total_spend"),
+                )
             )
         else:
-                data_hrm = (data_hrm.withColumn("total_used_headroom_per_id", F.when(F.col(self.feature_col) >0, 
-                                                                                F.col(self.feature_col) * F.col("used_headroom_frac")).otherwise(F.col("prediction_out") * self.prev_not_bought_factor_lx_id_indpendent)
-                                        )
-                            .withColumnRenamed('total_used_headroom_per_id', 'total_used_headroom')
-                            .withColumnRenamed(self.feature_col, 'sum_total_spend')
-                            .select(self.user_key, f'{self.lx_key}_id', 'sum_total_spend', 'total_used_headroom', 'used_headroom_frac')
+            data_hrm = (
+                data_hrm.withColumn(
+                    "total_used_headroom_per_id",
+                    F.when(
+                        F.col(self.feature_col) > 0,
+                        F.col(self.feature_col) * F.col("used_headroom_frac"),
+                    ).otherwise(
+                        F.col("prediction_out")
+                        * self.prev_not_bought_factor_lx_id_indpendent
+                    ),
                 )
+                .withColumnRenamed("total_used_headroom_per_id", "total_used_headroom")
+                .withColumnRenamed(self.feature_col, "sum_total_spend")
+                .select(
+                    self.user_key,
+                    f"{self.lx_key}_id",
+                    "sum_total_spend",
+                    "total_used_headroom",
+                    "used_headroom_frac",
+                )
+            )
 
         data_hrm = data_hrm.withColumn("rand", F.rand())
         data_hrm_cnt = data_hrm.count()
-        data_hrm = (data_hrm.withColumn("offer_id", F.lit(None)))
+        data_hrm = data_hrm.withColumn("offer_id", F.lit(None))
 
-        #Allocate offers based on offer limits
+        # Allocate offers based on offer limits
         for k, v in self.offer_limits.items():
-                    offer_id = int(k)
-                    data_hrm = (data_hrm
-                                .withColumn("offer_id", F.when((F.col("total_used_headroom") >= v[0]) &
-                                                                (F.col("total_used_headroom") < v[1]), offer_id)
-                                            .otherwise(F.col("offer_id"))
-                                            )
-                    )
-        
-        
-                
-        data_out = (data_hrm
-                    # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
-                    # If still values are null, give them a random small offer.
-                    .withColumn("large_offers", F.array([F.lit(x) for x in self.large_offers]))
-                    .withColumn("small_offers", F.array([F.lit(x) for x in self.small_offers]))
-                    .withColumn("offer_id", F.when((F.col("total_used_headroom") >= self.large_lim),
-                                                    F.col("large_offers")[((F.col("rand") * F.size(F.col("large_offers"))).cast("int"))])
-                                 .otherwise(F.col("offer_id")))
-                    .withColumn("offer_id",
-                                F.when((F.col("offer_id").isNull()), 
-                                       F.col("small_offers")[((F.col("rand") * F.size(F.col("small_offers"))).cast("int"))])
-                                .otherwise(F.col("offer_id")))
-                    .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
+            offer_id = int(k)
+            data_hrm = data_hrm.withColumn(
+                "offer_id",
+                F.when(
+                    (F.col("total_used_headroom") >= v[0])
+                    & (F.col("total_used_headroom") < v[1]),
+                    offer_id,
+                ).otherwise(F.col("offer_id")),
+            )
+
+        data_out = (
+            data_hrm
+            # If very large headroom. Probably some outliers. For now random spread these offers over the top offer range.
+            # If still values are null, give them a random small offer.
+            .withColumn("large_offers", F.array([F.lit(x) for x in self.large_offers]))
+            .withColumn("small_offers", F.array([F.lit(x) for x in self.small_offers]))
+            .withColumn(
+                "offer_id",
+                F.when(
+                    (F.col("total_used_headroom") >= self.large_lim),
+                    F.col("large_offers")[
+                        ((F.col("rand") * F.size(F.col("large_offers"))).cast("int"))
+                    ],
+                ).otherwise(F.col("offer_id")),
+            )
+            .withColumn(
+                "offer_id",
+                F.when(
+                    (F.col("offer_id").isNull()),
+                    F.col("small_offers")[
+                        ((F.col("rand") * F.size(F.col("small_offers"))).cast("int"))
+                    ],
+                ).otherwise(F.col("offer_id")),
+            )
+            .withColumn("desc", self.get_offer_desc_part(F.col("offer_id")))
         )
 
-        #asserting that large spenders get large offers
+        # asserting that large spenders get large offers
         large_spenders = data_out.filter(F.col("total_used_headroom") > 270)
         if large_spenders.count() > 0:
-            cnt = large_spenders.select('offer_id').filter(~F.col('offer_id').isin(self.large_offers)).count()
-            assert cnt == 0, f'wrong offers given to large spenders (>270)'
-        
+            cnt = (
+                large_spenders.select("offer_id")
+                .filter(~F.col("offer_id").isin(self.large_offers))
+                .count()
+            )
+            assert cnt == 0, f"wrong offers given to large spenders (>270)"
 
         return data_out
 
     def prepare_export(self, data):
-        data_export = (data
-                        .withColumn("offer_id", F.when(F.col("offer_id").isNull(), F.lit(self.fill_offer))
-                                        .otherwise(F.col("offer_id"))
-                                        )
-                        .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
-                        .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
-                        .withColumn("estimated_headroom",
-                                        F.round(F.col("total_used_headroom") - F.col("sum_total_spend"),
-                                                2))
-                        .drop('sum_total_spend', 'total_used_headroom','large_offers','small_offers','rand')
+        data_export = (
+            data.withColumn(
+                "offer_id",
+                F.when(F.col("offer_id").isNull(), F.lit(self.fill_offer)).otherwise(
+                    F.col("offer_id")
+                ),
+            )
+            .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
+            .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
+            .withColumn(
+                "estimated_headroom",
+                F.round(F.col("total_used_headroom") - F.col("sum_total_spend"), 2),
+            )
+            .drop(
+                "sum_total_spend",
+                "total_used_headroom",
+                "large_offers",
+                "small_offers",
+                "rand",
+            )
         )
 
         return data_export

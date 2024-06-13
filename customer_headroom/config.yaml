@@ -43,7 +43,7 @@ mail_storage_account: #storage account for different envs for email attachments 
   dev: "dtaeunprodblbsharing01"
   ppd: "dtaeunprodblbfactory01"
   prod: "dtaeunprodblbfactory01"
-  
+
 Email:
   from_email: 'dta.admin@mnscorp.net'
   to_email: ['dapeng.wang@mnscorp.net','parthav.x.maheshwari@mnscorp.net']
@@ -65,8 +65,8 @@ steps: [segmentation, build_dataset, fit_rec, predict, allocate]
 date_format: &date_format '%Y%m%d'
 dates:
   upcoming_campaign: *upcoming_campaign
-  etl_date: &etl_date 20231127 #"today"  # changed 
-  lookback_days: &lookback_days 195 # 28*7-1 
+  etl_date: &etl_date 20231127 #"today"  # changed
+  lookback_days: &lookback_days 195 # 28*7-1
   lookback_days_registration: &lookback_days_registration 195 # 28*7-1
 columns:
   user_id: &user_id "cust_id"
@@ -165,11 +165,11 @@ predict:
   feature_col: *feature_col
   pred_key: *lx
   pred_items: *lx_ids
-  # pred_items: ["average_time_window_max_spend_basket", 
-  #             "50percentile_time_window_max_spend_basket", 
-  #             "75percentile_time_window_max_spend_basket", 
-  #             "85percentile_time_window_max_spend_basket", 
-  #             "90percentile_time_window_max_spend_basket", 
+  # pred_items: ["average_time_window_max_spend_basket",
+  #             "50percentile_time_window_max_spend_basket",
+  #             "75percentile_time_window_max_spend_basket",
+  #             "85percentile_time_window_max_spend_basket",
+  #             "90percentile_time_window_max_spend_basket",
   #             "100percentile_time_window_max_spend_basket",] #*lx_ids
   cat_cols: *seg_cat_cols
   partitionByList: *segPartition
@@ -248,14 +248,14 @@ allocation:
   outlier_max: 200.
   max_increase: 80.
   min_increase: 5.
-  prev_not_bought_factor: 0. # 0 means don't use categories that wasn't bought 
+  prev_not_bought_factor: 0. # 0 means don't use categories that wasn't bought
   prev_not_bought_factor_lx_id_indpendent: 1
   headroom_factor: 1.2
-  aggregate_level: *aggregation_level 
+  aggregate_level: *aggregation_level
   fill_offer: 14140
   # Output
   headroom_export_tbl: *headroom_export_tbl
-  tcol_allocate_separately : False # False 
+  tcol_allocate_separately : False # False
   exclude_high_spend: None
   min_num_basket: None
 
@@ -294,7 +294,7 @@ sections:
                     '16736': "£17 off when you spend £170 on M&S food in store",
                     '16718': "£19 off when you spend £190 on M&S food in store",
                     '16716': "£21 off when you spend £210 on M&S food in store",
-                    '16734': "£23 off when you spend £230 on M&S food in store", 
+                    '16734': "£23 off when you spend £230 on M&S food in store",
                     '16698': "£25 off when you spend £250 on M&S food in store",
                     '16699': "£27 off when you spend £270 on M&S food in store",}
     offer_limits_top: {'16437': [0,21],
@@ -320,7 +320,7 @@ sections:
                     '16736': "£17 off when you spend £170 on M&S food in store",
                     '16718': "£19 off when you spend £190 on M&S food in store",
                     '16716': "£21 off when you spend £210 on M&S food in store",
-                    '16734': "£23 off when you spend £230 on M&S food in store", 
+                    '16734': "£23 off when you spend £230 on M&S food in store",
                     '16698': "£25 off when you spend £250 on M&S food in store",
                     '16699': "£27 off when you spend £270 on M&S food in store",}
     offer_limits: {'16437': [0,21],

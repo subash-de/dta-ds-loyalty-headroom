@@ -22,11 +22,12 @@ else:
 dbutils.library.restartPython()
 
 
-    
+
 
 # COMMAND ----------
 
 from dtaml.databricks.runtime import get_all_widgets
+
 from customer_headroom.config import load_config_campaign_type
 
 widgets = get_all_widgets()

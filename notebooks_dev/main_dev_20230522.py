@@ -1,27 +1,31 @@
 # Databricks notebook source
-# MAGIC %run ./bootstrap 
+# MAGIC %run ./bootstrap
 
 # COMMAND ----------
 
 import os
+from datetime import datetime, timedelta
 from functools import partial
+from multiprocessing.pool import ThreadPool
+
+import offerallocationv2.utils.persist_utils as persist_utils
 import pandas as pd
-from datetime import datetime
+import seaborn as sns
+from cdsutils.io_utils import file_exists, load_object, save_object
+from dtaml.logging import get_logger
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import SegmentationDataManager, SegmentationManager
+from customer_headroom.etl.segmentation import (SegmentationDataManager,
+                                                SegmentationManager)
+from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
 from customer_headroom.modelling.predict import Predictor
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.allocation.allocator import Allocator
-import offerallocationv2.utils.persist_utils as persist_utils
-from dtaml.logging import get_logger
-from cdsutils.io_utils import file_exists, save_object, load_object
-from multiprocessing.pool import ThreadPool
-import seaborn as sns
-from datetime import datetime, timedelta
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -30,6 +34,7 @@ logger = get_logger("customer-headroom")
 # COMMAND ----------
 
 import inspect
+
 lines = inspect.getsource(Allocator)
 print(lines)
 
@@ -101,7 +106,7 @@ if "segmentation" in config.steps:
     # else:
     #     custs_etl_data = spark.read.parquet(cust_path)
 
-    # selecting customer who have registered for a period of time, so that there is some spending data when calculating percentiles. 
+    # selecting customer who have registered for a period of time, so that there is some spending data when calculating percentiles.
     sparks_account_df = sparks_account_df.filter(F.col("registration_date") <= datetime.strptime(str(last_registration_date), "%Y%m%d"))
 
     custs_etl_data = sparks_account_df
@@ -208,7 +213,7 @@ len(seg_list)
 
 # COMMAND ----------
 
-# MAGIC %md # Build dataset 
+# MAGIC %md # Build dataset
 
 # COMMAND ----------
 
@@ -254,7 +259,7 @@ if "build_dataset" in config.steps:
     segmentations_tbl = (persist_utils.read_table(table_name=segmentations_tbl_name, where=f"campaign= {campaign}")
                          .select([config_bd["user_id"]] + partitionByList)
                          )
-    
+
     # #############
     # segmentations_tbl = (segmentations_tbl.withColumn("campaign", F.lit("20230519")))
     # #############
@@ -312,7 +317,7 @@ if "build_dataset" in config.steps:
                                                      lab_database=config.dev_database,
                                                      table_prefix=config_bd.etl_data_tbl.prefix,
                                                      sensitivity=config_bd.etl_data_tbl.sensitivity)
-    
+
     logger.info(f"""etl_data_tbl_name: {etl_data_tbl_name}""")
 
     etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=f"campaign={campaign}")
@@ -321,7 +326,7 @@ if "build_dataset" in config.steps:
 
 # COMMAND ----------
 
-# MAGIC %md # Fit recommendation 
+# MAGIC %md # Fit recommendation
 
 # COMMAND ----------
 
@@ -330,7 +335,7 @@ config["fit_rec"]
 
 # COMMAND ----------
 
-# MAGIC %sql select count(*), experian_hh_composition, segmentation from loyalty_azlab_prod.headroom_etl_data_230522_p_tbl where campaign = 20230522 group by experian_hh_composition, segmentation 
+# MAGIC %sql select count(*), experian_hh_composition, segmentation from loyalty_azlab_prod.headroom_etl_data_230522_p_tbl where campaign = 20230522 group by experian_hh_composition, segmentation
 
 # COMMAND ----------
 
@@ -340,7 +345,7 @@ config["fit_rec"]
 # seg_list_3 = []
 
 # for j in seg_list2:
-#   k = j 
+#   k = j
 #   k['campaign'] = 20230519
 #   seg_list_3.append(k)
 
@@ -397,7 +402,7 @@ def run_fit_rec(seg, config, database):
 
     data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
     logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
-    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
+    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager,
                                  tags=model_tags,
                                  description="Headroom: Registered Data Processor Object")
 
@@ -412,13 +417,13 @@ def run_fit_rec(seg, config, database):
 
     rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
-    persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
+    persist_utils.register_model(model_name=rec_name, model_object=rec_algo,
                                  tags=model_tags,
                                  description="Headroom: Registered Recommender Model")
 
     param_name = (config.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
-    persist_utils.register_model(model_name=param_name, model_object=fit_params, 
+    persist_utils.register_model(model_name=param_name, model_object=fit_params,
                                  tags=model_tags,
                                  description="Headroom: Registered Parameters Object")
 
@@ -438,7 +443,7 @@ if "fit_rec" in config.steps:
 
 # COMMAND ----------
 
-# MAGIC %md # Predict 
+# MAGIC %md # Predict
 
 # COMMAND ----------
 
@@ -449,11 +454,11 @@ logger.info(config["predict"])
 if "predict" in config.steps:
     logger.info("Begin Predictions")
     config_pd = config["predict"]
-    # config_pd["pred_items"] = ["average_time_window_max_spend_basket", 
-    #                                  "50percentile_time_window_max_spend_basket", 
-    #                                  "75percentile_time_window_max_spend_basket", 
-    #                                  "85percentile_time_window_max_spend_basket", 
-    #                                  "90percentile_time_window_max_spend_basket", 
+    # config_pd["pred_items"] = ["average_time_window_max_spend_basket",
+    #                                  "50percentile_time_window_max_spend_basket",
+    #                                  "75percentile_time_window_max_spend_basket",
+    #                                  "85percentile_time_window_max_spend_basket",
+    #                                  "90percentile_time_window_max_spend_basket",
     #                                  "100percentile_time_window_max_spend_basket",]
     partitionByList = config_pd["partitionByList"]
 
@@ -487,7 +492,7 @@ if "predict" in config.steps:
         )
 
         predictions = predictor_manager.get(data=data, algo=rec_algo)
-        # add the segment here !!! or else the rows are note deleted when inserting 
+        # add the segment here !!! or else the rows are note deleted when inserting
         # new rows are added in the predict step for l2 ids not in etl
         predictions = (predictions
                        .withColumn("campaign", F.lit(campaign))
@@ -525,7 +530,7 @@ if "predict" in config.steps:
                                                        lab_database=config.dev_database,
                                                        table_prefix=config_pd.prediction_tbl.prefix,
                                                        sensitivity=config_pd.prediction_tbl.sensitivity)
-    
+
     logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
     prediction_tbl = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
@@ -537,7 +542,7 @@ if "predict" in config.steps:
 
 # COMMAND ----------
 
-# MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl  where load_timestamp is not null 
+# MAGIC %sql select count(*), count(distinct cust_id ) from loyalty_azlab_prod.predictions_230522_p_tbl  where load_timestamp is not null
 
 # COMMAND ----------
 
@@ -549,11 +554,11 @@ if "predict" in config.steps:
 
 # COMMAND ----------
 
-# MAGIC %sql select count(distinct cust_id) from loyalty_azlab_prod.predictions_230522_p_tbl 
+# MAGIC %sql select count(distinct cust_id) from loyalty_azlab_prod.predictions_230522_p_tbl
 
 # COMMAND ----------
 
-# MAGIC %md # Allocation 
+# MAGIC %md # Allocation
 
 # COMMAND ----------
 
@@ -574,7 +579,7 @@ logger.info(config["allocation"])
 
 # predictions = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
 
-# # if its under predicting, then would force the stretch to be 20% 
+# # if its under predicting, then would force the stretch to be 20%
 # predictions = (predictions.filter(F.col("cust_id") == 6872732896086312431)
 #                 .withColumn("prediction_out_orig", F.col("prediction_out"))
 #                 .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col("l2_id_total_spend_basket"), F.col("l2_id_total_spend_basket")*1.2).otherwise(F.col("prediction_out_orig")))
@@ -599,8 +604,8 @@ if "allocate" in config.steps:
 
     predictions = persist_utils.read_table(table_name=prediction_tbl_name, where=f"campaign={campaign}")
 
-    # if its under predicting, then would force the stretch to be 20% 
-    # replacing the feature col value with pred_out when its 0 
+    # if its under predicting, then would force the stretch to be 20%
+    # replacing the feature col value with pred_out when its 0
     predictions = (predictions
                   .withColumn("prediction_out_orig", F.col("prediction_out"))
                   .withColumn("prediction_out", F.when(F.col("prediction_out_orig") < F.col("l2_id_total_spend_basket"), F.col("l2_id_total_spend_basket")*1.05).otherwise(F.col("prediction_out_orig")))
@@ -706,7 +711,7 @@ headroom_tbl.filter(F.col("cust_id") == 6872732896086312431).display()
 
 # COMMAND ----------
 
-# MAGIC %md # Testing 
+# MAGIC %md # Testing
 
 # COMMAND ----------
 
@@ -716,7 +721,7 @@ if "build_dataset" in config.steps:
                                                      lab_database=config.dev_database,
                                                      table_prefix=config_bd.etl_data_tbl.prefix,
                                                      sensitivity=config_bd.etl_data_tbl.sensitivity)
-    
+
     logger.info(f"""etl_data_tbl_name: {etl_data_tbl_name}""")
 
     etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=f"campaign={campaign}")
@@ -726,7 +731,7 @@ if "build_dataset" in config.steps:
 
 # COMMAND ----------
 
-# Cat_04, segmentaiton 0 
+# Cat_04, segmentaiton 0
 display(
   etl_data_tbl.filter(F.col("cust_id") == 6872732896086312431)
 )
@@ -737,7 +742,7 @@ seg_list[11]
 
 # COMMAND ----------
 
-# MAGIC %md ## Fit model 
+# MAGIC %md ## Fit model
 
 # COMMAND ----------
 
@@ -782,7 +787,7 @@ def run_fit_rec(seg, config, database):
 
     data_process_manager_name = (config.data_processor_name + "_{ext}").format(campaign=campaign, ext=ext_str)
     logger.info(f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}")
-    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager, 
+    persist_utils.register_model(model_name=data_process_manager_name, model_object=data_process_manager,
                                  tags=model_tags,
                                  description="Headroom: Registered Data Processor Object")
 
@@ -797,13 +802,13 @@ def run_fit_rec(seg, config, database):
 
     rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
-    persist_utils.register_model(model_name=rec_name, model_object=rec_algo, 
+    persist_utils.register_model(model_name=rec_name, model_object=rec_algo,
                                  tags=model_tags,
                                  description="Headroom: Registered Recommender Model")
 
     param_name = (config.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
-    persist_utils.register_model(model_name=param_name, model_object=fit_params, 
+    persist_utils.register_model(model_name=param_name, model_object=fit_params,
                                  tags=model_tags,
                                  description="Headroom: Registered Parameters Object")
 
@@ -854,7 +859,7 @@ etl_data_tbl_name = persist_utils.get_table_name(factory_database=config_fr.etl_
 
 seg_etl_data_tbl = persist_utils.read_table(table_name=etl_data_tbl_name, where=" and ".join(seg_ext))
 seg_etl_data_tbl.count()
-# max_size = config_fr["max_train_size"] 
+# max_size = config_fr["max_train_size"]
 
 # # Why max 100k size????
 # if max_size:
@@ -952,7 +957,7 @@ data_processor.max_col
 
 # COMMAND ----------
 
-# MAGIC %md ## predict 
+# MAGIC %md ## predict
 
 # COMMAND ----------
 
@@ -963,11 +968,11 @@ config["predict"]
 if "predict" in config.steps:
     logger.info("Begin Predictions")
     config_pd = config["predict"]
-    # config_pd["pred_items"] = ["average_time_window_max_spend_basket", 
-    #                                  "50percentile_time_window_max_spend_basket", 
-    #                                  "75percentile_time_window_max_spend_basket", 
-    #                                  "85percentile_time_window_max_spend_basket", 
-    #                                  "90percentile_time_window_max_spend_basket", 
+    # config_pd["pred_items"] = ["average_time_window_max_spend_basket",
+    #                                  "50percentile_time_window_max_spend_basket",
+    #                                  "75percentile_time_window_max_spend_basket",
+    #                                  "85percentile_time_window_max_spend_basket",
+    #                                  "90percentile_time_window_max_spend_basket",
     #                                  "100percentile_time_window_max_spend_basket",]
     partitionByList = config_pd["partitionByList"]
 
@@ -1068,7 +1073,7 @@ display(prediction_seg
   .withColumn("outlier_direction", F.when( F.col("pct_error") < -0.5, -1)
               .when(F.col("pct_error") > 200, 1).otherwise(0)
   )
-  .groupby("outlier", "campaign", "outlier_direction").count() 
+  .groupby("outlier", "campaign", "outlier_direction").count()
 )
 
 # COMMAND ----------
@@ -1083,7 +1088,7 @@ display(prediction_seg.filter(F.col("l2_id") == "85percentile_time_window_max_sp
   .withColumn("outlier_direction", F.when( F.col("pct_error") < -0.5, -1)
               .when(F.col("pct_error") > 200, 1).otherwise(0)
   )
-  .groupby("outlier", "campaign", "outlier_direction").count() 
+  .groupby("outlier", "campaign", "outlier_direction").count()
 )
 
 # COMMAND ----------
@@ -1117,7 +1122,7 @@ display(
   .agg(F.sum("weekly_max_basket_percentile").alias("sum_target"),
        F.sum("prediction_out").alias("sum_prediction"))
   .withColumn("target_minus_prediction", F.col("sum_target") - F.col("sum_prediction"))
-  
+
 )
 
 # COMMAND ----------
@@ -1168,16 +1173,16 @@ seg_data
 # COMMAND ----------
 
 predict_2 = pd.DataFrame(predict_1)
-predict_2['prediction_out'] = predict_2['est'] # np.exp(predict_2['est']) #* 500 
+predict_2['prediction_out'] = predict_2['est'] # np.exp(predict_2['est']) #* 500
 predict_2 = predict_2.rename(columns={"uid": "cust_id", "iid": "l2_id"})
 predict_2
 
 
 # COMMAND ----------
 
-pred_3 = pd.merge(left = seg_data, 
-                  right = predict_2, 
-                  how = 'left', 
+pred_3 = pd.merge(left = seg_data,
+                  right = predict_2,
+                  how = 'left',
                   on = ['cust_id', 'l2_id'])
 pred_3['log_target'] = np.log(pred_3['weekly_max_basket_percentile']/500)
 
@@ -1295,20 +1300,22 @@ spark.createDataFrame(seg_data).display()
 
 # COMMAND ----------
 
-# MAGIC %sql select count(*), experian_hh_composition, segmentation from loyalty_azlab_prod.headroom_etl_data_2305_p_tbl where campaign = 20230522 group by experian_hh_composition, segmentation 
+# MAGIC %sql select count(*), experian_hh_composition, segmentation from loyalty_azlab_prod.headroom_etl_data_2305_p_tbl where campaign = 20230522 group by experian_hh_composition, segmentation
 
 # COMMAND ----------
 
-# MAGIC %sql select count(distinct cust_id), experian_hh_composition, segmentation from loyalty_azlab_prod.headroom_etl_data_2305_p_tbl where campaign = 20230522 group by experian_hh_composition, segmentation 
+# MAGIC %sql select count(distinct cust_id), experian_hh_composition, segmentation from loyalty_azlab_prod.headroom_etl_data_2305_p_tbl where campaign = 20230522 group by experian_hh_composition, segmentation
 
 # COMMAND ----------
 
-# MAGIC %md # build dataset 
+# MAGIC %md # build dataset
 
 # COMMAND ----------
 
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 # COMMAND ----------
 
@@ -1342,25 +1349,25 @@ display(
   # cust_lx_trx
   trx_line
   .select("cust_id", "basket_id", "time_window_ind", "sales_amt")
-  # find the basket amount 
+  # find the basket amount
   .groupby("cust_id", "basket_id", "time_window_ind")
   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
+  # find the weeky max basket amount
   .groupby("cust_id", "time_window_ind")
   .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
   .groupby("cust_id")
-  .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))  
+  .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))
   # .select("cust_id", F.expr(unpivotExpr))
   # .filter(~F.col("l2_id").isNull())
-  # .unpivot(ids = ['cust_id'], values = ["average_time_window_max_spend_basket", 
-  #                                    "50percentile_time_window_max_spend_basket", 
-  #                                    "75percentile_time_window_max_spend_basket", 
-  #                                    "85percentile_time_window_max_spend_basket", 
-  #                                    "90percentile_time_window_max_spend_basket", 
+  # .unpivot(ids = ['cust_id'], values = ["average_time_window_max_spend_basket",
+  #                                    "50percentile_time_window_max_spend_basket",
+  #                                    "75percentile_time_window_max_spend_basket",
+  #                                    "85percentile_time_window_max_spend_basket",
+  #                                    "90percentile_time_window_max_spend_basket",
   #                                    "100percentile_time_window_max_spend_basket",],
-  #       variableColumnName = "l2_id", 
+  #       variableColumnName = "l2_id",
   #       valueColumnName = 'value',
-  #       )  
+  #       )
 )
 
 # COMMAND ----------
@@ -1369,14 +1376,14 @@ display(
   # cust_lx_trx
   trx_line
   .select("cust_id", "basket_id", "WEEK_ID", "sales_amt")
-  # find the basket amount 
+  # find the basket amount
   .groupby("cust_id", "basket_id", "WEEK_ID")
   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
+  # find the weeky max basket amount
   .groupby("cust_id", "WEEK_ID")
   .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
   .groupby("cust_id")
-  .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))  
+  .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))
 )
 
 # COMMAND ----------
@@ -1385,14 +1392,14 @@ display(
   # cust_lx_trx
   trx_line
   .select("cust_id", "basket_id", "WEEK_ID", "sales_amt")
-  # find the basket amount 
+  # find the basket amount
   .groupby("cust_id", "basket_id", "WEEK_ID")
   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
+  # find the weeky max basket amount
   .groupby("cust_id", "WEEK_ID")
   .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
   # .groupby("cust_id")
-  # .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))  
+  # .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))
 )
 
 # COMMAND ----------
@@ -1401,10 +1408,10 @@ display(
   # cust_lx_trx
   trx_line
   .select("cust_id", "basket_id", "WEEK_ID", "sales_amt")
-  # find the basket amount 
+  # find the basket amount
   .groupby("cust_id", "basket_id", "WEEK_ID")
   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
+  # find the weeky max basket amount
   # .groupby("cust_id", "WEEK_ID")
   .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "WEEK_ID") ))
   .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
@@ -1418,7 +1425,7 @@ display(
   # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
 
   # .groupby("cust_id")
-  # .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))  
+  # .agg(*trx_manager.get_expr_agg("time_window_max_spend_basket"))
 )
 
 # COMMAND ----------
@@ -1435,10 +1442,10 @@ display(
 
 percentile_spend = (  trx_line
   .select("cust_id", "basket_id", "WEEK_ID", "sales_amt")
-  # find the basket amount 
+  # find the basket amount
   .groupby("cust_id", "basket_id", "WEEK_ID")
   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
+  # find the weeky max basket amount
   .groupby("cust_id", "WEEK_ID")
   .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
   .groupby("cust_id")
@@ -1449,10 +1456,10 @@ percentile_spend = (  trx_line
 
   max_basket_id = (trx_line
   .select("cust_id", "basket_id", "WEEK_ID", "sales_amt")
-  # find the basket amount 
+  # find the basket amount
   .groupby("cust_id", "basket_id", "WEEK_ID")
   .agg(F.sum("sales_amt").cast(T.DoubleType()).alias("total_spend_basket"))
-  # find the weeky max basket amount 
+  # find the weeky max basket amount
   # .groupby("cust_id", "WEEK_ID")
   .withColumn('time_window_max_spend_basket', F.max("total_spend_basket").over(W.partitionBy("cust_id", "WEEK_ID") ))
   .where(F.col("total_spend_basket") == F.col("time_window_max_spend_basket"))
@@ -1475,7 +1482,7 @@ max_basket_id.display()
 
 # COMMAND ----------
 
-# how many customer have all categories 
+# how many customer have all categories
 
 # COMMAND ----------
 
@@ -1487,8 +1494,10 @@ max_basket_id.display()
 
 # COMMAND ----------
 
-from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
-
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 # COMMAND ----------
 
@@ -1503,5 +1512,3 @@ pred_2.groupby("cust_id").agg(F.count("*").alias("count_row")).filter(F.col("cou
 pred_2.filter(F.col("cust_id") == 1942085016394194064).display()
 
 # COMMAND ----------
-
-
