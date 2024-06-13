@@ -5,6 +5,7 @@ Persist utils:
 * Persist files to blob storage
 * Read files from blob storage
 """
+
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Union
@@ -121,7 +122,7 @@ def create_beam_table(
             es = str(e)
             if "not a Delta table" in es:
                 log.error(
-                    f"AnalysisException not a Delta table, checking if table exists"
+                    "AnalysisException not a Delta table, checking if table exists"
                 )
                 db_name, tbl_name = table_name.split(".")
                 if spark._jsparkSession.catalog().tableExists(table_name):
@@ -203,7 +204,7 @@ def insert_df_into_table(
     if (
         "load_timestamp" not in insert_df.columns
         and spark.sql(f"DESCRIBE TABLE {target_tbl_name}")
-        .filter(f'col_name="load_timestamp"')
+        .filter('col_name="load_timestamp"')
         .count()
         == 1
     ):
@@ -850,7 +851,7 @@ def save_chunk(
     )
     log.info(f"Converting sparks dataframe to pandas df for chunk: {chunk}")
     df_pd = data.toPandas()
-    log.info(f"Dropping unused cols")
+    log.info("Dropping unused cols")
     df_pd.drop(
         columns=[
             "load_timestamp",
@@ -1121,7 +1122,7 @@ def save_table(
     )
     log.info(f"Converting sparks dataframe to pandas df for table: {table_name}")
     df_pd = data.toPandas()
-    log.info(f"Dropping unused cols")
+    log.info("Dropping unused cols")
     df_pd.drop(
         columns=["load_timestamp", "test_flag", "campaign_type_id", "campaign"],
         inplace=True,

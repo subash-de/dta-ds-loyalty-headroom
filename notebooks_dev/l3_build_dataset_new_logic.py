@@ -3,30 +3,16 @@
 
 # COMMAND ----------
 
-import os
 from ast import literal_eval
 from datetime import datetime, timedelta
-from functools import partial
-from multiprocessing.pool import ThreadPool
 
 import offerallocationv2.utils.persist_utils as persist_utils
-import pandas as pd
 import seaborn as sns
-from cdsutils.io_utils import file_exists, load_object, save_object
 from dtaml.logging import get_logger
-from pyspark.sql import Column, DataFrame
-from pyspark.sql import Window as W
 from pyspark.sql import functions as F
-from pyspark.sql import types as T
 
 from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (SegmentationDataManager,
-                                                SegmentationManager)
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.modelling.data_process import DataProcessor
-from customer_headroom.modelling.fit import build_recommender
-from customer_headroom.modelling.predict import Predictor
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")

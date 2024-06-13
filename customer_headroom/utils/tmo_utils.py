@@ -1,10 +1,7 @@
 import logging
-from collections import defaultdict
 from functools import reduce
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-import numpy as np
-import pandas as pd
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
@@ -329,7 +326,6 @@ def offers_remaining(
     offer_min_volume_dict: dict,
     col_name_num_variant: str = "no_of_variants",
 ) -> DataFrame:
-
     """Calculate the volume of offers that needs assigning
 
     Parameters

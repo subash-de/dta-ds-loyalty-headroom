@@ -13,13 +13,10 @@ config
 
 # from offerallocationv2.utils import tmo_utils
 import pandas as pd
-import plotly
 import plotly.express as px
 import seaborn as sns
-from pyspark.sql import Column, DataFrame
 from pyspark.sql import Window as W
 from pyspark.sql import functions as F
-from pyspark.sql import types as T
 
 # COMMAND ----------
 

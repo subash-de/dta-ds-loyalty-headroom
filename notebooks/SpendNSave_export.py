@@ -43,10 +43,7 @@ dbutils.library.restartPython()
 
 import logging.config
 
-import pandas as pd
 from offerallocation.utils.logging_utils import LOGGING_CONFIG
-from pyspark.sql import DataFrame
-from pyspark.sql import Window as W
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 

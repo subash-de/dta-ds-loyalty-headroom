@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.10,<3.11"
 scikit-surprise = "^1.1.4"
 dtaml = {version = "^2.0.23", extras=["pipelines"],source = "mlops"}
+mlflow-skinny = "^2.13.2"
 
 
 [[tool.poetry.source]]
@@ -16,6 +17,17 @@ name = "mlops"
 url = "https://pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"
 priority = "explicit"
 
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.4.8"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff]
+extend-include = ["*.ipynb"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"  

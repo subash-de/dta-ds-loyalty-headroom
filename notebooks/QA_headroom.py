@@ -10,18 +10,14 @@
 
 import os
 import shutil
+
 # from offerallocationv2.utils import tmo_utils
 from datetime import datetime, timedelta
 
-import pandas as pd
-import plotly
-import plotly.express as px
 import seaborn as sns
 from dtaml.logging import get_logger
-from pyspark.sql import Column, DataFrame
 from pyspark.sql import Window as W
 from pyspark.sql import functions as F
-from pyspark.sql import types as T
 
 import customer_headroom.utils.persist_utils as persist_utils
 
@@ -263,7 +259,7 @@ elif environment == "ppd":
     storageaccount = config.mail_storage_account.ppd
 elif environment == "prod":
     storageaccount = config.mail_storage_account.prod
-assert storageaccount is not None, f"env not equal to dev/ppd/prod"
+assert storageaccount is not None, "env not equal to dev/ppd/prod"
 
 # COMMAND ----------
 

@@ -3,30 +3,13 @@
 
 # COMMAND ----------
 
-import os
-from datetime import datetime, timedelta
-from functools import partial
-from multiprocessing.pool import ThreadPool
 
 import offerallocationv2.utils.persist_utils as persist_utils
 import pandas as pd
 import seaborn as sns
-from cdsutils.io_utils import file_exists, load_object, save_object
 from dtaml.logging import get_logger
-from pyspark.sql import Column, DataFrame
-from pyspark.sql import Window as W
 from pyspark.sql import functions as F
-from pyspark.sql import types as T
-from pyspark.sql.window import Window
 
-from customer_headroom.allocation.allocator import Allocator
-from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (SegmentationDataManager,
-                                                SegmentationManager)
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.modelling.data_process import DataProcessor
-from customer_headroom.modelling.fit import build_recommender
-from customer_headroom.modelling.predict import Predictor
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -97,7 +80,6 @@ seg_list = [
 
 
 def get_best_params(seg_list, config):
-
     config_fr = config["fit_rec"]
     config_pd = config["predict"]
     partitionByList = config_pd["partitionByList"]
@@ -124,7 +106,6 @@ def get_best_params(seg_list, config):
 
 
 def get_gs_data(seg_list, config):
-
     config_fr = config["fit_rec"]
     config_pd = config["predict"]
     partitionByList = config_pd["partitionByList"]

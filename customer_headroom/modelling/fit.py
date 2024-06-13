@@ -5,7 +5,7 @@ from surprise.model_selection import GridSearchCV, KFold
 
 
 def update_parameters(algo: any, param_dict: Dict[str, Any]) -> Any:
-    for (k, v) in param_dict.items():
+    for k, v in param_dict.items():
         algo.__setattr__(k, v)
     return algo
 

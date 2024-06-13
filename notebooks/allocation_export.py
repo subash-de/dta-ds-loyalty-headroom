@@ -1,22 +1,10 @@
 # Databricks notebook source
-import os
-import random
-from datetime import datetime, timedelta
-from functools import partial, reduce
+from datetime import datetime
+from functools import partial
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import seaborn as sns
-from matplotlib import cm
-from matplotlib.colors import LinearSegmentedColormap, ListedColormap
-from pyspark.ml.feature import PCA as sparkPCA
-from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
-from pyspark.sql.window import Window
-from sklearn.decomposition import PCA
-from sklearn.metrics import r2_score
 
 sns.set_style("darkgrid")
 

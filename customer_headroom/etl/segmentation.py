@@ -582,7 +582,6 @@ class SegmentationManager(BaseManager):
                 )
                 fail_count = 0
                 for k in range(self.k_search_min, self.k_search_max):
-
                     KMeans_algo = KMeans(
                         featuresCol=output_col, k=k, predictionCol="segmentation"
                     )

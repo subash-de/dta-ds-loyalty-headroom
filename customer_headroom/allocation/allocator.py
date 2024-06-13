@@ -2,7 +2,6 @@ from functools import partial
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
@@ -354,7 +353,7 @@ class Allocator(object):
                 .filter(~F.col("offer_id").isin(self.large_offers))
                 .count()
             )
-            assert cnt == 0, f"wrong offers given to large spenders (>270)"
+            assert cnt == 0, "wrong offers given to large spenders (>270)"
 
         return data_out
 

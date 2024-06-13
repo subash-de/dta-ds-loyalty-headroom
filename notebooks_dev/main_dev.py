@@ -11,7 +11,6 @@ print(f"Config used is: \n{config.dumps()}")
 
 # COMMAND ----------
 
-import os
 from datetime import datetime
 from functools import partial
 from multiprocessing.pool import ThreadPool
@@ -19,15 +18,16 @@ from multiprocessing.pool import ThreadPool
 import offerallocationv2.utils.persist_utils as persist_utils
 import pandas as pd
 import seaborn as sns
-from cdsutils.io_utils import file_exists, load_object, save_object
+from cdsutils.io_utils import load_object
 from dtaml.logging import get_logger
-from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
 from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (SegmentationDataManager,
-                                                SegmentationManager)
+from customer_headroom.etl.segmentation import (
+    SegmentationDataManager,
+    SegmentationManager,
+)
 from customer_headroom.evaluation.model_selection import Evaluator
 from customer_headroom.modelling.data_process import DataProcessor
 from customer_headroom.modelling.fit import build_recommender
@@ -177,7 +177,7 @@ if "segmentation" in config.steps:
 if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict")):
     config_use = config["use_segments"]
     if config_use["all"] == True:
-        logger.info(f"Use all Segmentations")
+        logger.info("Use all Segmentations")
         # In
         segmentations_tbl_name = persist_utils.get_table_name(
             factory_database=config_use.segmentations_tbl.factory_database,

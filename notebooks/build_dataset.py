@@ -3,30 +3,19 @@
 
 # COMMAND ----------
 
-import os
 from ast import literal_eval
 from datetime import datetime, timedelta
-from functools import partial
-from multiprocessing.pool import ThreadPool
 
-import pandas as pd
 import seaborn as sns
-from cdsutils.io_utils import file_exists, load_object, save_object
 from dtaml.logging import get_logger
-from pyspark.sql import Column, DataFrame
-from pyspark.sql import Window as W
 from pyspark.sql import functions as F
-from pyspark.sql import types as T
 
 import customer_headroom.utils.persist_utils as persist_utils
-from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (SegmentationDataManager,
-                                                SegmentationManager)
-from customer_headroom.evaluation.model_selection import Evaluator
-from customer_headroom.modelling.data_process import DataProcessor
-from customer_headroom.modelling.fit import build_recommender
-from customer_headroom.modelling.predict import Predictor
+from customer_headroom.etl.segmentation import (
+    SegmentationDataManager,
+    SegmentationManager,
+)
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -186,7 +175,7 @@ if "segmentation" in config.steps:
 if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict")):
     config_use = config["use_segments"]
     if config_use["all"] == True:
-        logger.info(f"Use all Segmentations")
+        logger.info("Use all Segmentations")
         # In
         segmentations_tbl_name = persist_utils.get_table_name(
             factory_database=config_use.segmentations_tbl.factory_database,

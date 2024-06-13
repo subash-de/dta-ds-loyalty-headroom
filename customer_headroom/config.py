@@ -39,9 +39,7 @@ def load_config_campaign_type(file_name: str = "config.yaml") -> Config:
     return config
 
 
-import os
-
-from dtaml.config import get_env_map, load_section_config
+from dtaml.config import get_env_map
 from dtaml.databricks.runtime import get_all_widgets, get_spark
 from dtaml.pipeline.steps import init_jinja
 from dtaml.utils.table import set_default_dbs

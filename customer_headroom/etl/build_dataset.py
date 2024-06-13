@@ -186,7 +186,7 @@ class TransactionsManager(BaseManager):
         ):
             return trx_data
         else:
-            for (k, v) in self.exclude_items.items():
+            for k, v in self.exclude_items.items():
                 trx_data = trx_data.filter(~(F.col(k).isin(v)))
                 return trx_data
 
@@ -295,9 +295,8 @@ class TransactionsManager(BaseManager):
 
         # Find number of transactions per customer per l2 category
         customer_lx_trans_grouped = (
-            customer_lx_transactions.filter(F.col(self.user_key).isNotNull()).groupby(
-                [self.user_key, f"{self.lx}_id"]
-            )
+            customer_lx_transactions.filter(F.col(self.user_key).isNotNull())
+            .groupby([self.user_key, f"{self.lx}_id"])
             # .groupby([self.user_key])
             #                                      .pivot(f"{self.lx}_id")
             .agg(
