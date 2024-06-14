@@ -333,9 +333,7 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # COMMAND ----------
 
 
-
 # COMMAND ----------
-
 
 
 # COMMAND ----------
@@ -362,7 +360,6 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # COMMAND ----------
 
 
-
 # COMMAND ----------
 
 # import inspect
@@ -370,5 +367,3 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # print(lines)
 
 # COMMAND ----------
-
-

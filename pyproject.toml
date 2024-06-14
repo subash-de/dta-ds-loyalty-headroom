@@ -20,6 +20,7 @@ priority = "explicit"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.4.8"
+pytest = "^8.2.2"
 
 [build-system]
 requires = ["poetry-core"]

@@ -152,22 +152,23 @@ def create_beam_table(
 def get_table_name(
     factory_database: str, lab_database: str, table_prefix: str, sensitivity: str
 ):
-    """Get table name. Prefixes stg_ if stage table.
+    """_summary_
 
     Parameters
     ----------
-    factory_database: str :
-
-    lab_database: str :
-
-    table_prefix: str :
-
-    sensitivity: str :
-
+    factory_database : str
+        _description_
+    lab_database : str
+        _description_
+    table_prefix : str
+        _description_
+    sensitivity : str
+        _description_
 
     Returns
     -------
-
+    _type_
+        _description_
     """
     # Prefix stg_ if we're in lab and factory_database contains analysestg
     if (

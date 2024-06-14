@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ./bootstrap
+# MAGIC %run ../bootstrap
 
 # COMMAND ----------
 
@@ -43,6 +43,26 @@ def get_campaign(campaign, etl_date):
     if (campaign == "{campaign}") or (campaign == ""):
         campaign = get_date(etl_date)
     return campaign
+
+
+def get_count(seg, config, database):
+    partitionByList = seg.keys()
+    seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
+
+    etl_data_tbl_name = persist_utils.get_table_name(
+        factory_database=config.etl_data_tbl.factory_database,
+        lab_database=database,
+        table_prefix=config.etl_data_tbl.prefix,
+        sensitivity=config.etl_data_tbl.sensitivity,
+    )
+
+    seg_etl_data_tbl = persist_utils.read_table(
+        table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
+    )
+
+    cnt = seg_etl_data_tbl.count()
+
+    return (seg, cnt)
 
 
 config_dates = config["dates"]
@@ -296,26 +316,6 @@ if "build_dataset" in config.steps:
 # COMMAND ----------
 
 
-def get_count(seg, config, database):
-    partitionByList = seg.keys()
-    seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-
-    etl_data_tbl_name = persist_utils.get_table_name(
-        factory_database=config.etl_data_tbl.factory_database,
-        lab_database=database,
-        table_prefix=config.etl_data_tbl.prefix,
-        sensitivity=config.etl_data_tbl.sensitivity,
-    )
-
-    seg_etl_data_tbl = persist_utils.read_table(
-        table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
-    )
-
-    cnt = seg_etl_data_tbl.count()
-
-    return (seg, cnt)
-
-
 seg_cnt = []
 for seg in seg_list:
     config_bd = config["build_dataset"]
@@ -328,47 +328,5 @@ logger.info(f"Ordered seg_list: {seg_list}")
 
 # COMMAND ----------
 
+# seg_list has
 dbutils.notebook.exit(str({"seg_list": seg_list}))
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %md # dev
-
-# COMMAND ----------
-
-# config_bd = config["build_dataset"]
-
-# COMMAND ----------
-
-# persist_utils.get_table_name(
-#             factory_database=config_bd.etl_data_tbl.factory_database,
-#             lab_database=config.dev_database,
-#             table_prefix=config_bd.etl_data_tbl.prefix,
-#             sensitivity=config_bd.etl_data_tbl.sensitivity,
-#         )
-
-# COMMAND ----------
-
-# %sql select * from loyalty_azlab_prod.headroom_etl_data_np_p_tbl
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# import inspect
-# lines = inspect.getsource(TransactionsManager.get)
-# print(lines)
-
-# COMMAND ----------
-
-
