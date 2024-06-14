@@ -14,17 +14,22 @@ pip_url = PIP_URL.format(token=devops_token)
 
 # COMMAND ----------
 
-root_path = Path('/Workspace') / Path(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().lstrip('/')).parent.parent.parent
+# MAGIC %run ./variables
+
+# COMMAND ----------
+
+
 
 if PACKAGE_SOURCE=="repos":
-    %pip install "{root_path}"
+    %pip install "{ROOT_PATH}"
 else:
     %pip install "{PACKAGE_NAME}=={PACKAGE_VERSION}"
 
 dbutils.library.restartPython()
 
+# COMMAND ----------
 
-
+# MAGIC %run ./variables
 
 # COMMAND ----------
 
