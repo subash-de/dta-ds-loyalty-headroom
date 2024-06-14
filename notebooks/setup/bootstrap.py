@@ -15,11 +15,7 @@ pip_url = PIP_URL.format(token=devops_token)
 # COMMAND ----------
 
 if PACKAGE_SOURCE=="repos":
-    try:
-      lib_root = dbutils.widgets.get('folder')
-    except:
-      lib_root = '..'
-    py_root = (Path('/Workspace') / Path(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().lstrip('/')).parent / lib_root).resolve()
+    py_root = (Path('/Workspace') / Path(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().lstrip('/')).parent.parent.parent).resolve()
     %pip install "{py_root}"
 else:
     %pip install "{PACKAGE_NAME}=={PACKAGE_VERSION}"
@@ -38,3 +34,7 @@ from customer_headroom.config import load_config_campaign_type
 widgets = get_all_widgets()
 config = load_config_campaign_type()
 print(f'Config used is: \n{config.dumps()}')
+
+# COMMAND ----------
+
+
