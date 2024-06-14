@@ -89,32 +89,28 @@ last_registration_date: {last_registration_date}
 # MAGIC %md # Build Segmentations
 
 # COMMAND ----------
-
+# Step 1: Build Segmentation Dataset
+# TODO: Must be a Job parameter
 if "segmentation" in config.steps:
     logger.info("Begin Building Segmentation Dataset")
     config_sg = config["segmentation"]
-    # cust_path = create_path_campaign(config_sg["cust_path"])
 
     # load factory tables
+    # Registered customer information
     sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
+    # All customer attributes (including Experian)
     cust_master_df = spark.sql("select * from analytics_trans_prod.customer_master")
+    # All transactions per customer at line level (with product details)
     trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
 
-    # load customer table
-    # TODO: Replace with input customer id's if required.
-    # if cust_path is None:
-    #     custs_etl_data = None
-    # else:
-    #     custs_etl_data = spark.read.parquet(cust_path)
-
-    # selecting customer who have registered for a period of time, so that there is some spending data when calculating percentiles.
+    # selecting customer who have registered for a period of time,
+    #   so that there is some spending data when calculating percentiles.
     sparks_account_df = sparks_account_df.filter(
         F.col("registration_date")
         <= datetime.strptime(str(last_registration_date), "%Y%m%d")
     )
 
-    custs_etl_data = sparks_account_df
-
+    # Manager for Segmentation Data
     seg_data_manager = SegmentationDataManager(
         etl_date=get_date(config_sg["etl_date"]),
         lookback_days=config_sg["lookback_days"],
@@ -122,11 +118,14 @@ if "segmentation" in config.steps:
         user_id=config_sg["user_id"],
     )
 
+    # Step 1: build the data for segmentation
+    # These should be two steps
     seg_data = seg_data_manager.get(
-        trx_line_df, sparks_account_df, cust_master_df, customer_input=custs_etl_data
+        trx_line_df, sparks_account_df, cust_master_df, customer_input=sparks_account_df
     ).withColumn("campaign", F.lit(campaign))
 
     # TODO: Replace with customer cluster work to reduce data sizes to appropiate groups.
+    # Creating the segmented dataset
     seg_data_table_name = persist_utils.create_beam_table(
         table_prefix=config_sg.seg_data_tbl.prefix,
         lab_database=config.dev_database,
@@ -141,12 +140,14 @@ if "segmentation" in config.steps:
 
     logger.info(f"""seg_data_table_name: {seg_data_table_name}""")
 
+    # Persist the segmented data into created dataset
     persist_utils.insert_df_into_table(
         target_tbl_name=seg_data_table_name,
         insert_df=seg_data,
         delete_where=f"campaign={campaign}",
     )
 
+    # Step 2: Segment the data
     logger.info("Begin Segmentation of Dataset")
     seg_data_read = persist_utils.read_table(
         table_name=seg_data_table_name, where=f"campaign={campaign}"
@@ -192,6 +193,11 @@ if "segmentation" in config.steps:
 
 # COMMAND ----------
 
+# Step 3: Get seg_list: List of dictionaries
+#   where each dictionary has the following properties:
+#       - campaign id
+#       - experian_hh_composition
+#       - segmentation id (of each experian_hh_composition)
 if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict")):
     config_use = config["use_segments"]
     if config_use["all"]:
@@ -216,6 +222,8 @@ if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict"))
 # MAGIC %md # Build dataset
 
 # COMMAND ----------
+
+# Step 4: Build Dataset
 
 config_use = config["use_segments"]
 if "build_dataset" in config.steps:
@@ -282,18 +290,7 @@ if "build_dataset" in config.steps:
     )
 
     # TODO: Save cust_id to account_id Mapping as done in the customer_purchase work.
-
-    # # Check dataset
-    # logger.info("Validating training data")
-    # all_data = spark.read.parquet(all_data_path)
-    # valid_manager = ValidationManager(
-    #     start_date=config_bd["start_date"],
-    #     end_date=config_bd["end_date"],
-    #     date_format=config_bd["date_format"],
-    # )
-    # is_valid = valid_manager.get(all_data)
-    # logger.info(f"Is dataset valid: {is_valid}")
-    # logger.info(f"all_data | row count: {all_data.count()}; column count: {len(all_data.columns)}")
+    # TODO: delete all mentions of validationmanager
 
 # COMMAND ----------
 
@@ -315,7 +312,7 @@ if "build_dataset" in config.steps:
 
 # COMMAND ----------
 
-
+# Step 5: Get ordered segmentation list
 seg_cnt = []
 for seg in seg_list:
     config_bd = config["build_dataset"]

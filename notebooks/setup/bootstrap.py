@@ -41,6 +41,6 @@ widgets = get_all_widgets()
 config = load_config_campaign_type(f"{root_path}/config/config.yaml")
 print(f'Config used is: \n{config.dumps()}')
 
-# COMMAND ----------
+
 
 

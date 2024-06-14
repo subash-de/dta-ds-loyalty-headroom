@@ -3,35 +3,25 @@ experiment_name: v4
 comms_flag: "acc" # campaign_type - spend and save: 'ss', accumulator: 'acc',
 
 tables:
+  defaults:
+    factory_database: datascienceoffers_analyse_prod
+    factory_stg_database: datascienceoffers_analysestg_prod
+    feature_store:
+    sensitivity: p
   seg_data_tbl: &seg_data_tbl
     prefix: headroom_segmentation_data_np
-    factory_stg_database: datascienceoffers_analysestg_prod
-    factory_database: datascienceoffers_analyse_prod
-    sensitivity: p
     partitionByList: ["campaign"]
   segmentations_tbl: &segmentations_tbl
     prefix: headroom_segmentations_np
-    factory_stg_database: datascienceoffers_analysestg_prod
-    factory_database: datascienceoffers_analyse_prod
-    sensitivity: p
     partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
   etl_data_tbl: &etl_data_tbl
     prefix: headroom_etl_data_np
-    factory_stg_database: datascienceoffers_analysestg_prod
-    factory_database: datascienceoffers_analyse_prod
-    sensitivity: p
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
     prefix: predictions_np
-    factory_stg_database: datascienceoffers_analysestg_prod
-    factory_database: datascienceoffers_analyse_prod
-    sensitivity: p
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
     prefix: headroom_allocation_np
-    factory_stg_database: datascienceoffers_analysestg_prod
-    factory_database: datascienceoffers_analyse_prod
-    sensitivity: p
     partitionByList: ["campaign", "offer_id"]
 
 mail_containers: # mount paths for different envs
@@ -63,11 +53,20 @@ verions:
 steps: [segmentation, build_dataset, fit_rec, predict, allocate]
 # offline_eval
 date_format: &date_format '%Y%m%d'
+debug:
+  build_dataset:
+    input:
 dates:
+  # Campaign ID (Internal to Offers)
+  #   - Mapping to bullseye ID in headroom_id_mapping_tbl
   upcoming_campaign: *upcoming_campaign
-  etl_date: &etl_date 20231127 #"today"  # changed
+  # End date of timeframe
+  etl_date: &etl_date 20231127 # "today"  # changed
+  # Amount of days to look back
   lookback_days: &lookback_days 195 # 28*7-1
+  # TODO: what is this used for?
   lookback_days_registration: &lookback_days_registration 195 # 28*7-1
+# filters:
 columns:
   user_id: &user_id "cust_id"
   item_id: &item_id "l2_id" #change to different lx id
@@ -87,10 +86,9 @@ segmentation:
   # input
   etl_date: *etl_date
   lookback_days: *lookback_days
+  # TODO: put this in base of yaml
   l1_id: "FD"
   user_id: *user_id
-  cust_path: None
-  # [*prod_input, *upcoming_campaign, "customers"]
   num_cols: *seg_num_cols
   cat_cols: *seg_cat_cols
   frac_lim: 0.01 # 0.1
@@ -197,6 +195,7 @@ allocation:
   # input
   prediction_tbl: *prediction_tbl
   feature_col: *feature_col
+  # TODO: Put this information in a table
   offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
                 '14140': "£5 off when you spend £30 on M&S food in store",
                 '14141': "£5 off when you spend £40 on M&S food in store",
@@ -261,6 +260,7 @@ allocation:
 
 sections:
   ss:
+    # TODO: Put this information in a table
     offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
                   '14140': "£5 off when you spend £30 on M&S food in store",
                   '14141': "£5 off when you spend £40 on M&S food in store",

@@ -1,3 +1,8 @@
+"""
+Segmentation:
+    This module is used to create a segmentation dataset from the all_transaction_line factory table.
+"""
+
 import os
 from datetime import datetime, timedelta
 from functools import reduce
