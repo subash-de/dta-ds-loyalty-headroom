@@ -14,9 +14,10 @@ pip_url = PIP_URL.format(token=devops_token)
 
 # COMMAND ----------
 
+root_path = Path('/Workspace') / Path(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().lstrip('/')).parent.parent.parent
+
 if PACKAGE_SOURCE=="repos":
-    py_root = (Path('/Workspace') / Path(dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get().lstrip('/')).parent.parent.parent).resolve()
-    %pip install "{py_root}"
+    %pip install "{root_path}"
 else:
     %pip install "{PACKAGE_NAME}=={PACKAGE_VERSION}"
 
@@ -32,7 +33,7 @@ from dtaml.databricks.runtime import get_all_widgets
 from customer_headroom.config import load_config_campaign_type
 
 widgets = get_all_widgets()
-config = load_config_campaign_type()
+config = load_config_campaign_type(f"{root_path}/config/config.yaml")
 print(f'Config used is: \n{config.dumps()}')
 
 # COMMAND ----------
