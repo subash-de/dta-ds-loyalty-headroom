@@ -10,6 +10,7 @@ python = "^3.10,<3.11"
 scikit-surprise = "^1.1.4"
 dtaml = {version = "^2.0.23", extras=["pipelines"],source = "mlops"}
 mlflow-skinny = "^2.13.2"
+omegaconf = "^2.3.0"
 
 
 [[tool.poetry.source]]
