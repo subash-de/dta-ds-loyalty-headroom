@@ -40,7 +40,7 @@ def load_config_campaign_type(file_name: str = "config.yaml") -> Config:
 
 
 from dtaml.config import get_env_map
-from dtaml.databricks.runtime import get_all_widgets, get_spark
+from dtaml.databricks.runtime import get_spark
 from dtaml.pipeline.steps import init_jinja
 from dtaml.utils.table import set_default_dbs
 
@@ -66,11 +66,8 @@ def set_spark_config():
 
 
 # TODO check if we can get this to work
-def initialize():
-    widgets = get_all_widgets()
-    env = widgets.get("environment", "dev")
-
-    config = load_config(env)
+def initialize(file_path: str = "config.yaml"):
+    config = load_config(file_path)
     init_jinja(config.package_name)
     set_spark_config()
     set_default_dbs(
