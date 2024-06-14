@@ -194,7 +194,7 @@ if "segmentation" in config.steps:
 
 if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict")):
     config_use = config["use_segments"]
-    if config_use["all"] == True:
+    if config_use["all"]:
         logger.info("Use all Segmentations")
         # In
         segmentations_tbl_name = persist_utils.get_table_name(
