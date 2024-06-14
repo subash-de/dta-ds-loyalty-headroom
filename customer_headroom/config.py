@@ -1,8 +1,5 @@
-# import os
-
-# from dtaml.config import load_section_config
 import os
-
+from omegaconf import OmegaConf as oc
 import yaml
 from dtaml.config import Config, load_section_config
 
@@ -63,9 +60,19 @@ def set_spark_config():
         "spark.databricks.delta.autoCompact.enabled": "true",
     }.items():
         spark.conf.set(k, v)
+# TODO: start using this OC initialiser
+def initialize_oc(file_name:str = "./config.yaml"):
+    config = oc.load(os.path.join(os.path.dirname(__file__), file_name))
+    # TODO: check if we need jinja here
+    # init_jinja(config.package_name)
+    set_spark_config()
+    set_default_dbs(
+        config.factory_database, config.lab_database, config.staging_database
+    )
+    return config
 
 
-# TODO check if we can get this to work
+
 def initialize(file_path: str = "config.yaml"):
     config = load_config(file_path)
     init_jinja(config.package_name)

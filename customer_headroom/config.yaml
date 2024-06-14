@@ -1,7 +1,7 @@
 experiment_name: v4
 # select campaign type
 comms_flag: "acc" # campaign_type - spend and save: 'ss', accumulator: 'acc',
-
+package_name: customer_headroom
 tables:
   defaults:
     factory_database: datascienceoffers_analyse_prod

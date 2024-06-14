@@ -33,12 +33,17 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
+# MAGIC %load_ext autoreload
+# MAGIC %autoreload 2
+
+# COMMAND ----------
+
 from dtaml.databricks.runtime import get_all_widgets
 
-from customer_headroom.config import load_config_campaign_type
+from customer_headroom.config import initialize_oc, load_config_campaign_type
 
 widgets = get_all_widgets()
-config = load_config_campaign_type(f"{root_path}/config/config.yaml")
+config = load_config_campaign_type()
 print(f'Config used is: \n{config.dumps()}')
 
 
