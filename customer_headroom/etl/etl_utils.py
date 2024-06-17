@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 
 
 def find_all_segments(data, partitionByList):
@@ -20,7 +20,7 @@ def get_date(date):
 def get_campaign(campaign, etl_date):
     if (campaign == "{campaign}") or (campaign == ""):
         campaign = get_date(etl_date)
-    return campaign
+    return int(campaign)
 
 
 def get_count(seg, config, database):

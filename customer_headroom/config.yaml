@@ -2,12 +2,13 @@ experiment_name: v4
 # select campaign type
 comms_flag: "acc" # campaign_type - spend and save: 'ss', accumulator: 'acc',
 package_name: customer_headroom
+
+factory_database: datascienceoffers_analyse_prod
+factory_stg_database: datascienceoffers_analysestg_prod
+lab_database: loyalty_azlab_prod
+sensitivity: p
+
 tables:
-  defaults:
-    factory_database: datascienceoffers_analyse_prod
-    factory_stg_database: datascienceoffers_analysestg_prod
-    feature_store:
-    sensitivity: p
   seg_data_tbl: &seg_data_tbl
     prefix: headroom_segmentation_data_np
     partitionByList: ["campaign"]

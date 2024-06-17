@@ -40,12 +40,17 @@ dbutils.library.restartPython()
 
 from dtaml.databricks.runtime import get_all_widgets
 
+from dtaml.utils.table import factory_table, set_default_dbs
+
 from customer_headroom.config import initialize_oc, load_config_campaign_type
 
 widgets = get_all_widgets()
 config = load_config_campaign_type()
 print(f'Config used is: \n{config.dumps()}')
-
+set_default_dbs(
+  factory_database=config.factory_database,
+  lab_database=config.lab_database,
+)
 
 
 
