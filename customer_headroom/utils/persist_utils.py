@@ -42,11 +42,30 @@ from dtaml.logging import get_logger
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.utils import AnalysisException
+import mlflow
+from mlflow import MlflowClient
 
 spark = get_spark()
 dbutils = get_dbutils()
 log = get_logger(__file__)
 aml = None
+
+
+def register_model(model_name, model_object, tags, description):
+    metadata = mlflow.sklearn.log_model(
+        model_object,
+        registered_model_name=model_name
+        )
+    model_version = metadata.registered_model_version
+    client = MlflowClient()
+    if tags:
+        for k, v in tags.items():
+            client.set_model_version_tag(model_name, model_version, k, v)
+    client.update_model_version(
+        name=model_name,
+        version=model_version,
+        description=description,
+    )
 
 
 def create_beam_table(
@@ -540,14 +559,6 @@ def get_clv_path(clv_factory_dir: str, clv_mount: Dict):
     return clv_factory_dir.replace(
         "{clv_mount}", clv_mount[os.environ[constants.ENV_ENVIRONMENT]]
     )
-
-
-def register_model(
-    model_name, model_object, tags=None, properties=None, description=None
-):
-    raise NotImplementedError("register_model is not implemented")
-
-
 def download_model(
     model_name, target_dir=None, tags=None, properties=None, version=None, exist_ok=True
 ):

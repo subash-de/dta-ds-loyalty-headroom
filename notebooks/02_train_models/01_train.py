@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ./bootstrap
+# MAGIC %run ../setup/bootstrap
 
 # COMMAND ----------
 
@@ -8,7 +8,7 @@ dbutils.widgets.text("seg", "{}", "")
 # COMMAND ----------
 
 from datetime import datetime, timedelta
-
+import mlflow
 import seaborn as sns
 from dtaml.logging import get_logger
 
@@ -22,6 +22,12 @@ logger = get_logger("customer-headroom")
 # COMMAND ----------
 
 seg = eval(dbutils.widgets.get("seg"))
+
+debug = True
+if debug:
+    seg = {"campaign": 20231212, "experian_hh_composition": "Cat_U", "segmentation": 1}
+
+
 
 if seg == {}:
     dbutils.notebook.exit(True)
@@ -77,17 +83,18 @@ last_registration_date: {last_registration_date}
 # COMMAND ----------
 
 
-def run_fit_rec(seg, config, database):
-    partitionByList = config["partitionByList"]
+def run_fit_rec(seg, config):
+    config_fr = config["fit_rec"]
+    partitionByList = config_fr["partitionByList"]
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
     ext_str = "_".join([str(seg[k]) for k in partitionByList])
 
     model_tags = {**config.get("model_tags", {}), **{"campaign": campaign}}
     etl_data_tbl_name = persist_utils.get_table_name(
-        factory_database=config.etl_data_tbl.factory_database,
-        lab_database=database,
-        table_prefix=config.etl_data_tbl.prefix,
-        sensitivity=config.etl_data_tbl.sensitivity,
+        factory_database=config.factory_database,
+        lab_database=config.lab_database,
+        table_prefix=config_fr.etl_data_tbl.prefix,
+        sensitivity=config.sensitivity,
     )
 
     seg_etl_data_tbl = persist_utils.read_table(
@@ -98,20 +105,20 @@ def run_fit_rec(seg, config, database):
 
     # build surprise preprocessed data
     data_process_manager = DataProcessor(
-        feature_col=config["feature_col"],
-        item_id=config["item_id"],
-        user_id=config["user_id"],
-        lognorm=config["lognorm"],
-        line_format=config["line_format"],
-        min_lim=config["min_lim"],
-        max_lim=config["max_lim"],
+        feature_col=config_fr["feature_col"],
+        item_id=config_fr["item_id"],
+        user_id=config_fr["user_id"],
+        lognorm=config_fr["lognorm"],
+        line_format=config_fr["line_format"],
+        min_lim=config_fr["min_lim"],
+        max_lim=config_fr["max_lim"],
     )
 
-    seg_data[config["feature_col"]] = seg_data[config["feature_col"]].astype(float)
+    seg_data[config_fr["feature_col"]] = seg_data[config_fr["feature_col"]].astype(float)
     rec_data = data_process_manager.get(seg_data)
     logger.info(f"{seg}: Recommender Data Created")
 
-    data_process_manager_name = (config.data_processor_name + "_{ext}").format(
+    data_process_manager_name = (config_fr.data_processor_name + "_{ext}").format(
         campaign=campaign, ext=ext_str
     )
     logger.info(
@@ -128,13 +135,16 @@ def run_fit_rec(seg, config, database):
 
     rec_algo, fit_params = build_recommender(
         X=rec_data,
-        method=config["method"],
-        params=config["params"],
-        param_grid=config["param_grid"],
+        method=config_fr["method"],
+        params=config_fr["params"],
+        param_grid=config_fr["param_grid"],
     )
 
-    rec_name = (config.rec_name + "_{ext}").format(ext=ext_str)
+    rec_name = (config_fr.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
+    
+    mlflow.sklearn.log_model(rec_algo, registered_model_name=rec_name)
+    
     persist_utils.register_model(
         model_name=rec_name,
         model_object=rec_algo,
@@ -142,7 +152,7 @@ def run_fit_rec(seg, config, database):
         description="Headroom: Registered Recommender Model",
     )
 
-    param_name = (config.param_name + "_{ext}").format(ext=ext_str)
+    param_name = (config_fr.param_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
     persist_utils.register_model(
         model_name=param_name,
@@ -154,10 +164,19 @@ def run_fit_rec(seg, config, database):
 
 # COMMAND ----------
 
+# MAGIC %load_ext autoreload
+# MAGIC %autoreload 2
+
+# COMMAND ----------
+
 logger.info("Begin Preprocessing dataset")
-config_fr = config["fit_rec"]
-run_fit_rec(seg=seg, config=config_fr, database=config.dev_database)
+
+run_fit_rec(seg=seg, config=config)
 
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
+
+# COMMAND ----------
+
+
