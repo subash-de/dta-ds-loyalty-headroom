@@ -12,7 +12,6 @@ debug = True
 
 # COMMAND ----------
 
-from ast import literal_eval
 from datetime import datetime, timedelta
 
 import seaborn as sns
@@ -20,15 +19,13 @@ from dtaml.logging import get_logger
 from pyspark.sql import functions as F
 
 import customer_headroom.utils.persist_utils as persist_utils
-from customer_headroom.etl.etl_utils import find_all_segments, get_date, get_campaign, get_count, write_beam_table
-from customer_headroom.etl.build_dataset import TransactionsManager
+from customer_headroom.etl.etl_utils import get_date, get_campaign, write_beam_table
 from customer_headroom.etl.segmentation import (
     SegmentationDataManager,
     SegmentationManager,
 )
 
 
-from dtaml.utils.table import factory_table, set_default_dbs
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")

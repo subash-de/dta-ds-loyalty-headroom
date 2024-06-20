@@ -8,7 +8,6 @@ dbutils.widgets.text("seg", "{}", "")
 # COMMAND ----------
 
 from datetime import datetime, timedelta
-import mlflow
 import seaborn as sns
 from dtaml.logging import get_logger
 

@@ -44,7 +44,6 @@ from pyspark.sql import functions as F
 from pyspark.sql.utils import AnalysisException
 import mlflow
 from mlflow import MlflowClient
-import tempfile
 
 spark = get_spark()
 dbutils = get_dbutils()
@@ -52,7 +51,6 @@ log = get_logger(__file__)
 aml = None
 
 
-import mlflow
 import pickle
 from mlflow.tracking import MlflowClient
 import logging
