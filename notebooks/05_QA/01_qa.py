@@ -4,7 +4,7 @@
 
 # COMMAND ----------
 
-# MAGIC %run ./bootstrap
+# MAGIC %run ../setup/bootstrap
 
 # COMMAND ----------
 
@@ -98,20 +98,20 @@ out_path
 
 # COMMAND ----------
 
-if "allocate" in config.steps:
-    config_al = config["allocation"]
-    headroom_tbl_name = persist_utils.get_table_name(
-        factory_database=config_al.headroom_export_tbl.factory_database,
-        lab_database=config.dev_database,
-        table_prefix=config_al.headroom_export_tbl.prefix,
-        sensitivity=config_al.headroom_export_tbl.sensitivity,
-    )
-    logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
 
-    headroom_tbl = persist_utils.read_table(
-        table_name=headroom_tbl_name, where=f"campaign={campaign}"
-    )
-    display(headroom_tbl.orderBy(F.rand()))
+config_al = config["allocation"]
+headroom_tbl_name = persist_utils.get_table_name(
+    factory_database=config.factory_database,
+    lab_database=config.lab_database,
+    table_prefix=config_al.headroom_export_tbl.prefix,
+    sensitivity=config.sensitivity,
+)
+logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
+
+headroom_tbl = persist_utils.read_table(
+    table_name=headroom_tbl_name, where=f"campaign={campaign}"
+)
+display(headroom_tbl.orderBy(F.rand()))
 
 # COMMAND ----------
 

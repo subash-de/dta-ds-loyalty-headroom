@@ -22,7 +22,7 @@ tables:
     prefix: headroomX_predictions_np
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation_np
+    prefix: headroomX_allocation_np
     partitionByList: ["campaign", "offer_id"]
 
 mail_containers: # mount paths for different envs
