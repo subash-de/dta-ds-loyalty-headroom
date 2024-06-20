@@ -40,8 +40,6 @@ Email:
   to_email: ['dapeng.wang@mnscorp.net','parthav.x.maheshwari@mnscorp.net']
   to_email_failed: ['dapeng.wang@mnscorp.net']
 
-factory_database: "datascienceoffers_analyse_prod"
-dev_database: "loyalty_azlab_prod"
 training_table_prefix: "headroom_training"
 prediction_table_prefix: "headroom_prediction"
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/

@@ -26,8 +26,9 @@ seg_list = eval(dbutils.widgets.get("seg_list"))
 
 debug = True
 if debug:
-    seg_list = [{"campaign": 20231212, "experian_hh_composition": "Cat_U", "segmentation": 1}]
-
+    seg_list = [
+        {"campaign": 20231212, "experian_hh_composition": "Cat_U", "segmentation": 1}
+    ]
 
 
 if seg_list == []:
@@ -117,7 +118,7 @@ etl_data_tbl_name = persist_utils.get_table_name(
 config_pd = config["predict"]
 prediction_tbl_name = persist_utils.get_table_name(
     factory_database=config.factory_database,
-    lab_database=config.dev_database,
+    lab_database=config.lab_database,
     table_prefix=config_pd.prediction_tbl.prefix,
     sensitivity=config.sensitivity,
 )
@@ -144,9 +145,7 @@ for seg in seg_list:
     logger.info(f"{seg}: Read Recommender name={rec_name}")
     rec_algo = persist_utils.get_latest_version(model_name=rec_name)
 
-    data_processor_name = (config_pd.data_processor_name + "_{ext}").format(
-        ext=ext_str
-    )
+    data_processor_name = (config_pd.data_processor_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Read Data Processor name={data_processor_name}")
     data_processor = persist_utils.get_latest_version(model_name=data_processor_name)
 
@@ -165,14 +164,12 @@ for seg in seg_list:
     predictions = (
         predictions.withColumn("campaign", F.lit(campaign))
         .drop("load_timestamp")
-        .withColumn(
-            "experian_hh_composition", F.lit(seg["experian_hh_composition"])
-        )
+        .withColumn("experian_hh_composition", F.lit(seg["experian_hh_composition"]))
         .withColumn("segmentation", F.lit(seg["segmentation"]))
     )  # ----------------------------------------------
     prediction_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_pd.prediction_tbl.prefix,
-        lab_database=config.dev_database,
+        lab_database=config.lab_database,
         factory_database=config.factory_database,
         sensitivity=config.sensitivity,
         schema=predictions,
@@ -198,7 +195,9 @@ for seg in seg_list:
 
 # COMMAND ----------
 
-predictions_read = persist_utils.read_table(table_name=prediction_tbl_name, where="campaign = 20231212")
+predictions_read = persist_utils.read_table(
+    table_name=prediction_tbl_name, where="campaign = 20231212"
+)
 
 # COMMAND ----------
 
@@ -209,5 +208,3 @@ display(predictions_read)
 dbutils.notebook.exit(True)
 
 # COMMAND ----------
-
-

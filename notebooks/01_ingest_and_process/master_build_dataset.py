@@ -31,7 +31,6 @@ logger = get_logger("customer-headroom")
 # COMMAND ----------
 
 
-
 config_dates = config["dates"]
 campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
 
@@ -96,7 +95,7 @@ if "segmentation" in config.steps:
     # Creating the segmented dataset
     seg_data_table_name = persist_utils.create_beam_table(
         table_prefix=config_sg.seg_data_tbl.prefix,
-        lab_database=config.dev_database,
+        lab_database=config.lab_database,
         factory_database=config_sg.seg_data_tbl.factory_database,
         sensitivity=config_sg.seg_data_tbl.sensitivity,
         schema=seg_data,
@@ -138,7 +137,7 @@ if "segmentation" in config.steps:
     )
     segmentations_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_sg.segmentations_tbl.prefix,
-        lab_database=config.dev_database,
+        lab_database=config.lab_database,
         factory_database=config_sg.segmentations_tbl.factory_database,
         sensitivity=config_sg.segmentations_tbl.sensitivity,
         schema=segmentations,
@@ -173,7 +172,7 @@ if any(step in config.steps for step in ("build_dataset", "fit_rec", "predict"))
         # In
         segmentations_tbl_name = persist_utils.get_table_name(
             factory_database=config_use.segmentations_tbl.factory_database,
-            lab_database=config.dev_database,
+            lab_database=config.lab_database,
             table_prefix=config_use.segmentations_tbl.prefix,
             sensitivity=config_use.segmentations_tbl.sensitivity,
         )
@@ -211,7 +210,7 @@ if "build_dataset" in config.steps:
 
     segmentations_tbl_name = persist_utils.get_table_name(
         table_prefix=config_bd.segmentations_tbl.prefix,
-        lab_database=config.dev_database,
+        lab_database=config.lab_database,
         factory_database=config_bd.segmentations_tbl.factory_database,
         sensitivity=config_bd.segmentations_tbl.sensitivity,
     )
@@ -238,7 +237,7 @@ if "build_dataset" in config.steps:
 
     etl_data_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_bd.etl_data_tbl.prefix,
-        lab_database=config.dev_database,
+        lab_database=config.lab_database,
         factory_database=config_bd.etl_data_tbl.factory_database,
         sensitivity=config_bd.etl_data_tbl.sensitivity,
         schema=all_data,
@@ -266,7 +265,7 @@ if "build_dataset" in config.steps:
     config_bd = config["build_dataset"]
     etl_data_tbl_name = persist_utils.get_table_name(
         factory_database=config_bd.etl_data_tbl.factory_database,
-        lab_database=config.dev_database,
+        lab_database=config.lab_database,
         table_prefix=config_bd.etl_data_tbl.prefix,
         sensitivity=config_bd.etl_data_tbl.sensitivity,
     )
@@ -284,7 +283,7 @@ if "build_dataset" in config.steps:
 seg_cnt = []
 for seg in seg_list:
     config_bd = config["build_dataset"]
-    seg_cnt.append(get_count(seg, config=config_bd, database=config.dev_database))
+    seg_cnt.append(get_count(seg, config=config_bd, database=config.lab_database))
 
 seg_cnt.sort(key=lambda i: i[1], reverse=True)
 

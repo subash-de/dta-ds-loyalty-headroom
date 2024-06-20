@@ -8,18 +8,16 @@ from datetime import datetime, timedelta
 
 import seaborn as sns
 from dtaml.logging import get_logger
-from pyspark.sql import functions as F
+from dtaml.utils.table import factory_table
 
 import customer_headroom.utils.persist_utils as persist_utils
-from customer_headroom.etl.etl_utils import find_all_segments, get_date, get_campaign, get_count, write_beam_table
 from customer_headroom.etl.build_dataset import TransactionsManager
-from customer_headroom.etl.segmentation import (
-    SegmentationDataManager,
-    SegmentationManager,
+from customer_headroom.etl.etl_utils import (
+    find_all_segments,
+    get_campaign,
+    get_count,
+    get_date,
 )
-
-
-from dtaml.utils.table import factory_table, set_default_dbs
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -54,9 +52,8 @@ last_registration_date: {last_registration_date}
 #       - experian_hh_composition
 #       - segmentation id (of each experian_hh_composition)
 segmentations_tbl_name = factory_table(
-        table_prefix=config_use.segmentations_tbl.prefix,
-        sensitivity=config.sensitivity
-    )
+    table_prefix=config_use.segmentations_tbl.prefix, sensitivity=config.sensitivity
+)
 segmentations_tbl = persist_utils.read_table(
     table_name=segmentations_tbl_name, where=f"campaign={campaign}"
 )
@@ -117,7 +114,7 @@ all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
 
 etl_data_tbl_name = persist_utils.create_beam_table(
     table_prefix=config_bd.etl_data_tbl.prefix,
-    lab_database=config.dev_database,
+    lab_database=config.lab_database,
     factory_database=config.factory_database,
     sensitivity=config.sensitivity,
     schema=all_data,
@@ -157,8 +154,7 @@ config_bd = config["build_dataset"]
 partitionByList = config_use.segmentations_tbl.partitionByList
 
 segmentations_tbl_name = factory_table(
-    table_prefix=config_bd.segmentations_tbl.prefix,
-    sensitivity=config.sensitivity
+    table_prefix=config_bd.segmentations_tbl.prefix, sensitivity=config.sensitivity
 )
 
 logger.info(f"""segmentations_tbl_name: {segmentations_tbl_name}""")
@@ -231,10 +227,10 @@ for seg in seg_list:
     config_bd = config["build_dataset"]
     seg_cnt.append(
         get_count(
-                seg, 
-                config=config,
-            )
+            seg,
+            config=config,
         )
+    )
 
 seg_cnt.sort(key=lambda i: i[1], reverse=True)
 
@@ -247,5 +243,3 @@ logger.info(f"Ordered seg_list: {seg_list}")
 dbutils.notebook.exit(str({"seg_list": seg_list}))
 
 # COMMAND ----------
-
-
