@@ -24,13 +24,6 @@ pool:
 
 stages:
 
-  # - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/pull/') }}:
-  #     - stage: tests
-  #       jobs:
-  #         - job: test
-  #           steps:
-  #             - bash: echo "Add some tests you might want to do"
-
 
   - template: /devops/project_flow/v2/stage-multi-project.yaml@templates
     parameters:

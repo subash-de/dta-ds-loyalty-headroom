@@ -49,7 +49,7 @@ verions:
   data: &vdata v0.0.1
   model: &vmodel v0.0.1
   prediction: &vprediction v0.0.1
-steps: [segmentation, build_dataset, fit_rec, predict, allocate]
+
 # offline_eval
 date_format: &date_format '%Y%m%d'
 debug:
