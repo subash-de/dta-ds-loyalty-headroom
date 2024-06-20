@@ -44,6 +44,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.utils import AnalysisException
 import mlflow
 from mlflow import MlflowClient
+import tempfile
 
 spark = get_spark()
 dbutils = get_dbutils()
@@ -51,9 +52,33 @@ log = get_logger(__file__)
 aml = None
 
 
+import mlflow
+import pickle
+from mlflow.tracking import MlflowClient
+import logging
+
+logger = logging.getLogger("mlflow_utils")
+def get_latest_version(model_name):
+    # Example model name: redemption_offer_11111_campaign_240215 
+    client = MlflowClient()
+    models = client.search_model_versions(f"name='{model_name}'")
+    if not models:
+        logger.error(f"Model {model_name} was not found in the registry")
+        return None
+    model_version = max([int(model.version) for model in models])
+    run_id = client.get_model_version(model_name, model_version).run_id
+    tmp_path = client.download_artifacts(run_id=run_id, path=model_name+"/model.pkl")
+    with open(tmp_path,'rb') as f:
+        model = pickle.load(f)
+    return model
+
+
+
+
 def register_model(model_name, model_object, tags, description):
     metadata = mlflow.sklearn.log_model(
         model_object,
+        artifact_path=model_name,
         registered_model_name=model_name
         )
     model_version = metadata.registered_model_version
@@ -564,11 +589,6 @@ def download_model(
 ):
     raise NotImplementedError("download_model is not implemented")
 
-
-def load_model(
-    model_name, target_dir=None, tags=None, properties=None, version=None, exist_ok=True
-):
-    raise NotImplementedError("load_model is not implemented")
 
 
 def save_partition(

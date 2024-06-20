@@ -143,7 +143,6 @@ def run_fit_rec(seg, config):
     rec_name = (config_fr.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
     
-    mlflow.sklearn.log_model(rec_algo, registered_model_name=rec_name)
     
     persist_utils.register_model(
         model_name=rec_name,

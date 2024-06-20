@@ -166,6 +166,7 @@ allocation_grouped.toPandas().to_csv(
 # COMMAND ----------
 
 
+
 # COMMAND ----------
 
 # MAGIC %md # VIP list
@@ -278,5 +279,3 @@ else:
             "storageaccount": storageaccount,
         }
     )
-
-# COMMAND ----------

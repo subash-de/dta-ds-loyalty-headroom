@@ -19,7 +19,7 @@ tables:
     prefix: headroom_etl_data_np
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: predictions_np
+    prefix: headroomX_predictions_np
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
     prefix: headroom_allocation_np
