@@ -31,7 +31,7 @@ approval_rules:
       invalidate_on_push: true
       allow_non_author_contributor: true
       request_review:
-        enabled: true
+        enabled: false
         mode: teams
       ignore_commits_by:
         users: ["su-dtaadmin"]
