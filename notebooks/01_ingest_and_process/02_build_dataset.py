@@ -240,7 +240,7 @@ logger.info(f"Ordered seg_list: {seg_list}")
 
 # COMMAND ----------
 
-dbutils.jobs.taskValues.set(key = 'seg_list', value = seg_list)
+dbutils.jobs.taskValues.set(key="seg_list", value=seg_list)
 
 # COMMAND ----------
 

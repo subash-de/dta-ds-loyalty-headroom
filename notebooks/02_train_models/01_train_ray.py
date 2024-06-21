@@ -7,13 +7,9 @@ dbutils.widgets.text("seg", "{}", "")
 
 # COMMAND ----------
 
-from datetime import datetime, timedelta
 import seaborn as sns
 from dtaml.logging import get_logger
 
-import customer_headroom.utils.persist_utils as persist_utils
-from customer_headroom.modelling.data_process import DataProcessor
-from customer_headroom.modelling.fit import build_recommender
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -127,14 +123,14 @@ type(seg_list)
 
 
 notebooks = [
-  Notebook(
-    name=f"headroomX_train_campaign_{seg['campaign']}_exp_{seg['experian_hh_composition']}_seg_{seg['segmentation']}",
-    path="./02_train_single",
-    args={
-      "seg": str(seg),
-    }
-  )
-  for seg in seg_list
+    Notebook(
+        name=f"headroomX_train_campaign_{seg['campaign']}_exp_{seg['experian_hh_composition']}_seg_{seg['segmentation']}",
+        path="./02_train_single",
+        args={
+            "seg": str(seg),
+        },
+    )
+    for seg in seg_list
 ]
 
 # COMMAND ----------
@@ -143,11 +139,7 @@ notebooks[0].args
 
 # COMMAND ----------
 
-run_notebooks(
-  notebooks,
-  parallel=30,
-  progress=30
-)
+run_notebooks(notebooks, parallel=30, progress=30)
 
 # COMMAND ----------
 
