@@ -85,10 +85,10 @@ sparks_account_df = sparks_account_df.filter(
 
 # COMMAND ----------
 
-
+# //TODO #23 Can we pass ETL_Date as a parameter of the job itself? 
 # Manager for Segmentation Data
 seg_data_manager = SegmentationDataManager(
-    etl_date=get_date(config_sg["etl_date"]),
+    etl_date=get_date(config.dates.etl_date,
     lookback_days=config_sg["lookback_days"],
     l1_id=config_sg["l1_id"],
     user_id=config_sg["user_id"],

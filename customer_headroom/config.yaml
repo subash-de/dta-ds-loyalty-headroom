@@ -44,7 +44,6 @@ training_table_prefix: "headroom_training"
 prediction_table_prefix: "headroom_prediction"
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
-upcoming_campaign: &upcoming_campaign "20231212"
 verions:
   data: &vdata v0.0.1
   model: &vmodel v0.0.1
@@ -58,7 +57,8 @@ debug:
 dates:
   # Campaign ID (Internal to Offers)
   #   - Mapping to bullseye ID in headroom_id_mapping_tbl
-  upcoming_campaign: *upcoming_campaign
+  # //TODO #24 should upcoming campaign be a job parameter?
+  upcoming_campaign: "20231212"
   # End date of timeframe
   etl_date: &etl_date 20231127 # "today"  # changed
   # Amount of days to look back
