@@ -51,13 +51,14 @@ last_registration_date: {last_registration_date}
 #       - campaign id
 #       - experian_hh_composition
 #       - segmentation id (of each experian_hh_composition)
+
+config_use = config["use_segments"]
 segmentations_tbl_name = factory_table(
     table_prefix=config_use.segmentations_tbl.prefix, sensitivity=config.sensitivity
 )
 segmentations_tbl = persist_utils.read_table(
     table_name=segmentations_tbl_name, where=f"campaign={campaign}"
 )
-config_use = config["use_segments"]
 if config_use["all"]:
     logger.info("Use all Segmentations")
     seg_list = find_all_segments(segmentations_tbl, config_use["partitionByList"])
@@ -236,6 +237,10 @@ seg_cnt.sort(key=lambda i: i[1], reverse=True)
 
 seg_list = [seg[0] for seg in seg_cnt]
 logger.info(f"Ordered seg_list: {seg_list}")
+
+# COMMAND ----------
+
+dbutils.jobs.taskValues.set(key = 'seg_list', value = seg_list)
 
 # COMMAND ----------
 
