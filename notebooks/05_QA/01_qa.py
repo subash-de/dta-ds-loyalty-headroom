@@ -56,6 +56,13 @@ def get_campaign(campaign, etl_date):
     return campaign
 
 
+# COMMAND ----------
+
+debug = True
+if debug:
+    config.dates.etl_date = config.debug.tables.etl_date
+    config.dates.lookback_days = config.debug.tables.lookback_days
+
 campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
 
 
