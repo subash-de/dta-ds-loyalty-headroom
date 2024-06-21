@@ -8,6 +8,12 @@ factory_stg_database: datascienceoffers_analysestg_prod
 lab_database: loyalty_azlab_prod
 sensitivity: p
 
+
+debug:
+  tables:
+    etl_date: 20231127
+    lookback_days: 7
+
 tables:
   seg_data_tbl: &seg_data_tbl
     prefix: headroom_segmentation_data_np
