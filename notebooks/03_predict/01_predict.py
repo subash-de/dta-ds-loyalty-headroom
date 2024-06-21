@@ -132,22 +132,21 @@ def get_campaign(campaign, etl_date):
     return campaign
 
 
-config_dates = config["dates"]
-campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
+campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
 
-date_format = "%Y%m%d"
+
 last_registration_date = int(
     (
-        datetime.strptime(str(campaign), date_format)
-        - timedelta(days=config_dates["lookback_days_registration"])
-    ).strftime(date_format)
+        datetime.strptime(str(campaign), config.dates.date_format)
+        - timedelta(days=config.dates.lookback_days_registration)
+    ).strftime(config.dates.date_format)
 )
 
 # campaign = 20230522
 
 logger.info(
     f"""
-config_dates: {config_dates}
+config.dates: {config.dates}
 campaign: {campaign}
 last_registration_date: {last_registration_date}
 """

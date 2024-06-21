@@ -25,20 +25,19 @@ logger = get_logger("customer-headroom")
 # COMMAND ----------
 
 
-config_dates = config["dates"]
-campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
+campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
 
-date_format = "%Y%m%d"
+
 last_registration_date = int(
     (
-        datetime.strptime(str(campaign), date_format)
-        - timedelta(days=config_dates["lookback_days_registration"])
-    ).strftime(date_format)
+        datetime.strptime(str(campaign), config.dates.date_format)
+        - timedelta(days=config.dates.lookback_days_registration)
+    ).strftime(config.dates.date_format)
 )
 
 logger.info(
     f"""
-config_dates: {config_dates}
+config.dates: {config.dates}
 campaign: {campaign}
 last_registration_date: {last_registration_date}
 """
@@ -92,8 +91,8 @@ partitionByList = config_use.segmentations_tbl.partitionByList
 
 # build training data
 trx_manager = TransactionsManager(
-    etl_date=get_date(config_bd["etl_date"]),
-    lookback_days=config_bd["lookback_days"],
+    etl_date=get_date(config.dates.etl_date),
+    lookback_days=config.dates.lookback_days,
     l1_ids=config_bd["l1_ids"],
     lx=config_bd["lx"],
     lx_ids=config_bd["lx_ids"],  # getting all the products in this l2 id
@@ -170,8 +169,8 @@ segmentations_tbl = persist_utils.read_table(
 
 # build training data
 trx_manager = TransactionsManager(
-    etl_date=get_date(config_bd["etl_date"]),
-    lookback_days=config_bd["lookback_days"],
+    etl_date=get_date(config.dates.etl_date),
+    lookback_days=config.dates.lookback_days,
     l1_ids=config_bd["l1_ids"],
     lx=config_bd["lx"],
     lx_ids=config_bd["lx_ids"],  # getting all the products in this l2 id

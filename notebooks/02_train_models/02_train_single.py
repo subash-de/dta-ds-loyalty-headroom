@@ -8,6 +8,7 @@ dbutils.widgets.text("seg", "{}", "")
 # COMMAND ----------
 
 from datetime import datetime, timedelta
+
 import seaborn as sns
 from dtaml.logging import get_logger
 
@@ -21,7 +22,6 @@ logger = get_logger("customer-headroom")
 # COMMAND ----------
 
 seg = eval(dbutils.widgets.get("seg"))
-
 
 
 if seg == {}:
@@ -54,22 +54,21 @@ def get_campaign(campaign, etl_date):
     return campaign
 
 
-config_dates = config["dates"]
-campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
+campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
 
-date_format = "%Y%m%d"
+
 last_registration_date = int(
     (
-        datetime.strptime(str(campaign), date_format)
-        - timedelta(days=config_dates["lookback_days_registration"])
-    ).strftime(date_format)
+        datetime.strptime(str(campaign), config.dates.date_format)
+        - timedelta(days=config.dates.lookback_days_registration)
+    ).strftime(config.dates.date_format)
 )
 
 # campaign = 20230522
 
 logger.info(
     f"""
-config_dates: {config_dates}
+config.dates: {config.dates}
 campaign: {campaign}
 last_registration_date: {last_registration_date}
 """
@@ -109,7 +108,9 @@ def run_fit_rec(seg, config):
         max_lim=config_fr["max_lim"],
     )
 
-    seg_data[config_fr["feature_col"]] = seg_data[config_fr["feature_col"]].astype(float)
+    seg_data[config_fr["feature_col"]] = seg_data[config_fr["feature_col"]].astype(
+        float
+    )
     rec_data = data_process_manager.get(seg_data)
     logger.info(f"{seg}: Recommender Data Created")
 
@@ -137,8 +138,7 @@ def run_fit_rec(seg, config):
 
     rec_name = (config_fr.rec_name + "_{ext}").format(ext=ext_str)
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
-    
-    
+
     persist_utils.register_model(
         model_name=rec_name,
         model_object=rec_algo,
@@ -167,5 +167,3 @@ run_fit_rec(seg=seg, config=config)
 dbutils.notebook.exit(True)
 
 # COMMAND ----------
-
-

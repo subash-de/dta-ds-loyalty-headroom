@@ -42,21 +42,20 @@ def get_campaign(campaign, etl_date):
     return campaign
 
 
-config_dates = config["dates"]
-campaign = get_campaign(config_dates["upcoming_campaign"], config_dates["etl_date"])
+campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
 
-date_format = "%Y%m%d"
+
 last_registration_date = int(
     (
-        datetime.strptime(str(campaign), date_format)
-        - timedelta(days=config_dates["lookback_days_registration"])
-    ).strftime(date_format)
+        datetime.strptime(str(campaign), config.dates.date_format)
+        - timedelta(days=config.dates.lookback_days_registration)
+    ).strftime(config.dates.date_format)
 )
 
 
 logger.info(
     f"""
-config_dates: {config_dates}
+config.dates: {config.dates}
 campaign: {campaign}
 last_registration_date: {last_registration_date}
 """
@@ -199,9 +198,7 @@ if config_al["aggregate_level"] == "basket":
             f"Remove customer who have less than {config['min_num_basket']} basket"
         )
         headroom_export = headroom_export.join(
-            predictions.filter(
-                F.col("count_user_basket") >= config["min_num_basket"]
-            )
+            predictions.filter(F.col("count_user_basket") >= config["min_num_basket"])
             .select("cust_id")
             .distinct(),
             how="inner",
@@ -261,5 +258,3 @@ headroom_tbl.groupBy("desc").count().withColumn(
 dbutils.notebook.exit(True)
 
 # COMMAND ----------
-
-
