@@ -16,13 +16,11 @@ from dtaml.logging import get_logger
 from pyspark.sql import functions as F
 
 import customer_headroom.utils.persist_utils as persist_utils
-from customer_headroom.etl.etl_utils import get_date, get_campaign, write_beam_table
+from customer_headroom.etl.etl_utils import get_campaign, get_date, write_beam_table
 from customer_headroom.etl.segmentation import (
     SegmentationDataManager,
     SegmentationManager,
 )
-
-
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -86,15 +84,14 @@ sparks_account_df = sparks_account_df.filter(
 
 # COMMAND ----------
 
-# //TODO #23 Can we pass ETL_Date as a parameter of the job itself? 
+# //TODO #23 Can we pass ETL_Date as a parameter of the job itself?
 # Manager for Segmentation Data
 seg_data_manager = SegmentationDataManager(
-    etl_date=get_date(config.dates.etl_date,
+    etl_date=get_date(config.dates.etl_date),
     lookback_days=config.dates.lookback_days,
     l1_id=config_sg["l1_id"],
     user_id=config_sg["user_id"],
 )
-
 
 
 # COMMAND ----------
@@ -127,9 +124,9 @@ seg_data
 # COMMAND ----------
 
 seg_data_table_name = write_beam_table(
-  seg_data,
-  config,
-  "seg_data_tbl",
+    seg_data,
+    config,
+    "seg_data_tbl",
 )
 
 # COMMAND ----------
@@ -171,11 +168,9 @@ segmentations = seg_manager.get(data=seg_data_read).withColumn(
 # COMMAND ----------
 
 write_beam_table(
-  segmentations,
-  config,
-  "segmentations_tbl",
+    segmentations,
+    config,
+    "segmentations_tbl",
 )
 
 # COMMAND ----------
-
-
