@@ -218,7 +218,6 @@ if build_dataset == "True":
 import json
 
 str_seg_list = json.dumps(seg_list, indent=2)
-dbutils.jobs.taskValues.set(key="seg_list", value=str_seg_list)
 
 # COMMAND ----------
 
