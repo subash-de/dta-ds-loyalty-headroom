@@ -60,13 +60,13 @@ dates:
   # Campaign ID (Internal to Offers)
   #   - Mapping to bullseye ID in headroom_id_mapping_tbl
   # //TODO #24 should upcoming campaign be a job parameter?
-  upcoming_campaign: "20231212"
+  upcoming_campaign: "20240715"
   # End date of timeframe
-  etl_date: 20231127 # "today"  # changed
+  etl_date: 20240715 # "today"  # changed
   # Amount of days to look back
-  lookback_days: 195 # 28*7-1
+  lookback_days: 363 # 28*7-1
   # TODO: what is this used for?
-  lookback_days_registration: 195 # 28*7-1
+  lookback_days_registration: 363 # 28*7-1
   # Date format
   date_format: '%Y%m%d'
 # filters:

@@ -529,11 +529,11 @@ class TransactionsManager(BaseManager):
             .groupby(self.user_key, f"{self.lx}_id")
             .agg(*self.get_expr_agg("total_spend_time_window"))
             .select(
-                self.user_key, f"{self.lx}_id", "85percentile_total_spend_time_window"
+                self.user_key, f"{self.lx}_id", "100percentile_total_spend_time_window"
             )
             .withColumn(
                 f"{self.lx}_id_total_time_window_spend",
-                F.col("85percentile_total_spend_time_window"),
+                F.col("100percentile_total_spend_time_window"),
             )
         )
 
@@ -549,7 +549,7 @@ class TransactionsManager(BaseManager):
             # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
             .groupby("cust_id")
             .agg(*self.get_expr_agg("total_spend_time_window"))
-            .select("cust_id", "85percentile_total_spend_time_window")
+            .select("cust_id", "100percentile_total_spend_time_window")
         )  # add to config ================
 
         # get the time window ind id that is closest to the 85th percentile
@@ -568,7 +568,7 @@ class TransactionsManager(BaseManager):
             .join(percentile_spend_time_window, how="left", on="cust_id")
             .where(
                 F.col("total_spend_time_window")
-                >= F.col("85percentile_total_spend_time_window")
+                >= F.col("100percentile_total_spend_time_window")
             )
             # .orderBy("time_window_max_spend_basket")
             .withColumn(
