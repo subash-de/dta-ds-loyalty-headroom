@@ -24,6 +24,8 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
+
+
 # COMMAND ----------
 
 debug = True
@@ -215,13 +217,11 @@ if build_dataset == "True":
 # COMMAND ----------
 
 
-import json
+# import json
 
-str_seg_list = json.dumps(seg_list, indent=2)
+# str_seg_list = json.dumps(seg_list, indent=2)
 
 # COMMAND ----------
 
 # seg_list has
-dbutils.notebook.exit(str({"seg_list": str_seg_list}))
-
-# COMMAND ----------
+dbutils.notebook.exit(str({"seg_list": seg_list}))
