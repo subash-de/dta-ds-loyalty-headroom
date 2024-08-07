@@ -22,57 +22,6 @@ logger = get_logger("customer-headroom")
 # COMMAND ----------
 
 seg_list = eval(dbutils.widgets.get("seg_list"))
-# TODO: remove this, this is just for testing purposes
-# seg_list = [
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_U', 'segmentation': 0},
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_00', 'segmentation': 5}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_00', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_05', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_03', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_01', 'segmentation': 1}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_00', 'segmentation': 1}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_02', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_00', 'segmentation': 4}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_U', 'segmentation': 1}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_01', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_05', 'segmentation': 5}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_04', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_00', 'segmentation': 3}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_U', 'segmentation': 4}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_01', 'segmentation': 4}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_U', 'segmentation': 5}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_07', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_08', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_05', 'segmentation': 4}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_00', 'segmentation': 2}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_10', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_U', 'segmentation': 2}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_01', 'segmentation': 3}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_05', 'segmentation': 1}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_05', 'segmentation': 3}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_03', 'segmentation': 3}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_05', 'segmentation': 2}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_02', 'segmentation': 4}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_02', 'segmentation': 3}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_08', 'segmentation': 5}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_01', 'segmentation': 2}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_U', 'segmentation': 3}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_06', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_03', 'segmentation': 2}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_03', 'segmentation': 4}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_00', 'segmentation': 6}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_03', 'segmentation': 1}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_02', 'segmentation': 1}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_02', 'segmentation': 2}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_09', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_11', 'segmentation': 0}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_03', 'segmentation': 5}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_08', 'segmentation': 2}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_02', 'segmentation': 5}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_08', 'segmentation': 3}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_08', 'segmentation': 4}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_08', 'segmentation': 1}, 
-#     {'campaign': 20240715, 'experian_hh_composition': 'Cat_08', 'segmentation': 6}]
 if seg_list == []:
     dbutils.notebook.exit(True)
 else:
@@ -249,3 +198,9 @@ display(predictions_read)
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
+
+# COMMAND ----------
+
+# MAGIC %environment
+# MAGIC "client": "1"
+# MAGIC "base_environment": ""
