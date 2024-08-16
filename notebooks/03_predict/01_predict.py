@@ -54,7 +54,7 @@ def get_campaign(campaign, etl_date):
 
 # COMMAND ----------
 
-debug = True
+debug = False
 if debug:
     config.dates.etl_date = config.debug.tables.etl_date
     config.dates.lookback_days = config.debug.tables.lookback_days
@@ -198,9 +198,3 @@ display(predictions_read)
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
-
-# COMMAND ----------
-
-# MAGIC %environment
-# MAGIC "client": "1"
-# MAGIC "base_environment": ""

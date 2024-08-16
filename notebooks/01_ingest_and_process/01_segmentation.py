@@ -27,7 +27,7 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
-debug = True
+debug = False
 if debug:
     config.dates.etl_date = config.debug.tables.etl_date
     config.dates.lookback_days = config.debug.tables.lookback_days
@@ -172,5 +172,3 @@ write_beam_table(
     config,
     "segmentations_tbl",
 )
-
-# COMMAND ----------

@@ -44,7 +44,7 @@ def get_campaign(campaign, etl_date):
 
 # COMMAND ----------
 
-debug = True
+debug = False
 if debug:
     config.dates.etl_date = config.debug.tables.etl_date
     config.dates.lookback_days = config.debug.tables.lookback_days
@@ -192,26 +192,26 @@ else:
         "campaign", F.lit(campaign)
     )
 
-if config_al["aggregate_level"] == "basket":
-    if config["exclude_high_spend"] is not None:
-        logger.info(
-            f"Remove customer whos spend_plus_headroom > {config['exclude_high_spend']}"
-        )
-        headroom_export = headroom_export.filter(
-            F.col("spend_plus_headroom") <= config["exclude_high_spend"]
-        )
+# if config_al["aggregate_level"] == "basket":
+#     if config["exclude_high_spend"] is not None:
+#         logger.info(
+#             f"Remove customer whos spend_plus_headroom > {config['exclude_high_spend']}"
+#         )
+#         headroom_export = headroom_export.filter(
+#             F.col("spend_plus_headroom") <= config["exclude_high_spend"]
+#         )
 
-    if config["min_num_basket"] is not None:
-        logger.info(
-            f"Remove customer who have less than {config['min_num_basket']} basket"
-        )
-        headroom_export = headroom_export.join(
-            predictions.filter(F.col("count_user_basket") >= config["min_num_basket"])
-            .select("cust_id")
-            .distinct(),
-            how="inner",
-            on="cust_id",
-        )
+#     if config["min_num_basket"] is not None:
+#         logger.info(
+#             f"Remove customer who have less than {config['min_num_basket']} basket"
+#         )
+#         headroom_export = headroom_export.join(
+#             predictions.filter(F.col("count_user_basket") >= config["min_num_basket"])
+#             .select("cust_id")
+#             .distinct(),
+#             how="inner",
+#             on="cust_id",
+#         )
 
 headroom_export_cnt = headroom_export.count()
 logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
@@ -264,5 +264,3 @@ headroom_tbl.groupBy("desc").count().withColumn(
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
-
-# COMMAND ----------

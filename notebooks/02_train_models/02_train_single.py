@@ -56,7 +56,7 @@ def get_campaign(campaign, etl_date):
 
 # COMMAND ----------
 
-debug = True
+debug = False
 if debug:
     config.dates.etl_date = config.debug.tables.etl_date
     config.dates.lookback_days = config.debug.tables.lookback_days
@@ -172,5 +172,3 @@ run_fit_rec(seg=seg, config=config)
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
-
-# COMMAND ----------
