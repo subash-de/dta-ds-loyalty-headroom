@@ -28,8 +28,11 @@ tables:
     prefix: headroomX_predictions_np
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroomX_allocation_np
+    prefix: headroomX_allocation_np_241104_100pct
     partitionByList: ["campaign", "offer_id"]
+  headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
+    prefix: headroom_cust_id_link
+    partitionByList: ["campaign"]
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
@@ -60,9 +63,9 @@ dates:
   # Campaign ID (Internal to Offers)
   #   - Mapping to bullseye ID in headroom_id_mapping_tbl
   # //TODO #24 should upcoming campaign be a job parameter?
-  upcoming_campaign: "20240715"
+  upcoming_campaign: "20240909"
   # End date of timeframe
-  etl_date: 20240715 # "today"  # changed
+  etl_date: 20240909 # "today"  # changed
   # Amount of days to look back
   lookback_days: 363 # 28*7-1
   # TODO: what is this used for?
@@ -124,6 +127,7 @@ build_dataset:
   etl_data_tbl: *etl_data_tbl
   partitionByList: *segPartition
   aggregation_level: &aggregation_level 'basket' #change to basket or lx id
+  headroom_cust_id_link_tbl: *headroom_cust_id_link_tbl
 fit_rec:
   # input
   etl_data_tbl: *etl_data_tbl

@@ -196,6 +196,36 @@ if build_dataset == "True":
 
     # TODO: Save cust_id to account_id Mapping as done in the customer_purchase work.
     # TODO: delete all mentions of validationmanager
+    sparks = spark.sql("select account_id, uk_digital_id,  cust_id from analytics_trans_prod.sparks_account")
+    sparks = (sparks.withColumn("row",F.row_number().over(W.partitionBy("cust_id").orderBy("account_id") )).filter(F.col("row") == 1).drop("row"))
+
+    cust_id_link = (
+        etl_data_tbl
+        .select("cust_id")
+        .distinct()
+        .join(sparks, how = 'left', on = 'cust_id')
+    )
+    cust_id_link_tbl_name = persist_utils.create_beam_table(
+        table_prefix=config_bd.headroom_cust_id_link_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=all_data,
+        partition_by=config_bd.headroom_cust_id_link_tbl.partitionByList,
+        overwrite_table=False,
+        assert_equality=False,
+        add_load_timestamp=True,
+    )
+    logger.info(f"""cust_id_link_tbl_name: {cust_id_link_tbl_name}""")
+
+    persist_utils.insert_df_into_table(
+        target_tbl_name=cust_id_link_tbl_name,
+        insert_df=cust_id_link,
+        add_columns=True,
+        insert_append=True,
+        delete_where=f"campaign={campaign}",
+    )
+    
 
     # Step 5: Get ordered segmentation list
     seg_cnt = []
