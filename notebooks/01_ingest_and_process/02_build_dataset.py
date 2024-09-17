@@ -19,6 +19,9 @@ from customer_headroom.etl.etl_utils import (
     get_date,
 )
 
+from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
+
+
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
 
@@ -196,6 +199,10 @@ if build_dataset == "True":
 
     # TODO: Save cust_id to account_id Mapping as done in the customer_purchase work.
     # TODO: delete all mentions of validationmanager
+
+    etl_data_tbl = persist_utils.read_table(
+        table_name=etl_data_tbl_name, where=f"campaign={campaign}"
+    )
     sparks = spark.sql("select account_id, uk_digital_id,  cust_id from analytics_trans_prod.sparks_account")
     sparks = (sparks.withColumn("row",F.row_number().over(W.partitionBy("cust_id").orderBy("account_id") )).filter(F.col("row") == 1).drop("row"))
 
