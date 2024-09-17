@@ -50,6 +50,8 @@ dbutils = get_dbutils()
 log = get_logger(__file__)
 aml = None
 
+mlflow.set_registry_uri("databricks")
+mlflow.set_tracking_uri("databricks")
 
 import pickle
 from mlflow.tracking import MlflowClient

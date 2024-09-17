@@ -21,6 +21,15 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
+import mlflow
+
+# COMMAND ----------
+
+mlflow.set_registry_uri("databricks")
+mlflow.set_tracking_uri("databricks")
+
+# COMMAND ----------
+
 seg = eval(dbutils.widgets.get("seg"))
 
 
