@@ -211,13 +211,14 @@ if build_dataset == "True":
         .select("cust_id")
         .distinct()
         .join(sparks, how = 'left', on = 'cust_id')
+        .withColumn('campaign', F.lit(campaign))
     )
     cust_id_link_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_bd.headroom_cust_id_link_tbl.prefix,
         lab_database=config.lab_database,
         factory_database=config.factory_database,
         sensitivity=config.sensitivity,
-        schema=all_data,
+        schema=cust_id_link,
         partition_by=config_bd.headroom_cust_id_link_tbl.partitionByList,
         overwrite_table=False,
         assert_equality=False,
@@ -262,3 +263,7 @@ if build_dataset == "True":
 
 # seg_list has
 dbutils.notebook.exit(str({"seg_list": seg_list}))
+
+# COMMAND ----------
+
+

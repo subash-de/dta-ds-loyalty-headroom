@@ -21,6 +21,10 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
+
+
+# COMMAND ----------
+
 seg_list = eval(dbutils.widgets.get("seg_list"))
 if seg_list == []:
     dbutils.notebook.exit(True)
