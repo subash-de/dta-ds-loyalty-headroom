@@ -112,19 +112,19 @@ etl_data_tbl_name = persist_utils.get_table_name(
 
 
 config_pd = config["predict"]
-prediction_tbl_name = persist_utils.get_table_name(
-    factory_database=config.factory_database,
-    lab_database=config.lab_database,
-    table_prefix=config_pd.prediction_tbl.prefix,
-    sensitivity=config.sensitivity,
-)
+# prediction_tbl_name = persist_utils.get_table_name(
+#     factory_database=config.factory_database,
+#     lab_database=config.lab_database,
+#     table_prefix=config_pd.prediction_tbl.prefix,
+#     sensitivity=config.sensitivity,
+# )
 
-logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
+# logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
-prediction_tbl = persist_utils.read_table(
-    table_name=prediction_tbl_name, where=f"campaign={campaign}"
-)
-display(prediction_tbl.orderBy(F.rand()))
+# prediction_tbl = persist_utils.read_table(
+#     table_name=prediction_tbl_name, where=f"campaign={campaign}"
+# )
+# display(prediction_tbl.orderBy(F.rand()))
 
 # COMMAND ----------
 
@@ -192,7 +192,7 @@ for seg in seg_list:
 # COMMAND ----------
 
 predictions_read = persist_utils.read_table(
-    table_name=prediction_tbl_name, where="campaign = 20231212"
+    table_name=prediction_tbl_name, where=f"campaign = {campaign}"
 )
 
 # COMMAND ----------
