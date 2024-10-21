@@ -33,6 +33,7 @@ tables:
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
     prefix: headroom_cust_id_link_241104_85pct
     partitionByList: ["campaign"]
+  factory_tbl_all_transaction_line_discount: "analytics_trans_prod.all_transaction_line_discount"
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
