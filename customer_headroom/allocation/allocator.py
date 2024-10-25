@@ -99,25 +99,31 @@ class Allocator(object):
             return "Missing"
 
     def get(
-        self, predictions: DataFrame, audience: Optional[DataFrame] = None
+        self, predictions: DataFrame, audience: Optional[DataFrame] = None, headroom: bool = True
     ) -> DataFrame:
         """
         Allocate customers from Headroom predictions.
         """
-        if audience:
-            predictions = predictions.join(
-                audience.select(self.user_key).distinct(), on=self.user_key, how="right"
-            )
 
-        prediction_scores = self.get_prediction_scores(predictions)
+        if headroom:
+            if audience:
+                predictions = predictions.join(
+                    audience.select(self.user_key).distinct(), on=self.user_key, how="right"
+                )
 
-        prediction_scores_tagged = self.tag_outliers(prediction_scores)
+            prediction_scores = self.get_prediction_scores(predictions)
 
-        headroom_predictions = self.get_headroom(prediction_scores_tagged)
+            prediction_scores_tagged = self.tag_outliers(prediction_scores)
 
-        headroom_export = self.prepare_export(headroom_predictions)
+            headroom_predictions = self.get_headroom(prediction_scores_tagged)
 
-        return headroom_export
+            export = self.prepare_export(headroom_predictions)
+        else:
+            test_predictions = self.allocate_offers_for_all_baselines(predictions)
+
+            export = self.prepare_export(test_predictions)
+
+        return export
 
     def get_prediction_scores(self, predictions):
         pred_scores = (
@@ -301,7 +307,15 @@ class Allocator(object):
                     "used_headroom_frac",
                 )
             )
+        
+        data_hrm = data_hrm.withColumnRenamed("total_used_headroom", "baseline_plus_stretch")
 
+        data_out = self.allocate_offer(data_hrm)
+
+        return data_out
+
+    def allocate_offer(self, data_hrm):
+        # get used_headroom_fraction
         data_hrm = data_hrm.withColumn("rand", F.rand())
         data_hrm_cnt = data_hrm.count()
         data_hrm = data_hrm.withColumn("offer_id", F.lit(None))
@@ -312,8 +326,7 @@ class Allocator(object):
             data_hrm = data_hrm.withColumn(
                 "offer_id",
                 F.when(
-                    (F.col("total_used_headroom") >= v[0])
-                    & (F.col("total_used_headroom") < v[1]),
+                    (F.col("baseline_plus_stretch") >= v[0]) & (F.col("baseline_plus_stretch") < v[1]),
                     offer_id,
                 ).otherwise(F.col("offer_id")),
             )
@@ -327,7 +340,7 @@ class Allocator(object):
             .withColumn(
                 "offer_id",
                 F.when(
-                    (F.col("total_used_headroom") >= self.large_lim),
+                    (F.col("baseline_plus_stretch") >= self.large_lim),
                     F.col("large_offers")[
                         ((F.col("rand") * F.size(F.col("large_offers"))).cast("int"))
                     ],
@@ -346,7 +359,7 @@ class Allocator(object):
         )
 
         # asserting that large spenders get large offers
-        large_spenders = data_out.filter(F.col("total_used_headroom") > 270)
+        large_spenders = data_out.filter(F.col("baseline_plus_stretch") > 270)
         if large_spenders.count() > 0:
             cnt = (
                 large_spenders.select("offer_id")
@@ -357,6 +370,36 @@ class Allocator(object):
 
         return data_out
 
+    def allocate_offers_for_all_baselines(self, fixed_stretch_tbl):
+        # List of baseline columns (automatically detected)
+        baseline_columns = [col for col in fixed_stretch_tbl.columns if col.startswith("baseline")]
+        
+        # Initialize an empty DataFrame to store the combined result
+        combined_allocation_df = None
+        fixed_stretch_tbl = fixed_stretch_tbl.withColumnRenamed('85th_percentile', 'sum_total_spend')
+        
+        # Iterate over each baseline column and allocate offers
+        for baseline_col in baseline_columns:
+            # Select necessary columns including 'cust_id', '85th_percentile', and the current baseline column
+            selected_columns_df = fixed_stretch_tbl.select('cust_id', 'sum_total_spend', baseline_col)
+            
+            # Rename the current baseline column to 'current_baseline' so that allocate_offer can work on it
+            renamed_df = selected_columns_df.withColumnRenamed(baseline_col, "baseline_plus_stretch")
+            
+            # Call the allocate_offer function, passing the DataFrame with the renamed column
+            allocation_df = self.allocate_offer(renamed_df)
+            
+            # Add a new column to indicate the baseline column used for the allocation
+            allocation_df = allocation_df.withColumn('test_type', F.lit(baseline_col))
+                        
+            # Combine the result with the previous results
+            if combined_allocation_df is None:
+                combined_allocation_df = allocation_df
+            else:
+                combined_allocation_df = combined_allocation_df.unionByName(allocation_df)
+        
+        return combined_allocation_df
+
     def prepare_export(self, data):
         data_export = (
             data.withColumn(
@@ -365,19 +408,19 @@ class Allocator(object):
                     F.col("offer_id")
                 ),
             )
-            .withColumn("spend_plus_headroom", F.round("total_used_headroom", 2))
+            .withColumn("spend_plus_stretch", F.round("baseline_plus_stretch", 2))
             .withColumn("estimated_spend", F.round(F.col("sum_total_spend"), 2))
             .withColumn(
-                "estimated_headroom",
-                F.round(F.col("total_used_headroom") - F.col("sum_total_spend"), 2),
+                "estimated_stretch",
+                F.round(F.col("spend_plus_stretch") - F.col("sum_total_spend"), 2),
             )
             .drop(
                 "sum_total_spend",
-                "total_used_headroom",
+                "baseline_plus_stretch",
                 "large_offers",
                 "small_offers",
                 "rand",
             )
         )
-
+       
         return data_export

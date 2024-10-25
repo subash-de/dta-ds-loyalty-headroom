@@ -20,16 +20,17 @@ def add_week_number(df: DataFrame, date_column: str, start_date: str) -> DataFra
     Returns:
         DataFrame: DataFrame with a new 'week_number' column.
     """
-    df = df.withColumn("date", to_date(col("EVENT_DATE")))
+    
+    df = df.withColumn("date_2", to_date(col(date_column).cast("string"), "yyyyMMdd"))
     df = df.withColumn("week_number",
-                       (datediff(col("date"), to_date(expr(f"'{start_date}'"),
-                        "yyyy-MM-dd")) / 7).cast("int") + 1
-                       )
+                    (datediff(col("date_2"), to_date(lit(str(trx_manager.lookback_date)), "yyyyMMdd")) / 7).cast("int") + 1
+                    )
     return df
 
 
 def calculate_weekly_rolling_sum(df: DataFrame,
                                  rolling_window: int,
+                                 rolling_window_col: str,
                                  date_column: str,
                                  start_date: str,
                                  column_to_sum: str,
@@ -40,6 +41,7 @@ def calculate_weekly_rolling_sum(df: DataFrame,
     Args:
         df (DataFrame): Input DataFrame containing the data.
         rolling_window (int): The number of weeks to include in the rolling window.
+        rolling_window_col (str): Name of the column to store the rolling sum in.
         date_column (str): Name of the date column.
         start_date (str): The start date to calculate week numbers from.
         column_to_sum (str): Column to calculate the rolling sum for.
@@ -74,7 +76,7 @@ def calculate_weekly_rolling_sum(df: DataFrame,
     )
 
     weekly_df = weekly_df.withColumn(
-        f"rolling_{rolling_window}_week_sales",
+        rolling_window_col,
         F.sum(column_to_sum).over(w),
     )
 

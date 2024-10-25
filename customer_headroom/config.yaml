@@ -27,13 +27,20 @@ tables:
   prediction_tbl: &prediction_tbl
     prefix: headroomX_predictions_np_241104_85pct
     partitionByList: *segPartition
+  fixed_stretch_tbl: &fixed_stretch_tbl
+    prefix: fixed_stretch_tbl_np_241104_85pct
+    partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
     prefix: headroomX_allocation_np_241104_85pct
     partitionByList: ["campaign", "offer_id"]
+  full_export_tbl: &full_export_tbl
+    prefix: test_cells_allocation_np_241104_85pct
+    partitionByList: ["campaign", "offer_id"]
+  prefix: headroomX_allocation_np_241104_85pct
+  partitionByList: ["campaign", "offer_id"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
     prefix: headroom_cust_id_link_241104_85pct
     partitionByList: ["campaign"]
-  factory_tbl_all_transaction_line_dev: "loyalty_azlab_prod.legacy_all_transaction_line"
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
@@ -69,10 +76,13 @@ dates:
   etl_date: 20240909 # "today"  # changed
   # Amount of days to look back
   lookback_days: 363 # 28*7-1
+  # Rolling sum end date
+  rolling_sum_etl_date: "2024-09-09"
   # TODO: what is this used for?
   lookback_days_registration: 363 # 28*7-1
   # Date format
   date_format: '%Y%m%d'
+  date_format_transactions: '%Y-%m-%d' 
 # filters:
 columns:
   user_id: &user_id "cust_id"
@@ -194,9 +204,20 @@ offline_eval:
   kfold: True
   n_splits: 5
   shuffle: True
+baseline_stretch_simulations:
+  department: 'FD'
+  rolling_window: 4
+  date_col: "date"
+  col_to_sum: "sales_amt"
+  grouping_cols: "cust_id"
+  baseline_percentiles: 85
+  stretch_amounts: [0,10,30]
+  # output
+  fixed_stretch_tbl: *fixed_stretch_tbl
 allocation:
   # input
   prediction_tbl: *prediction_tbl
+  fixed_stretch_tbl: *fixed_stretch_tbl
   feature_col: *feature_col
   # TODO: Put this information in a table
   offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
@@ -257,6 +278,7 @@ allocation:
   fill_offer: 14140
   # Output
   headroom_export_tbl: *headroom_export_tbl
+  full_export_tbl: *full_export_tbl
   tcol_allocate_separately : False # False
   exclude_high_spend: None
   min_num_basket: None
