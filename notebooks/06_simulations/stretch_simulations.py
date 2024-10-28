@@ -19,7 +19,6 @@ import sys
 
 import sys
 import customer_headroom.utils.persist_utils as persist_utils
-# from customer_headroom import config
 
 # COMMAND ----------
 
@@ -31,6 +30,7 @@ from dtaml.logging import get_logger
 from dtaml.utils.table import factory_table
 
 import customer_headroom.utils.persist_utils as persist_utils
+import customer_headroom.utils.simulation_utils as simulation_utils
 from customer_headroom.etl.build_dataset import TransactionsManager
 from customer_headroom.etl.etl_utils import (
     find_all_segments,
@@ -47,22 +47,188 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
-import customer_headroom.utils.simulation_utils as simulation_utils
+config_sim = config["baseline_stretch_simulations"]
 
 # COMMAND ----------
 
-trans_before_june_accu = persist_utils.read_table(
-    table_name = config.tables.factory_tbl_all_transaction_line_dev,
-    where= "EVENT_DATE >= '2023-06-01'"
-           and "EVENT_DATE <= '2024-05-31'"
-           and "sparks_reg_date <= '2023-06-01'"
-           and "trans_line_type = 'S'"
-           and "division_id = 'FD'"
-           and "sparks_account_id is not null")
+# start_date = str(
+#     (
+#         datetime.strptime(str(config.dates.rolling_sum_etl_date), config.dates.date_format_transactions)
+#         - timedelta(days=config.dates.lookback_days)
+#     ).strftime(config.dates.date_format_transactions)
+# )
+
 
 # COMMAND ----------
 
-weekly_sales = simulation_utils.calculate_weekly_rolling_sum(trans_before_june_accu, 4, "EVENT_DATE", "2023-06-01", "sales_amt", "cust_id")
+def get_campaign(campaign, etl_date):
+    if (campaign == "{campaign}") or (campaign == ""):
+        campaign = get_date(etl_date)
+    return campaign
+campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
+
+# COMMAND ----------
+
+config_use = config["use_segments"]
+segmentations_tbl_name = factory_table(
+    table_prefix=config_use.segmentations_tbl.prefix, sensitivity=config.sensitivity
+)
+segmentations_tbl = persist_utils.read_table(
+    table_name=segmentations_tbl_name, where=f"campaign={campaign}"
+)
+if config_use["all"]:
+    logger.info("Use all Segmentations")
+    seg_list = find_all_segments(segmentations_tbl, config_use["partitionByList"])
+else:
+    seg_list = config_use["seg_list"]
+logger.info(f"Segmentations: {seg_list}")
+
+# COMMAND ----------
+
+config_bd = config["build_dataset"]
+trx_manager = TransactionsManager(
+        etl_date=get_date(config.dates.etl_date),
+        lookback_days=config.dates.lookback_days,
+        l1_ids=config_bd["l1_ids"],
+        lx=config_bd["lx"],
+        lx_ids=config_bd["lx_ids"],  # getting all the products in this l2 id
+        user_key=config_bd["user_id"],
+        window_days=config_bd["window_days"],
+        time_window_length=config_bd["time_window_days"],
+        exclude_items=literal_eval(config["exclude_items"]),
+        aggregation_level=config_bd["aggregation_level"],
+    )
+
+# COMMAND ----------
+
+trx_line = spark.table("analytics_trans_prod.all_transaction_line")
+articles_df = spark.table("analytics_trans_prod.lu_article")
+
+# COMMAND ----------
+
+trx_line = (
+            trx_manager._add_date(trx_line)
+            .filter(F.col("date") <= trx_manager.etl_date)
+            .filter(F.col("date") >= trx_manager.lookback_date)
+            .filter(F.col("PURCHASE_CHANNEL").isin(trx_manager.channels))
+            .filter(F.col("l1_id").isin(list(trx_manager.l1_ids)))
+            .filter(trx_manager.get_common_filters())
+        )
+
+if trx_manager.christmas_remove_range is not None:
+  trx_line = trx_manager.remove_christmas_transactions(
+                trx_line, christmas_range=trx_manager.christmas_remove_range
+            )
+
+# Remove items from transaction list, e.g. BWS items
+trx_line = trx_manager.remove_items(trx_line)
+
+if segmentations_tbl is not None:
+    # Only keep customers in segmentations
+    trx_line = trx_line.join(
+        segmentations_tbl.select(trx_manager.user_key).distinct(), on=trx_manager.user_key
+    )
+
+cust_lx_trx = trx_manager.get_customer_transactions(trx_line, articles_df)
+
+
+# COMMAND ----------
+
+cust_lx_trx.columns
+
+# COMMAND ----------
+
+cust_lx_trx.count()
+
+# COMMAND ----------
+
+config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
+
+# COMMAND ----------
+
+from pyspark.sql.functions import col, to_date, lit, datediff
+
+# Convert the 'date' column to a date format (assuming the original format is 'yyyyMMdd')
+cust_lx_trx = cust_lx_trx.withColumn("date_2", to_date(col('date').cast("string"), "yyyyMMdd"))
+
+cust_lx_trx = cust_lx_trx.withColumn("week_number",
+                    (datediff(col("date_2"), to_date(lit(str(trx_manager.lookback_date)), "yyyyMMdd")) / 7).cast("int") + 1
+                    )
+
+# COMMAND ----------
+
+
+from typing import Union, List
+def calculate_weekly_rolling_sum(df: DataFrame,
+                                 rolling_window: int,
+                                 rolling_window_col: str,
+                                 date_column: str,
+                                 start_date: str,
+                                 column_to_sum: str,
+                                 grouping_columns: Union[List[str], str]) -> DataFrame:
+    """
+    Calculates the weekly rolling sum of a specified column
+    
+    Args:
+        df (DataFrame): Input DataFrame containing the data.
+        rolling_window (int): The number of weeks to include in the rolling window.
+        rolling_window_col (str): Name of the column to store the rolling sum in.
+        date_column (str): Name of the date column.
+        start_date (str): The start date to calculate week numbers from.
+        column_to_sum (str): Column to calculate the rolling sum for.
+        grouping_columns (Union[List[str], str]): Columns to group the data by.
+        
+    Returns:
+        DataFrame: DataFrame with rolling weekly sums for the specified column.
+    """
+    # df = add_week_number(df, date_column, start_date)
+
+    if not isinstance(grouping_columns, list):
+        grouping_columns = [grouping_columns]
+    group_columns_with_week = grouping_columns + ["week_number"]
+    weekly_df = df.groupBy(*group_columns_with_week).agg(F.sum(column_to_sum).alias(column_to_sum))
+
+    # Filling 0s for missing weeks
+    distinct_columns = {}
+    for col in group_columns_with_week:
+        distinct_columns[col] = weekly_df.select(col).distinct()
+    cross_joined = distinct_columns[group_columns_with_week[0]]
+    for col in group_columns_with_week[1:]:
+        cross_joined = cross_joined.crossJoin(distinct_columns[col])
+    weekly_df = cross_joined.join(weekly_df, on=group_columns_with_week, how="left")
+    weekly_df = weekly_df.fillna({column_to_sum: 0})
+
+    # Finding rolling sum
+    w = (
+        Window()
+        .partitionBy(*grouping_columns)
+        .orderBy("week_number")
+        .rowsBetween(-(rolling_window - 1), Window.currentRow)
+    )
+
+    weekly_df = weekly_df.withColumn(
+        rolling_window_col,
+        F.sum(column_to_sum).over(w),
+    )
+
+    weekly_df = weekly_df.filter(F.col("week_number") >= rolling_window)
+
+    return weekly_df
+
+# COMMAND ----------
+
+weekly_sales.count()
+
+# COMMAND ----------
+
+weekly_sales = simulation_utils.calculate_weekly_rolling_sum(cust_lx_trx, 
+                                                            config_sim['rolling_window'],
+                                                            config_sim['rolling_window_col'],
+                                                            config_sim['date_col'], 
+                                                            trx_manager.lookback_date, 
+                                                            config_sim['col_to_sum'], 
+                                                            config_sim['grouping_cols'])
+
 
 # COMMAND ----------
 
@@ -70,7 +236,15 @@ weekly_sales.display()
 
 # COMMAND ----------
 
-baseline_per_customer = simulation_utils.calculate_baselines_plus_stretch_combs(85, weekly_sales,"rolling_4_week_sales", "cust_id", [0, 10, 30])
+baseline_per_customer = simulation_utils.calculate_baselines_plus_stretch_combs(config_sim['baseline_percentiles'], 
+                                                                                weekly_sales,
+                                                                               config_sim['rolling_window_col'], 
+                                                                               config_sim['grouping_cols'], 
+                                                                               config_sim['stretch_amounts'])
+
+# COMMAND ----------
+
+logger.info(f"baseline_per_customer: {baseline_per_customer}")
 
 # COMMAND ----------
 
@@ -85,9 +259,15 @@ percentile_columns = list(set(baseline_columns) - set(zero_stretch_cols))
 
 # COMMAND ----------
 
-percentile_df = simulation_utils.calculate_percentile_rank(baseline_per_customer, weekly_sales,"rolling_4_week_sales", percentile_columns,"cust_id")
+percentile_df = simulation_utils.calculate_percentile_rank(baseline_per_customer, 
+                                                           weekly_sales,
+                                                           config_sim['rolling_window_col'], 
+                                                           percentile_columns,
+                                                           config_sim['grouping_cols'])
 
 # COMMAND ----------
+
+## TODO: generalize
 
 # Adjusting percentile values for 0% stretch and number of shops
 
@@ -95,121 +275,61 @@ percentile_df = simulation_utils.calculate_percentile_rank(baseline_per_customer
 percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_0_perc",lit(0.85))
 
 # Counting number of weekly sales for each customer in the past year
-grouped_df = weekly_sales.groupBy("cust_id").agg(
-    F.sum(F.when(F.col("sales_amt") > 0, 1).otherwise(0)).alias("non_zero_sales_count")
+grouped_df = weekly_sales.groupBy(config_sim['grouping_cols']).agg(
+    F.sum(F.when(F.col(config_sim['col_to_sum']) > 0, 1).otherwise(0)).alias("non_zero_sales_count")
 )
-percentile_df = percentile_df.join(grouped_df, on='cust_id', how='left')
+percentile_df = percentile_df.join(grouped_df, on=config_sim['grouping_cols'], how='left')
 
 # If customer shopped less than two times in the past year, set the percentile to 100%
-percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_10_perc_adjusted",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_10_perc")))
-percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_30_perc_adjusted",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_30_perc")))
+percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_10_perc",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_10_perc")))
+percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_20_perc",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_20_perc")))
+percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_30_perc",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_30_perc")))
 
 # COMMAND ----------
 
-# Finding the average percentile for each baseline + stretch combination
-percentile_columns = [col for col in percentile_df.columns if col.startswith("percentile")]
-percentile_aggregations = percentile_df.agg(*[F.mean(col).alias(f"{col}_avg") for col in percentile_columns])
-percentile_aggregations.display()
+percentile_of_stretches_cols = [col for col in percentile_df.columns if col.startswith("percentile")]
 
 # COMMAND ----------
 
-percentile_df_pandas = percentile_df.toPandas()
+final_df = baseline_per_customer.join(percentile_df.select(['cust_id']+percentile_of_stretches_cols), on=config_sim['grouping_cols'], how="left")
 
 # COMMAND ----------
 
-# Plotting percentile distributions
-simulation_utils.plot_percentiles_distributions(percentile_df_pandas, ['percentile_baseline_85_stretch_0_perc', 'percentile_baseline_85_stretch_10_perc_adjusted','percentile_baseline_85_stretch_30_perc_adjusted'])
+final_df = final_df.drop('mean_value', 'median_value')
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC #### Deviation from mean & median spending
+final_df.display()
 
 # COMMAND ----------
 
-# Calculating differences between different baseline + stretches and mean/max/median values
-for col in baseline_columns:
-  baseline_per_customer = baseline_per_customer.withColumn(col + "_diff_mean", (F.col(col) - F.col("mean_value"))/F.col("mean_value"))
-  baseline_per_customer = baseline_per_customer.withColumn(col + "_diff_median", (F.col(col) - F.col("median_value"))/F.col("median_value"))
+fixed_stretch_tbl_name= persist_utils.create_beam_table(
+    table_prefix=config_sim.fixed_stretch_tbl.prefix,
+    lab_database=config.lab_database,
+    factory_database=config.factory_database,
+    sensitivity=config.sensitivity,
+    schema=final_df,
+    partition_by=config_sim.fixed_stretch_tbl.partitionByList,
+    overwrite_table=True,
+    assert_equality=False,
+    add_load_timestamp=True,
+)
+logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
 
-
-# COMMAND ----------
-
-difference_columns = [col for col in baseline_per_customer.columns if "_diff_" in col]
-baseline_per_customer_agg = baseline_per_customer.agg(*[F.mean(col).alias(f"{col}_avg") for col in difference_columns])
-baseline_per_customer_agg.display()
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Customer segment breakdown
-
-# COMMAND ----------
-
-customer_df = spark.sql("""
-                  SELECT *
-                  FROM(
-                  SELECT 
-                      *,
-                      ROW_NUMBER() OVER (PARTITION BY cust_id ORDER BY yyyymmdd DESC) AS row_num
-                  FROM customer_azbase_prod.segtco_history
-                  where yyyymmdd <= 20240610)
-                  WHERE row_num = 1
-                  """)
+persist_utils.insert_df_into_table(
+    target_tbl_name=fixed_stretch_tbl_name,
+    insert_df=final_df,
+    insert_append=True,
+    add_columns=True,
+)
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC #### Percentiles
+fixed_stretch_tbl = persist_utils.read_table(
+    table_name=fixed_stretch_tbl_name
+)
+fixed_stretch_tbl.columns
 
 # COMMAND ----------
 
-# Joining customer breakdown table with percentile rank data
-percentile_customer_segment = percentile_df.join(customer_df.select('cust_id', 'cust_band_fd').distinct(), on='cust_id', how='left')
-
-# COMMAND ----------
-
-# Finding the average percentile for each baseline + stretch combination
-percentile_aggregations = percentile_customer_segment.groupBy('cust_band_fd').agg(*[F.mean(col).alias(f"{col}_avg") for col in percentile_columns])
-percentile_aggregations.display()
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC #### Deviation from mean/median spending
-
-# COMMAND ----------
-
-# Joining customer breakdown table with difference from median/mean
-customer_segment_diff = baseline_per_customer.join(customer_df.select('cust_id', 'cust_band_fd').distinct(), on='cust_id', how='left')
-
-# COMMAND ----------
-
-# Finding the average percentile for each baseline + stretch combination
-diff_aggregations = customer_segment_diff.groupBy('cust_band_fd').agg(*[F.mean(col).alias(f"{col}_avg") for col in difference_columns])
-# diff_aggregations.display()
-
-# COMMAND ----------
-
-percentile_customer_segment_pandas = percentile_customer_segment.toPandas()
-
-# COMMAND ----------
-
-import matplotlib.pyplot as plt
-
-# Define the categories you want to plot
-categories = percentile_customer_segment_pandas['cust_band_fd'].unique()
-categories = [cat for cat in categories if cat is not None]
-
-# Set up the plot
-plt.figure(figsize=(10, 6))
-
-# Loop through each category and plot its histogram
-for category in categories:
-    print("Customer Segment:", category)
-    subset = percentile_customer_segment_pandas[percentile_customer_segment_pandas['cust_band_fd'] == category]
-    simulation_utils.plot_percentiles_distributions(subset, ['percentile_baseline_85_stretch_0_perc', 'percentile_baseline_85_stretch_10_perc_adjusted', 'percentile_baseline_85_stretch_30_perc_adjusted'])
-
-# COMMAND ----------
-
-
+fixed_stretch_tbl.display()

@@ -248,4 +248,121 @@ headroom_tbl.groupBy("desc").count().withColumn(
 
 # COMMAND ----------
 
+# Fixed stretch allocation
+config_sim = config['baseline_stretch_simulations']
+fixed_stretch_tbl_name = persist_utils.get_table_name(
+      factory_database=config.factory_database,
+    lab_database=config.lab_database,
+    table_prefix=config_sim.fixed_stretch_tbl.prefix,
+    sensitivity=config.sensitivity,
+
+)
+
+logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
+
+fixed_stretch_tbl = persist_utils.read_table(
+    table_name=fixed_stretch_tbl_name
+)
+
+fixed_stretch_allocation_manager = Allocator(
+        feature_col=config_al["feature_col"],
+        offer_limits=config["offer_limits"],
+        offer_desc=config["offers_desc"],
+        user_key=config_al["user_key"],
+        outlier_min=config_al["outlier_min"],
+        outlier_max=config_al["outlier_max"],
+        max_increase=config_al["max_increase"],
+        min_increase=config_al["min_increase"],
+        headroom_factor=config_al["headroom_factor"],
+        fill_offer=config_al["fill_offer"],
+        prev_not_bought_factor=config_al["prev_not_bought_factor"],
+    )
+
+fixed_stretch_export = fixed_stretch_allocation_manager.get(predictions= fixed_stretch_tbl, headroom = False)
+fixed_stretch_export = fixed_stretch_export.withColumn("campaign", F.lit(campaign))
+
+# Removing customers with no headroom output
+headroom_customers = exports_merged.filter(exports_merged["test_type"] == "headroom").select("cust_id").distinct()
+all_export = exports_merged.join(headroom_customers, on="cust_id", how="inner")
+
+# COMMAND ----------
+
+# Removing customers with no headroom output
+headroom_customers = exports_merged.filter(exports_merged["test_type"] == "headroom").select("cust_id").distinct()
+all_export = exports_merged.join(headroom_customers, on="cust_id", how="inner")
+
+# COMMAND ----------
+
+test_cells_tbl_name = persist_utils.create_beam_table(
+    table_prefix=config_al.full_export_tbl.prefix,
+    lab_database=config.lab_database,
+    factory_database=config.factory_database,
+    sensitivity=config.sensitivity,
+    schema=all_export,
+    partition_by=config_al.full_export_tbl.partitionByList,
+    overwrite_table=True,
+    assert_equality=False,
+    add_load_timestamp=True,
+)
+logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
+
+persist_utils.insert_df_into_table(
+    target_tbl_name=test_cells_tbl_name,
+    insert_df=all_export,
+    insert_append=True,
+    add_columns=True,
+)
+
+# COMMAND ----------
+
+# Assigning random test cells
+
+# Step 1: Get distinct cust_id and shuffle them randomly
+distinct_customers = all_export.select("cust_id").distinct().orderBy(F.rand())
+
+# Step 2: Count the number of distinct test types
+test_types = all_export.select("test_type").distinct().collect()
+num_test_types = len(test_types)
+
+# Step 3: Assign row numbers to the distinct customers
+window_spec = W.orderBy(F.lit(1))
+distinct_customers = distinct_customers.withColumn("row_num", F.row_number().over(window_spec))
+
+test_type_assignments = F.when((distinct_customers["row_num"] % num_test_types) == 0, test_types[0][0])
+for i in range(1, num_test_types):
+    test_type_assignments = test_type_assignments.when((distinct_customers["row_num"] % num_test_types) == i, test_types[i][0])
+
+distinct_customers = distinct_customers.withColumn("test_type", test_type_assignments)
+
+# Step 5: Join this back to the original dataframe to keep only one row per customer with the assigned test_type
+final_df = distinct_customers.join(all_export, on=["cust_id", "test_type"], how="inner").dropDuplicates(["cust_id"])
+
+# Step 6: Show the result
+final_df.orderBy('cust_id').display()
+
+# COMMAND ----------
+
+test_cells_selected_tbl_name = persist_utils.create_beam_table(
+    table_prefix=config_al.full_export_tbl.prefix,
+    lab_database=config.lab_database,
+    factory_database=config.factory_database,
+    sensitivity=config.sensitivity,
+    schema=test_cells_selected,
+    partition_by=config_al.full_export_selected_tbl.partitionByList,
+    overwrite_table=True,
+    assert_equality=False,
+    add_load_timestamp=True,
+)
+logger.info(f"""test_cells_selected_tbl_name: {test_cells_selected_tbl_name}""")
+
+persist_utils.insert_df_into_table(
+    target_tbl_name=test_cells_selected_tbl_name,
+    insert_df=all_export,
+    insert_append=True,
+    add_columns=True,
+)
+
+
+# COMMAND ----------
+
 dbutils.notebook.exit(True)

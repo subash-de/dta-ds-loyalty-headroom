@@ -16,30 +16,31 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data_np_241104_85pct
+    prefix: headroom_segmentation_data_np_241104_85pct_2
     partitionByList: ["campaign"]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations_np_241104_85pct
+    prefix: headroom_segmentations_np_241104_85pct_2
     partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data_np_241104_85pct
+    prefix: headroom_etl_data_np_241104_85pct_2
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroomX_predictions_np_241104_85pct
+    prefix: headroomX_predictions_np_241104_85pct_2
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
-    prefix: fixed_stretch_tbl_np_241104_85pct
+    prefix: fixed_stretch_tbl_np_241104_85pct_2
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroomX_allocation_np_241104_85pct
+    prefix: headroomX_allocation_np_241104_85pct_2
     partitionByList: ["campaign", "offer_id"]
   full_export_tbl: &full_export_tbl
-    prefix: test_cells_allocation_np_241104_85pct
+    prefix: test_cells_allocation_np_241104_85pct_2
     partitionByList: ["campaign", "offer_id"]
-  prefix: headroomX_allocation_np_241104_85pct
-  partitionByList: ["campaign", "offer_id"]
+  full_export_selected_tbl: &full_export_selected_tbl
+    prefix: test_cells_selected_allocation_np_241104_85pct_2
+    partitionByList: ["campaign", "offer_id"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
-    prefix: headroom_cust_id_link_241104_85pct
+    prefix: headroom_cust_id_link_241104_85pct_2
     partitionByList: ["campaign"]
 
 mail_containers: # mount paths for different envs
@@ -119,7 +120,7 @@ segmentation:
 use_segments:
   all: True
   # seg_list e.g. [{'experian_hh_composition': 'Cat_U', 'segmentation': 1}, ...]
-  seg_list: {}
+  # seg_list: {}
   segmentations_tbl: *segmentations_tbl
   partitionByList: *segPartition
 build_dataset:
@@ -211,7 +212,7 @@ baseline_stretch_simulations:
   col_to_sum: "sales_amt"
   grouping_cols: "cust_id"
   baseline_percentiles: 85
-  stretch_amounts: [0,10,30]
+  stretch_amounts: [0,10,20,30]
   # output
   fixed_stretch_tbl: *fixed_stretch_tbl
 allocation:
@@ -279,6 +280,7 @@ allocation:
   # Output
   headroom_export_tbl: *headroom_export_tbl
   full_export_tbl: *full_export_tbl
+  full_export_selected_tbl: *full_export_selected_tbl
   tcol_allocate_separately : False # False
   exclude_high_spend: None
   min_num_basket: None

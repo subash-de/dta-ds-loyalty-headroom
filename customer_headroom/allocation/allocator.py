@@ -315,7 +315,6 @@ class Allocator(object):
         return data_out
 
     def allocate_offer(self, data_hrm):
-        # get used_headroom_fraction
         data_hrm = data_hrm.withColumn("rand", F.rand())
         data_hrm_cnt = data_hrm.count()
         data_hrm = data_hrm.withColumn("offer_id", F.lit(None))

@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm 
 import numpy as np
 from typing import Union, List
+from pyspark.sql.functions import lit
 
 
 def add_week_number(df: DataFrame, date_column: str, start_date: str) -> DataFrame:
@@ -20,10 +21,10 @@ def add_week_number(df: DataFrame, date_column: str, start_date: str) -> DataFra
     Returns:
         DataFrame: DataFrame with a new 'week_number' column.
     """
-    
+
     df = df.withColumn("date_2", to_date(col(date_column).cast("string"), "yyyyMMdd"))
     df = df.withColumn("week_number",
-                    (datediff(col("date_2"), to_date(lit(str(trx_manager.lookback_date)), "yyyyMMdd")) / 7).cast("int") + 1
+                    (datediff(col("date_2"), to_date(lit(str(start_date)), "yyyyMMdd")) / 7).cast("int") + 1
                     )
     return df
 

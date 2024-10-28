@@ -51,16 +51,6 @@ config_sim = config["baseline_stretch_simulations"]
 
 # COMMAND ----------
 
-start_date = str(
-    (
-        datetime.strptime(str(config.dates.rolling_sum_etl_date), config.dates.date_format_transactions)
-        - timedelta(days=config.dates.lookback_days)
-    ).strftime(config.dates.date_format_transactions)
-)
-
-
-# COMMAND ----------
-
 def get_campaign(campaign, etl_date):
     if (campaign == "{campaign}") or (campaign == ""):
         campaign = get_date(etl_date)
@@ -98,9 +88,6 @@ trx_manager = TransactionsManager(
         exclude_items=literal_eval(config["exclude_items"]),
         aggregation_level=config_bd["aggregation_level"],
     )
-
-# COMMAND ----------
-
 trx_line = spark.table("analytics_trans_prod.all_transaction_line")
 articles_df = spark.table("analytics_trans_prod.lu_article")
 
@@ -134,10 +121,6 @@ cust_lx_trx = trx_manager.get_customer_transactions(trx_line, articles_df)
 
 # COMMAND ----------
 
-cust_lx_trx.columns
-
-# COMMAND ----------
-
 config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
 
 # COMMAND ----------
@@ -146,7 +129,7 @@ weekly_sales = simulation_utils.calculate_weekly_rolling_sum(cust_lx_trx,
                                                             config_sim['rolling_window'],
                                                             config_sim['rolling_window_col'],
                                                             config_sim['date_col'], 
-                                                            start_date, 
+                                                            trx_manager.lookback_date, 
                                                             config_sim['col_to_sum'], 
                                                             config_sim['grouping_cols'])
 
@@ -157,6 +140,7 @@ baseline_per_customer = simulation_utils.calculate_baselines_plus_stretch_combs(
                                                                                config_sim['rolling_window_col'], 
                                                                                config_sim['grouping_cols'], 
                                                                                config_sim['stretch_amounts'])
+logger.info(f"baseline_per_customer: {baseline_per_customer}")
 
 # COMMAND ----------
 
@@ -196,18 +180,13 @@ percentile_df = percentile_df.join(grouped_df, on=config_sim['grouping_cols'], h
 
 # If customer shopped less than two times in the past year, set the percentile to 100%
 percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_10_perc",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_10_perc")))
+percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_20_perc",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_20_perc")))
 percentile_df = percentile_df.withColumn("percentile_baseline_85_stretch_30_perc",F.when(F.col('non_zero_sales_count') <2, lit(1)).otherwise(F.col("percentile_baseline_85_stretch_30_perc")))
 
 # COMMAND ----------
 
 percentile_of_stretches_cols = [col for col in percentile_df.columns if col.startswith("percentile")]
-
-# COMMAND ----------
-
 final_df = baseline_per_customer.join(percentile_df.select(['cust_id']+percentile_of_stretches_cols), on=config_sim['grouping_cols'], how="left")
-
-# COMMAND ----------
-
 final_df = final_df.drop('mean_value', 'median_value')
 
 # COMMAND ----------
