@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from dtaml._internals.databricks import get_spark
 from pyspark.sql import DataFrame
@@ -168,3 +168,82 @@ class Predictor(object):
         )
 
         return data_headroom_combined
+
+class PredictorFixedStretch():
+    def __init__(
+        self,
+        grouping_columns: Union[List[str], str],
+        rolling_window_col: str,
+        baseline_percentiles: Union[List[int], int],
+        stretch_amounts: Union[List[int], int],
+        rolling_window: int = 4
+    ):
+
+        """
+        Initialize PredictorFixedStretch with additional parameters.
+
+        Parameters:
+            grouping_columns (Union[List[str], str]): Columns to group the data by.
+            rolling_window (int): The number of weeks to include in the rolling window.
+            rolling_window_col (str): Name of the column to store the rolling sum in.
+            baseline_percentiles (Union[List[int], int]): List of baseline percentiles to calculate.
+            stretch_amounts (Union[List[int], int]): List of stretch amounts to apply.
+        """
+
+        self.grouping_columns = (
+            grouping_columns if isinstance(grouping_columns, list) else [grouping_columns]
+        )
+        self.rolling_window = rolling_window
+        self.rolling_window_col = rolling_window_col
+        self.baseline_percentiles = (
+            baseline_percentiles if isinstance(baseline_percentiles, list) else [baseline_percentiles]
+        )
+        self.stretch_amounts = (
+            stretch_amounts if isinstance(stretch_amounts, list) else [stretch_amounts]
+        )
+
+    def get(self, weekly_df: DataFrame) -> DataFrame:
+        """
+        Process and return the DataFrame with calculated baseline percentiles and stretch combinations.
+
+        Parameters:
+            weekly_df (DataFrame): The weekly data to be processed.
+
+        Returns:
+            DataFrame: DataFrame with added baseline percentiles and stretch calculations.
+        """
+        baseline_with_stretch = self.calculate_baselines_plus_stretch_combs(weekly_df)
+        return baseline_with_stretch
+
+
+    def calculate_baselines_plus_stretch_combs(self, weekly_df: DataFrame) -> DataFrame:
+        """
+        Calculate baseline percentiles and stretched combinations based on specified stretch amounts.
+
+        Parameters:
+            weekly_df (DataFrame): Weekly data for calculations.
+
+        Returns:
+            DataFrame: DataFrame with baseline percentiles and stretched combinations.
+        """
+        # Aggregation expressions for calculating percentiles
+        agg_exprs = [
+            F.expr(f"percentile_approx({self.rolling_window_col}, {p / 100})").alias(f"{p}th_percentile")
+            for p in self.baseline_percentiles
+        ]
+
+        # Compute baseline percentiles by grouping
+        baseline_df = weekly_df.groupBy(*self.grouping_columns).agg(*agg_exprs)
+
+        # Calculate stretched columns for each baseline percentile and stretch amount
+        for percentile in self.baseline_percentiles:
+            percentile_col = f"{percentile}th_percentile"
+            for stretch in self.stretch_amounts:
+                stretch_factor = 1 + (stretch / 100.0)
+                stretch_col = f"{percentile}_stretch_{stretch}_perc"
+                baseline_df = baseline_df.withColumn(
+                    stretch_col, F.col(percentile_col) * stretch_factor
+                )
+
+        return baseline_df
+

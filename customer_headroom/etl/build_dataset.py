@@ -4,6 +4,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import Window as W
 from pyspark.sql import functions as F
+from pyspark.sql.functions import to_date, datediff, col, lit 
 from pyspark.sql import types as T
 
 # from great_expectations.dataset.sparkdf_dataset import SparkDFDataset
@@ -62,6 +63,25 @@ class BaseManager(object):
                 & (F.col("date_mmdd") <= christmas_end)
             )
         ).drop("date_mmdd")
+
+    def add_week_number(self, df: DataFrame, date_column: str, start_date: str) -> DataFrame:
+        """
+        Adds a 'week_number' column to the DataFrame based on the difference between the date_column and the start_date.
+        
+        Args:
+            df (DataFrame): Input DataFrame containing the date column.
+            date_column (str): Name of the column containing the date.
+            start_date (str): Starting date in 'yyyy-MM-dd' format.
+            
+        Returns:
+            DataFrame: DataFrame with a new 'week_number' column.
+        """
+        df = df.withColumn("date_2", F.to_date(F.col(date_column).cast("string"), "yyyyMMdd"))
+        df = df.withColumn(
+            "week_number",
+            (F.datediff(F.col("date_2"), F.to_date(F.lit(str(start_date)), "yyyyMMdd")) / 7).cast("int") + 1
+        )
+        return df
 
     @staticmethod
     def get_expr_agg(
@@ -650,8 +670,138 @@ class TransactionsManager(BaseManager):
             )
 
         return customer_lx_trans_grouped_all
+    
+class TransactionsManagerFixedStretch(TransactionsManager):
+    def __init__(
+        self,
+        etl_date: str,
+        lookback_days: str,
+        grouping_columns: Union[List[str], str],
+        rolling_window: int,
+        rolling_window_col: str,
+        l1_ids: list = ("GM"),
+        lx: str = "l2",
+        lx_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
+        user_key: str = "cust_id",
+        date_format: Optional[str] = "%Y%m%d",
+        channels: List[str] = ["POS"],
+        exclude_items: Dict[str, str] = {"l3_id": ["MM14"]},
+        christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101"),
+    ):
+        """
+        Initializes the TransactionsManagerFixedStretch class.
+
+        Parameters:
+            etl_date (str): The end date of timeframe in string format.
+            lookback_days (str): Number of days to look back from the etl_date.
+            grouping_columns (Union[List[str], str]): Columns to group the data by.
+            rolling_window (int): The number of weeks to include in the rolling window.
+            rolling_window_col (str): Name of the column to store the rolling sum in.
+            l1_ids (list, optional): List of L1 identifiers for filtering (e.g. "GM", "FD").
+            lx (str, optional): Level identifier (e.g., "l2").
+            lx_ids (Iterable, optional): List of lx to include in transactions.
+            date_format (Optional[str], optional): Format for parsing dates.
+            channels (List[str], optional): Channels to include in transactions.
+            exclude_items (Dict[str, str], optional): Items to exclude from transactions.
+            christmas_remove_range (Optional[Tuple[str]], optional): Range to exclude Christmas period.
+        """
+        super().__init__(
+            etl_date=etl_date,
+            lookback_days=lookback_days,
+            l1_ids=l1_ids,
+            lx=lx,
+            lx_ids=lx_ids,
+            user_key=user_key,
+            date_format=date_format,
+            channels=channels,
+            exclude_items=exclude_items,
+            christmas_remove_range=christmas_remove_range,
+        )
+
+        # Initialize attributes specific to TransactionsManagerFixedStretch
+        self.grouping_columns = (
+            grouping_columns if isinstance(grouping_columns, list) else [grouping_columns]
+        )
+        self.rolling_window = rolling_window
+        self.rolling_window_col = rolling_window_col
+        # self.baseline_percentiles = baseline_percentiles
+        # self.stretch_amounts = stretch_amounts
 
 
+    def get(
+        self,
+        trx_line: DataFrame,
+        lu_article: DataFrame,
+        cust_seg: Optional[DataFrame] = None,
+    ) -> DataFrame:
+        """
+        Entry method to run TransactionsManager
+        """
+        trx_line = (
+            self._add_date(trx_line)
+            .filter(F.col("date") <= self.etl_date)
+            .filter(F.col("date") >= self.lookback_date)
+            .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
+            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(self.get_common_filters())
+        )
+
+        if self.christmas_remove_range is not None:
+            trx_line = self.remove_christmas_transactions(
+                trx_line, christmas_range=self.christmas_remove_range
+            )
+
+        # Remove items from transaction list, e.g. BWS items
+        trx_line = self.remove_items(trx_line)
+
+        if cust_seg is not None:
+            # Only keep customers in segmentations
+            trx_line = trx_line.join(
+                cust_seg.select(self.user_key).distinct(), on=self.user_key
+            )
+
+        cust_lx_trx = self.get_customer_transactions(trx_line, lu_article)
+        weekly_df = self.calculate_weekly_rolling_sum(cust_lx_trx)
+        
+        return weekly_df
+    
+    def calculate_weekly_rolling_sum(self,
+                                     cust_lx_trx: DataFrame,
+                                     ) -> DataFrame:
+        
+        df = self.add_week_number(cust_lx_trx, "date", self.lookback_date)
+        
+        # Grouping data by grouping columns and week number
+        grouping_columns_with_week = self.grouping_columns + ["week_number"]
+        weekly_df = df.groupBy(*grouping_columns_with_week).agg(F.sum("sales_amt").alias("sales_amt"))
+
+        # Filling 0s for missing weeks
+        distinct_columns = {}
+        for col in grouping_columns_with_week:
+            distinct_columns[col] = weekly_df.select(col).distinct()
+        cross_joined = distinct_columns[grouping_columns_with_week[0]]
+        for col in grouping_columns_with_week[1:]:
+            cross_joined = cross_joined.crossJoin(distinct_columns[col])
+        weekly_df = cross_joined.join(weekly_df, on=grouping_columns_with_week, how="left")
+        weekly_df = weekly_df.fillna({"sales_amt": 0})
+
+        # Finding rolling sum
+        w = (
+            W()
+            .partitionBy(*self.grouping_columns)
+            .orderBy("week_number")
+            .rowsBetween(-(self.rolling_window - 1), W.currentRow)
+        )
+
+        weekly_df = weekly_df.withColumn(
+            self.rolling_window_col,
+            F.sum("sales_amt").over(w),
+        )
+
+        weekly_df = weekly_df.filter(F.col("week_number") >= self.rolling_window)
+
+        return weekly_df
+    
 class IdMappingManager(object):
     def get(self, sparks_account: DataFrame) -> DataFrame:
         """

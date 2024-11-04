@@ -118,6 +118,8 @@ class Allocator(object):
             headroom_predictions = self.get_headroom(prediction_scores_tagged)
 
             export = self.prepare_export(headroom_predictions)
+
+            export = export.withColumn("test_type", F.lit('headroom'))
         else:
             test_predictions = self.allocate_offers_for_all_baselines(predictions)
 
@@ -371,25 +373,25 @@ class Allocator(object):
 
     def allocate_offers_for_all_baselines(self, fixed_stretch_tbl):
         # List of baseline columns (automatically detected)
-        baseline_columns = [col for col in fixed_stretch_tbl.columns if col.startswith("baseline")]
+        columns_to_allocate = list(set(fixed_stretch_tbl.columns) - set([col for col in fixed_stretch_tbl.columns if col.endswith("th_percentile")] + ['cust_id'] + ['load_timestamp']))
         
         # Initialize an empty DataFrame to store the combined result
         combined_allocation_df = None
         fixed_stretch_tbl = fixed_stretch_tbl.withColumnRenamed('85th_percentile', 'sum_total_spend')
         
         # Iterate over each baseline column and allocate offers
-        for baseline_col in baseline_columns:
+        for col in columns_to_allocate:
             # Select necessary columns including 'cust_id', '85th_percentile', and the current baseline column
-            selected_columns_df = fixed_stretch_tbl.select('cust_id', 'sum_total_spend', baseline_col)
+            selected_columns_df = fixed_stretch_tbl.select('cust_id', 'sum_total_spend', col)
             
             # Rename the current baseline column to 'current_baseline' so that allocate_offer can work on it
-            renamed_df = selected_columns_df.withColumnRenamed(baseline_col, "baseline_plus_stretch")
+            renamed_df = selected_columns_df.withColumnRenamed(col, "baseline_plus_stretch")
             
             # Call the allocate_offer function, passing the DataFrame with the renamed column
             allocation_df = self.allocate_offer(renamed_df)
             
             # Add a new column to indicate the baseline column used for the allocation
-            allocation_df = allocation_df.withColumn('test_type', F.lit(baseline_col))
+            allocation_df = allocation_df.withColumn('test_type', F.lit(col))
                         
             # Combine the result with the previous results
             if combined_allocation_df is None:

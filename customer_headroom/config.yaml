@@ -24,6 +24,9 @@ tables:
   etl_data_tbl: &etl_data_tbl
     prefix: headroom_etl_data_np_241104_85pct_2
     partitionByList: *segPartition
+  fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
+    prefix: fixed_stretch_etl_data_np_241104_85pct_2
+    partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
     prefix: headroomX_predictions_np_241104_85pct_2
     partitionByList: *segPartition
@@ -137,6 +140,7 @@ build_dataset:
   christmas_remove_range: ["1218", "0101"]
   # output
   etl_data_tbl: *etl_data_tbl
+  fixed_stretch_etl_data_tbl: *fixed_stretch_etl_data_tbl
   partitionByList: *segPartition
   aggregation_level: &aggregation_level 'basket' #change to basket or lx id
   headroom_cust_id_link_tbl: *headroom_cust_id_link_tbl
@@ -172,6 +176,7 @@ fit_rec:
 predict:
   # input
   etl_data_tbl: *etl_data_tbl
+  fixed_stretch_etl_data_tbl: *fixed_stretch_etl_data_tbl
   data_processor_name: *data_processor_name
   rec_name: *rec_name
   feature_col: *feature_col
@@ -210,7 +215,7 @@ baseline_stretch_simulations:
   rolling_window: 4
   date_col: "date"
   col_to_sum: "sales_amt"
-  grouping_cols: "cust_id"
+  grouping_columns: "cust_id"
   baseline_percentiles: 85
   stretch_amounts: [0,10,20,30]
   # output
