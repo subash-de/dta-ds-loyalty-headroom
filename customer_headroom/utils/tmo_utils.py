@@ -1,11 +1,10 @@
 import logging
-import numpy as np
-import pandas as pd
 from functools import reduce
-from collections import defaultdict
-from typing import Optional, Dict, Tuple, List
-from pyspark.sql import DataFrame, SparkSession, functions as F, types as T
-from pyspark.sql import SparkSession
+from typing import Dict, List, Optional
+
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 logger = logging.getLogger("offerallocation")
 
@@ -327,7 +326,6 @@ def offers_remaining(
     offer_min_volume_dict: dict,
     col_name_num_variant: str = "no_of_variants",
 ) -> DataFrame:
-
     """Calculate the volume of offers that needs assigning
 
     Parameters

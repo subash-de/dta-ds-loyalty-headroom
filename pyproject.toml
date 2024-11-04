@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "customer-headroom"
+version = "0.1.0"
+description = ""
+authors = ["AntonioMoraisMNS <antonio.morais@mnscorp.net>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10,<3.11"
+scikit-surprise = "^1.1.4"
+dtaml = {version = "2.1.0", extras=["pipelines"],source = "mlops"}
+mlflow-skinny = "^2.13.2"
+omegaconf = "^2.3.0"
+jupyter = "^1.0.0"
+
+
+[[tool.poetry.source]]
+name = "mlops"
+url = "https://pkgs.dev.azure.com/dta-devops/datascience-platforms/_packaging/dta-ds-libraries/pypi/simple/"
+priority = "explicit"
+
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.4.8"
+pytest = "^8.2.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff]
+extend-include = ["*.ipynb"]
+exclude = ["notebooks_dev"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"  

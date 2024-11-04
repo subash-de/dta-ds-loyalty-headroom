@@ -1,25 +1,26 @@
 from typing import Optional
+
 import numpy as np
 import pandas as pd
 import surprise.dataset as surprise_ds
+from dtaml.logging import get_logger
 from surprise import Dataset
 from surprise.reader import Reader
-from dtaml.logging import get_logger
 
 logger = get_logger("customer-headroom")
 
 
 class DataProcessor(object):
     def __init__(
-            self,
-            feature_col: str,
-            item_id: str,
-            user_id: str = "cust_id",
-            lognorm: bool = True,
-            line_format: str = "user item rating",
-            scale_tol: float = 0.1,
-            min_lim: Optional[float] = None,
-            max_lim: Optional[float] = None,
+        self,
+        feature_col: str,
+        item_id: str,
+        user_id: str = "cust_id",
+        lognorm: bool = True,
+        line_format: str = "user item rating",
+        scale_tol: float = 0.1,
+        min_lim: Optional[float] = None,
+        max_lim: Optional[float] = None,
     ):
         self.feature_col = feature_col
         self.user_id = user_id
@@ -50,31 +51,35 @@ class DataProcessor(object):
         rec_data = self.transform(data)
         return rec_data
 
-    def transform(self,
-                  data: pd.DataFrame) -> surprise_ds.DatasetAutoFolds:
+    def transform(self, data: pd.DataFrame) -> surprise_ds.DatasetAutoFolds:
         """
         This task creates a surprise AutoFolds Dataset which is the input dataset to surprise models.
         The rating_scale and reader objects are defined here.
         """
         if self.lognorm:
-            data = self._lognorm_col(data,
-                                     col=self.feature_col,
-                                     min_col=self.min_col,
-                                     max_col=self.max_col)
+            data = self._lognorm_col(
+                data, col=self.feature_col, min_col=self.min_col, max_col=self.max_col
+            )
 
         data_ = data.loc[:, [self.user_id, self.item_id, self.value_col]]
 
-        self.rating_scale = (min(data_.loc[:, self.value_col]), max(data_.loc[:, self.value_col]))
-        self.reader = Reader(line_format=self.line_format, rating_scale=self.rating_scale)
+        self.rating_scale = (
+            min(data_.loc[:, self.value_col]),
+            max(data_.loc[:, self.value_col]),
+        )
+        self.reader = Reader(
+            line_format=self.line_format, rating_scale=self.rating_scale
+        )
         rec_data = Dataset.load_from_df(data_, self.reader)
         return rec_data
 
     @staticmethod
-    def _lognorm_col(df: pd.DataFrame,
-                     col: str,
-                     min_col: Optional[float] = None,
-                     max_col: Optional[float] = None
-                     ) -> pd.DataFrame:
+    def _lognorm_col(
+        df: pd.DataFrame,
+        col: str,
+        min_col: Optional[float] = None,
+        max_col: Optional[float] = None,
+    ) -> pd.DataFrame:
         """
         StaticMethod for calculating the lognorm of a desired column.
         """
@@ -85,5 +90,7 @@ class DataProcessor(object):
         #
         df.loc[:, col] = df.loc[:, col].astype("float64")
         df.loc[:, f"{col}_norm"] = (df.loc[:, col] - min_col) / (max_col - min_col)
-        df.loc[:, f"{col}_lognorm"] = df.loc[:, f"{col}_norm"].apply(lambda x: np.log(x))
+        df.loc[:, f"{col}_lognorm"] = df.loc[:, f"{col}_norm"].apply(
+            lambda x: np.log(x)
+        )
         return df

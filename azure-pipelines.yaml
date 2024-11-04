@@ -18,40 +18,32 @@ trigger:
       - main
       - develop
       - feature/*
-      - hotfix/*
 
 pool:
   vmImage: "ubuntu-latest"
 
 stages:
-  
-  # - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/pull/') }}:
-  #     - stage: tests
-  #       jobs:
-  #         - job: test
-  #           steps:
-  #             - bash: echo "Add some tests you might want to do"
-  
+
 
   - template: /devops/project_flow/v2/stage-multi-project.yaml@templates
     parameters:
       root_dir: "." # No need to edit this mostly, check the docs for details
 
       version_file: version.py
-      
+
       python:
         enable: true
-      
+        dependencies: poetry
         enable_tests: false
-        tests_flake8: false
-        tests_prospector: false
-      
+        tests_flake8: true
+        tests_prospector: true
+
       databricks:
-        enable: true
+        enable: false
         lab_workspace: loyalty # enterprise / marketing / loyalty
         folder_name: headroom
         clean: true
-      
+
         enable_tests: false
         test_notebook_path: sample_query
         test_worker_type: Standard_F4s_v2
@@ -60,20 +52,9 @@ stages:
           key1: value1
           key2: value2
       
+      airflow:
+        enable: true # TODO enable this when we migrate to airflow - Done
+      
       # docker:
       #   enable: true
       #   image_name: dummy
-      
-      # aks:
-      #   enable: true
-      #   app_name: dummy
-      #   values_file_dev: values.yaml
-      #   values_file_prod: values.yaml
-      
-      # adf:
-      #   enable_tests: false
-      #   test_pipeline_name: my_adf_pipeline
-      #   test_pipeline_params:
-      #     param1: value1
-      #     param2: value2
-    
