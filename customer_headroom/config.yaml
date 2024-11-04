@@ -16,19 +16,19 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data_np
+    prefix: headroom_segmentation_data
     partitionByList: ["campaign"]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations_np
+    prefix: headroom_segmentations
     partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data_np
+    prefix: headroom_etl_data
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroomX_predictions_np
+    prefix: headroomX_predictions
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroomX_allocation_np
+    prefix: headroomX_allocation
     partitionByList: ["campaign", "offer_id"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
     prefix: headroom_cust_id_link
