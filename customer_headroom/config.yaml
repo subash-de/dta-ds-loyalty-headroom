@@ -16,34 +16,34 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data_np_241104_85pct_2
-    partitionByList: ["campaign"]
+    prefix: headroom_segmentation_data
+    partitionByList: [ "campaign" ]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations_np_241104_85pct_2
-    partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
+    prefix: headroom_segmentations
+    partitionByList: &segPartition [ "campaign", "experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data_np_241104_85pct_2
+    prefix: headroom_etl_data
     partitionByList: *segPartition
   fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
-    prefix: fixed_stretch_etl_data_np_241104_85pct_2
+    prefix: fixed_stretch_etl_data
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroomX_predictions_np_241104_85pct_2
+    prefix: headroomX_predictions
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
     prefix: fixed_stretch_tbl_np_241104_85pct_2
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroomX_allocation_np_241104_85pct_2
+    prefix: headroomX_allocation
     partitionByList: ["campaign", "offer_id"]
   full_export_tbl: &full_export_tbl
-    prefix: test_cells_allocation_np_241104_85pct_2
+    prefix: test_cells_allocation
     partitionByList: ["campaign", "offer_id"]
   full_export_selected_tbl: &full_export_selected_tbl
-    prefix: test_cells_selected_allocation_np_241104_85pct_2
+    prefix: test_cells_selected_allocation
     partitionByList: ["campaign", "offer_id"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
-    prefix: headroom_cust_id_link_241104_85pct_2
+    prefix: headroom_cust_id_link
     partitionByList: ["campaign"]
 
 mail_containers: # mount paths for different envs
@@ -75,15 +75,15 @@ dates:
   # Campaign ID (Internal to Offers)
   #   - Mapping to bullseye ID in headroom_id_mapping_tbl
   # //TODO #24 should upcoming campaign be a job parameter?
-  upcoming_campaign: "20240909"
+  upcoming_campaign: "20241006"
   # End date of timeframe
-  etl_date: 20240909 # "today"  # changed
+  etl_date: 20241006 # "today"  # changed
   # Amount of days to look back
-  lookback_days: 363 # 28*7-1
+  lookback_days: 363 # 28*13-1
   # Rolling sum end date
   rolling_sum_etl_date: "2024-09-09"
   # TODO: what is this used for?
-  lookback_days_registration: 363 # 28*7-1
+  lookback_days_registration: 363 # 28*13-1
   # Date format
   date_format: '%Y%m%d'
   date_format_transactions: '%Y-%m-%d' 

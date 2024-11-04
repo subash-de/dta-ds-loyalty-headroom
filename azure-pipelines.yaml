@@ -51,7 +51,10 @@ stages:
         test_notebook_params:
           key1: value1
           key2: value2
-
+      
+      airflow:
+        enable: true # TODO enable this when we migrate to airflow - Done
+      
       # docker:
       #   enable: true
       #   image_name: dummy

@@ -193,27 +193,51 @@ else:
     headroom_export = allocation_manager.get(predictions).withColumn(
         "campaign", F.lit(campaign)
     )
+    
+headroom_export_cnt = headroom_export.count()
+logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
 
-# if config_al["aggregate_level"] == "basket":
-#     if config["exclude_high_spend"] is not None:
-#         logger.info(
-#             f"Remove customer whos spend_plus_headroom > {config['exclude_high_spend']}"
-#         )
-#         headroom_export = headroom_export.filter(
-#             F.col("spend_plus_headroom") <= config["exclude_high_spend"]
-#         )
+stg_headroom_tbl_name = persist_utils.create_beam_table(
+    table_prefix=config_al.headroom_export_tbl.prefix,
+    lab_database=config.lab_database,
+    factory_database=config.factory_stg_database,
+    sensitivity=config.sensitivity,
+    schema=headroom_export,
+    partition_by=config_al.headroom_export_tbl.partitionByList,
+    overwrite_table=True,
+    assert_equality=False,
+    add_load_timestamp=True,
+)
+logger.info(f"""stg_headroom_tbl_name: {stg_headroom_tbl_name}""")
 
-#     if config["min_num_basket"] is not None:
-#         logger.info(
-#             f"Remove customer who have less than {config['min_num_basket']} basket"
-#         )
-#         headroom_export = headroom_export.join(
-#             predictions.filter(F.col("count_user_basket") >= config["min_num_basket"])
-#             .select("cust_id")
-#             .distinct(),
-#             how="inner",
-#             on="cust_id",
-#         )
+persist_utils.insert_df_into_table(
+    target_tbl_name=stg_headroom_tbl_name,
+    insert_df=headroom_export,
+    delete_where=f"campaign={campaign}",
+    insert_append=True,
+    add_columns=True,
+)
+
+if config_al["aggregate_level"] == "basket":
+    if config["exclude_high_spend"] is not None:
+        logger.info(
+            f"Remove customer whos spend_plus_headroom > {config['exclude_high_spend']}"
+        )
+        headroom_export = headroom_export.filter(
+            F.col("spend_plus_headroom") <= config["exclude_high_spend"]
+        )
+
+if config["min_num_basket"] is not None:
+    logger.info(
+        f"Remove customer who have less than {config['min_num_basket']} basket"
+    )
+    headroom_export = headroom_export.join(
+        predictions.filter(F.col("count_user_basket") >= config["min_num_basket"])
+        .select("cust_id")
+        .distinct(),
+        how="inner",
+        on="cust_id",
+    )
 
 headroom_export_cnt = headroom_export.count()
 logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
