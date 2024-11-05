@@ -8,7 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.10,<3.11"
 scikit-surprise = "^1.1.4"
-dtaml = {version = "2.1.0", extras=["pipelines"],source = "mlops"}
+dtaml = {version = "2.4", extras=["pipelines"],source = "mlops"}
 mlflow-skinny = "^2.15.0"
 omegaconf = "^2.3.0"
 jupyter = "^1.1.1"
