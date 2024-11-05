@@ -9,7 +9,7 @@ readme = "README.md"
 python = "^3.10,<3.11"
 scikit-surprise = "^1.1.4"
 dtaml = {version = "2.1.0", extras=["pipelines"],source = "mlops"}
-mlflow-skinny = "^2.13.2"
+mlflow-skinny = "^2.15.0"
 omegaconf = "^2.3.0"
 jupyter = "^1.1.1"
 
