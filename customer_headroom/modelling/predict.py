@@ -216,7 +216,7 @@ class PredictorFixedStretch():
         return baseline_with_stretch
 
 
-    def calculate_baselines_plus_stretch_combs(self, weekly_df: DataFrame) -> DataFrame:
+    def calculate_baselines_plus_stretch_combs(self, grouped_percentile_df: DataFrame) -> DataFrame:
         """
         Calculate baseline percentiles and stretched combinations based on specified stretch amounts.
 
@@ -226,24 +226,18 @@ class PredictorFixedStretch():
         Returns:
             DataFrame: DataFrame with baseline percentiles and stretched combinations.
         """
-        # Aggregation expressions for calculating percentiles
-        agg_exprs = [
-            F.expr(f"percentile_approx({self.rolling_window_col}, {p / 100})").alias(f"{p}th_percentile")
-            for p in self.baseline_percentiles
-        ]
-
-        # Compute baseline percentiles by grouping
-        baseline_df = weekly_df.groupBy(*self.grouping_columns).agg(*agg_exprs)
 
         # Calculate stretched columns for each baseline percentile and stretch amount
         for percentile in self.baseline_percentiles:
             percentile_col = f"{percentile}th_percentile"
             for stretch in self.stretch_amounts:
+                print(stretch)
                 stretch_factor = 1 + (stretch / 100.0)
                 stretch_col = f"{percentile}_stretch_{stretch}_perc"
-                baseline_df = baseline_df.withColumn(
+                print(stretch_col)
+                grouped_percentile_df = grouped_percentile_df.withColumn(
                     stretch_col, F.col(percentile_col) * stretch_factor
                 )
 
-        return baseline_df
+        return grouped_percentile_df
 

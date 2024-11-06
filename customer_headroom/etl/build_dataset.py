@@ -679,6 +679,7 @@ class TransactionsManagerFixedStretch(TransactionsManager):
         grouping_columns: Union[List[str], str],
         rolling_window: int,
         rolling_window_col: str,
+        baseline_percentiles: Union[List[int], int],
         l1_ids: list = ("GM"),
         lx: str = "l2",
         lx_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
@@ -724,7 +725,9 @@ class TransactionsManagerFixedStretch(TransactionsManager):
         )
         self.rolling_window = rolling_window
         self.rolling_window_col = rolling_window_col
-        # self.baseline_percentiles = baseline_percentiles
+        self.baseline_percentiles = (
+            baseline_percentiles if isinstance(baseline_percentiles, list) else [baseline_percentiles]
+        )
         # self.stretch_amounts = stretch_amounts
 
 
@@ -762,8 +765,11 @@ class TransactionsManagerFixedStretch(TransactionsManager):
 
         cust_lx_trx = self.get_customer_transactions(trx_line, lu_article)
         weekly_df = self.calculate_weekly_rolling_sum(cust_lx_trx)
+
+        # Grouping transactions and calculating percentiles
+        percentile_df = self.calculate_percentiles(weekly_df)
         
-        return weekly_df
+        return percentile_df
     
     def calculate_weekly_rolling_sum(self,
                                      cust_lx_trx: DataFrame,
@@ -801,6 +807,19 @@ class TransactionsManagerFixedStretch(TransactionsManager):
         weekly_df = weekly_df.filter(F.col("week_number") >= self.rolling_window)
 
         return weekly_df
+
+    def calculate_percentiles(self, weekly_df: DataFrame) -> DataFrame:
+         # Aggregation expressions for calculating percentiles
+        agg_exprs = [
+            F.expr(f"percentile_approx({self.rolling_window_col}, {p / 100})").alias(f"{p}th_percentile")
+            for p in self.baseline_percentiles
+        ]
+
+        # Compute baseline percentiles by grouping
+        percentile_df = weekly_df.groupBy(*self.grouping_columns).agg(*agg_exprs)
+
+        return percentile_df
+
     
 class IdMappingManager(object):
     def get(self, sparks_account: DataFrame) -> DataFrame:

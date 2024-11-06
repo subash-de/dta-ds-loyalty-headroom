@@ -1,6 +1,7 @@
 from functools import partial
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
+import re
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
@@ -373,7 +374,8 @@ class Allocator(object):
 
     def allocate_offers_for_all_baselines(self, fixed_stretch_tbl):
         # List of baseline columns (automatically detected)
-        columns_to_allocate = list(set(fixed_stretch_tbl.columns) - set([col for col in fixed_stretch_tbl.columns if col.endswith("th_percentile")] + ['cust_id'] + ['load_timestamp']))
+        fixed_stretch_pattern = r"^\d+_stretch_\d+_perc$"
+        columns_to_allocate = [col for col in fixed_stretch_tbl.columns if re.match(fixed_stretch_pattern, col)]
         
         # Initialize an empty DataFrame to store the combined result
         combined_allocation_df = None

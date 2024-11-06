@@ -117,27 +117,27 @@ logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
 
 
 config_al = config["allocation"]
-headroom_tbl_name = persist_utils.get_table_name(
+selected_allocation_tbl_name = persist_utils.get_table_name(
     factory_database=config.factory_database,
     lab_database=config.lab_database,
-    table_prefix=config_al.headroom_export_tbl.prefix,
+    table_prefix=config_al.full_export_selected_tbl.prefix,
     sensitivity=config.sensitivity,
 )
-logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
+logger.info(f"""selected_allocation_tbl_name: {selected_allocation_tbl_name}""")
 
-headroom_tbl = persist_utils.read_table(
-    table_name=headroom_tbl_name, where=f"campaign={campaign}"
+selected_allocation_tbl = persist_utils.read_table(
+    table_name=selected_allocation_tbl_name, where=f"campaign={campaign}"
 )
-display(headroom_tbl.orderBy(F.rand()))
+display(selected_allocation_tbl.orderBy(F.rand()))
 
 # COMMAND ----------
 
-headroom_tbl.count()
+selected_allocation_tbl.count()
 
 # COMMAND ----------
 
 allocation_grouped = (
-    headroom_tbl.groupBy("desc")
+    selected_allocation_tbl.groupBy("desc")
     .count()
     .withColumn(
         "percentage", F.round(F.col("count") / F.sum("count").over(W.partitionBy()), 3)

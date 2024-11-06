@@ -8,6 +8,7 @@ factory_stg_database: datascienceoffers_analysestg_prod
 lab_database: loyalty_azlab_prod
 sensitivity: p
 
+fixed_stretch: True
 
 debug:
   tables:
@@ -16,34 +17,34 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data
+    prefix: headroom_segmentation_data_2
     partitionByList: [ "campaign" ]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations
+    prefix: headroom_segmentations_2
     partitionByList: &segPartition [ "campaign", "experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data
+    prefix: headroom_etl_data_2
     partitionByList: *segPartition
   fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
-    prefix: fixed_stretch_etl_data
+    prefix: headroom_fixed_stretch_etl_data_2
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroomX_predictions
+    prefix: headroomX_predictions_2
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
-    prefix: fixed_stretch_tbl_np_241104_85pct_2
+    prefix: headroom_fixed_stretch_prediction_2
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroomX_allocation
+    prefix: headroomX_allocation_2
     partitionByList: ["campaign", "offer_id"]
   full_export_tbl: &full_export_tbl
-    prefix: test_cells_allocation
+    prefix: headroom_test_cells_allocation_2
     partitionByList: ["campaign", "offer_id"]
   full_export_selected_tbl: &full_export_selected_tbl
-    prefix: test_cells_selected_allocation
+    prefix: head_room_test_cells_selected_allocation_2
     partitionByList: ["campaign", "offer_id"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
-    prefix: headroom_cust_id_link
+    prefix: headroom_cust_id_link_2
     partitionByList: ["campaign"]
 
 mail_containers: # mount paths for different envs

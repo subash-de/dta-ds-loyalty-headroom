@@ -125,11 +125,11 @@ for seg in seg_list:
             table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
         )
 
-        rec_name = (config_pd.rec_name + "_{ext}").format(ext=ext_str)
+        rec_name = (config_pd.rec_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix="malika_full_basket_06112024")
         logger.info(f"{seg}: Read Recommender name={rec_name}")
         rec_algo = persist_utils.get_latest_version(model_name=rec_name)
 
-        data_processor_name = (config_pd.data_processor_name + "_{ext}").format(ext=ext_str)
+        data_processor_name = (config_pd.data_processor_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix="malika_full_basket_06112024")
         logger.info(f"{seg}: Read Data Processor name={data_processor_name}")
         data_processor = persist_utils.get_latest_version(model_name=data_processor_name)
 
@@ -203,34 +203,30 @@ prediction_tbl = persist_utils.read_table(
 # COMMAND ----------
 
 # Fixed stretch predict
-config_pd = config["predict"]
-fixed_stretch_etl_data_tbl_name = persist_utils.get_table_name(
-    factory_database=config.factory_database,
-    lab_database=config.lab_database,
-    table_prefix=config_pd.fixed_stretch_etl_data_tbl.prefix,
-    sensitivity=config.sensitivity,
-)
+if config['fixed_stretch']:
+    fixed_stretch_etl_data_tbl_name = persist_utils.get_table_name(
+        factory_database=config.factory_database,
+        lab_database=config.lab_database,
+        table_prefix=config_pd.fixed_stretch_etl_data_tbl.prefix,
+        sensitivity=config.sensitivity,
+    )
 
-fixed_stretch_etl_tbl = persist_utils.read_table(
-    table_name=fixed_stretch_etl_data_tbl_name
-)
+    fixed_stretch_etl_tbl = persist_utils.read_table(
+        table_name=fixed_stretch_etl_data_tbl_name
+    )
 
-# COMMAND ----------
+    config_sim = config["baseline_stretch_simulations"]
+    config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
 
-config_sim = config["baseline_stretch_simulations"]
-config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
-fixed_stretch_predicition_manager = PredictorFixedStretch(
-  grouping_columns = config_sim['grouping_columns'],
-  rolling_window_col = config_sim["rolling_window_col"],
-  baseline_percentiles = config_sim['baseline_percentiles'],
-  stretch_amounts = config_sim['stretch_amounts'],                                        
-  )
+    fixed_stretch_predicition_manager = PredictorFixedStretch(
+    grouping_columns = config_sim['grouping_columns'],
+    rolling_window_col = config_sim["rolling_window_col"],
+    baseline_percentiles = config_sim['baseline_percentiles'],
+    stretch_amounts = config_sim['stretch_amounts'],                                        
+    )
+    baseline_per_customer = fixed_stretch_predicition_manager.get(fixed_stretch_etl_tbl)
 
-baseline_per_customer = fixed_stretch_predicition_manager.get(fixed_stretch_etl_tbl)
-
-# COMMAND ----------
-
-fixed_stretch_tbl_name= persist_utils.create_beam_table(
+    fixed_stretch_tbl_name= persist_utils.create_beam_table(
     table_prefix=config_sim.fixed_stretch_tbl.prefix,
     lab_database=config.lab_database,
     factory_database=config.factory_database,
@@ -241,34 +237,28 @@ fixed_stretch_tbl_name= persist_utils.create_beam_table(
     assert_equality=False,
     add_load_timestamp=True,
 )
-logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
+    logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
 
-persist_utils.insert_df_into_table(
-    target_tbl_name=fixed_stretch_tbl_name,
-    insert_df=baseline_per_customer,
-    insert_append=True,
-    add_columns=True,
-)
+    persist_utils.insert_df_into_table(
+        target_tbl_name=fixed_stretch_tbl_name,
+        insert_df=baseline_per_customer,
+        insert_append=True,
+        add_columns=True,
+    )
 
-# COMMAND ----------
+    # fixed_stretch_tbl_name = persist_utils.get_table_name(
+    # factory_database=config.factory_database,
+    #     lab_database=config.lab_database,
+    # table_prefix=config_sim.fixed_stretch_tbl.prefix,
+    # sensitivity=config.sensitivity
+    # )
 
-fixed_stretch_tbl_name = persist_utils.get_table_name(
-   factory_database=config.factory_database,
-    lab_database=config.lab_database,
-  table_prefix=config_sim.fixed_stretch_tbl.prefix,
-  sensitivity=config.sensitivity
-)
-
-logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
+    # logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
 
 
-fixed_stretch_tbl = persist_utils.read_table(
-    table_name=fixed_stretch_tbl_name
-)
-
-# COMMAND ----------
-
-fixed_stretch_tbl.display()
+    # fixed_stretch_tbl = persist_utils.read_table(
+    #     table_name=fixed_stretch_tbl_name
+    # )
 
 # COMMAND ----------
 

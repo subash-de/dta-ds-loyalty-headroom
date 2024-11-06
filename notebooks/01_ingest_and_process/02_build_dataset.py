@@ -260,19 +260,12 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # COMMAND ----------
 
 # Building data for baseline + fixed stretch approach
-config_bd = config["build_dataset"]
-config_sim = config["baseline_stretch_simulations"]
-config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
 
-# COMMAND ----------
+if config['fixed_stretch']:
+  config_sim = config["baseline_stretch_simulations"]
+  config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
 
-config_use = config["use_segments"]
-trx_line = spark.table("analytics_trans_prod.all_transaction_line")
-articles_df = spark.table("analytics_trans_prod.lu_article")
-
-# COMMAND ----------
-
-trx_manager_fixed_stretch = TransactionsManagerFixedStretch(
+  trx_manager_fixed_stretch = TransactionsManagerFixedStretch(
         etl_date=get_date(config.dates.etl_date),
         lookback_days=config.dates.lookback_days,
         grouping_columns=config_sim['grouping_columns'],
@@ -284,15 +277,9 @@ trx_manager_fixed_stretch = TransactionsManagerFixedStretch(
         user_key=config_bd["user_id"],
         exclude_items=literal_eval(config["exclude_items"]),
     )
+  weekly_data = trx_manager_fixed_stretch.get(trx_line_df, articles_df)
 
-trx_line = spark.table("analytics_trans_prod.all_transaction_line")
-weekly_data = trx_manager_fixed_stretch.get(trx_line, articles_df)
-
-
-
-# COMMAND ----------
-
-fixed_stretch_etl_data_tbl_name= persist_utils.create_beam_table(
+  fixed_stretch_etl_data_tbl_name= persist_utils.create_beam_table(
     table_prefix=config_bd.fixed_stretch_etl_data_tbl.prefix,
     lab_database=config.lab_database,
     factory_database=config.factory_database,
@@ -312,20 +299,19 @@ persist_utils.insert_df_into_table(
     add_columns=True,
 )
 
-# COMMAND ----------
+# fixed_stretch_etl_data_tbl_name = persist_utils.get_table_name(
+#    factory_database=config.factory_database,
+#     lab_database=config.lab_database,
+#   table_prefix=config_bd.fixed_stretch_etl_data_tbl.prefix,
+#   sensitivity=config.sensitivity
+# )
 
-fixed_stretch_etl_data_tbl_name = persist_utils.get_table_name(
-   factory_database=config.factory_database,
-    lab_database=config.lab_database,
-  table_prefix=config_bd.fixed_stretch_etl_data_tbl.prefix,
-  sensitivity=config.sensitivity
-)
+# logger.info(f"""fixed_stretch_etl_data_tbl_name: {fixed_stretch_etl_data_tbl_name}""")
 
-logger.info(f"""fixed_stretch_etl_data_tbl_name: {fixed_stretch_etl_data_tbl_name}""")
+# fixed_stretch_etl_data_tbl = persist_utils.read_table(
+#     table_name=fixed_stretch_etl_data_tbl_name
+# )
 
-fixed_stretch_etl_data_tbl = persist_utils.read_table(
-    table_name=fixed_stretch_etl_data_tbl_name
-)
 
 # COMMAND ----------
 
