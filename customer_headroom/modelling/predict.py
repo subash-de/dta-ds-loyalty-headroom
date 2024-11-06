@@ -231,10 +231,8 @@ class PredictorFixedStretch():
         for percentile in self.baseline_percentiles:
             percentile_col = f"{percentile}th_percentile"
             for stretch in self.stretch_amounts:
-                print(stretch)
                 stretch_factor = 1 + (stretch / 100.0)
                 stretch_col = f"{percentile}_stretch_{stretch}_perc"
-                print(stretch_col)
                 grouped_percentile_df = grouped_percentile_df.withColumn(
                     stretch_col, F.col(percentile_col) * stretch_factor
                 )
