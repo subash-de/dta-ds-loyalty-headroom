@@ -53,7 +53,7 @@ stages:
           key2: value2
       
       airflow:
-        enable: true # TODO enable this when we migrate to airflow - Done
+        enable: true # TODO enable this when we migrate to airflow - done 
       
       # docker:
       #   enable: true
