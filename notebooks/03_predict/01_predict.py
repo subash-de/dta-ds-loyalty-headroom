@@ -117,68 +117,64 @@ config_pd = config["predict"]
 
 
 for seg in seg_list:
-    try:
-        seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
-        ext_str = "_".join([str(seg[k]) for k in partitionByList])
+    seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
+    ext_str = "_".join([str(seg[k]) for k in partitionByList])
 
-        data = persist_utils.read_table(
-            table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
-        )
+    data = persist_utils.read_table(
+        table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
+    )
 
-        rec_name = (config_pd.rec_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix==config_pd["model_prefix"])
-        logger.info(f"{seg}: Read Recommender name={rec_name}")
-        rec_algo = persist_utils.get_latest_version(model_name=rec_name)
+    rec_name = (config_pd.rec_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix==config_pd["model_prefix"])
+    logger.info(f"{seg}: Read Recommender name={rec_name}")
+    rec_algo = persist_utils.get_latest_version(model_name=rec_name)
 
-        data_processor_name = (config_pd.data_processor_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix==config_pd["model_prefix"])
-        logger.info(f"{seg}: Read Data Processor name={data_processor_name}")
-        data_processor = persist_utils.get_latest_version(model_name=data_processor_name)
+    data_processor_name = (config_pd.data_processor_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix==config_pd["model_prefix"])
+    logger.info(f"{seg}: Read Data Processor name={data_processor_name}")
+    data_processor = persist_utils.get_latest_version(model_name=data_processor_name)
 
-        # build surprise preprocessed data
-        predictor_manager = Predictor(
-            feature_col=config_pd["feature_col"],
-            pred_key=f'{config_pd["pred_key"]}_id',
-            pred_items=list_pred_items,
-            min_col=data_processor.min_col,
-            max_col=data_processor.max_col,
-        )
+    # build surprise preprocessed data
+    predictor_manager = Predictor(
+        feature_col=config_pd["feature_col"],
+        pred_key=f'{config_pd["pred_key"]}_id',
+        pred_items=list_pred_items,
+        min_col=data_processor.min_col,
+        max_col=data_processor.max_col,
+    )
 
-        predictions = predictor_manager.get(data=data, algo=rec_algo)
-        # add the segment here !!! or else the rows are note deleted when inserting
-        # new rows are added in the predict step for l2 ids not in etl
-        predictions = (
-            predictions.withColumn("campaign", F.lit(campaign))
-            .drop("load_timestamp")
-            .withColumn("experian_hh_composition", F.lit(seg["experian_hh_composition"]))
-            .withColumn("segmentation", F.lit(seg["segmentation"]))
-        )  # ----------------------------------------------
-        prediction_tbl_name = persist_utils.create_beam_table(
-            table_prefix=config_pd.prediction_tbl.prefix,
-            lab_database=config.lab_database,
-            factory_database=config.factory_database,
-            sensitivity=config.sensitivity,
-            schema=predictions,
-            partition_by=config_pd.prediction_tbl.partitionByList,
-            overwrite_table=False,
-            assert_equality=False,
-            add_load_timestamp=True,
-        )
-        logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
+    predictions = predictor_manager.get(data=data, algo=rec_algo)
+    # add the segment here !!! or else the rows are note deleted when inserting
+    # new rows are added in the predict step for l2 ids not in etl
+    predictions = (
+        predictions.withColumn("campaign", F.lit(campaign))
+        .drop("load_timestamp")
+        .withColumn("experian_hh_composition", F.lit(seg["experian_hh_composition"]))
+        .withColumn("segmentation", F.lit(seg["segmentation"]))
+    )  # ----------------------------------------------
+    prediction_tbl_name = persist_utils.create_beam_table(
+        table_prefix=config_pd.prediction_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=predictions,
+        partition_by=config_pd.prediction_tbl.partitionByList,
+        overwrite_table=False,
+        assert_equality=False,
+        add_load_timestamp=True,
+    )
+    logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
-        persist_utils.insert_df_into_table(
-            target_tbl_name=prediction_tbl_name,
-            insert_df=predictions,
-            delete_where=" and ".join(seg_ext),
-        )
+    persist_utils.insert_df_into_table(
+        target_tbl_name=prediction_tbl_name,
+        insert_df=predictions,
+        delete_where=" and ".join(seg_ext),
+    )
 
-        predictions_read = persist_utils.read_table(
-            table_name=prediction_tbl_name, where=" and ".join(seg_ext)
-        )
-        logger.info(
-            f"predictions {seg} | row count: {predictions_read.count()}; column count: {len(predictions_read.columns)}"
-        )
-    except Exception as e:
-        print(f"Error: {e}")
-        continue
+    predictions_read = persist_utils.read_table(
+        table_name=prediction_tbl_name, where=" and ".join(seg_ext)
+    )
+    logger.info(
+        f"predictions {seg} | row count: {predictions_read.count()}; column count: {len(predictions_read.columns)}"
+    )
 
 # COMMAND ----------
 
