@@ -259,6 +259,12 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 
 # COMMAND ----------
 
+config_bd = config["build_dataset"]
+articles_df = spark.table("analytics_trans_prod.lu_article")
+trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
+
+# COMMAND ----------
+
 # Building data for baseline + fixed stretch approach
 
 if config['fixed_stretch']:
@@ -276,6 +282,7 @@ if config['fixed_stretch']:
         lx_ids=config_bd["lx_ids"],  # getting all the products in this l2 id
         user_key=config_bd["user_id"],
         exclude_items=literal_eval(config["exclude_items"]),
+        baseline_percentiles = config_sim["baseline_percentiles"],
     )
   weekly_data = trx_manager_fixed_stretch.get(trx_line_df, articles_df)
 

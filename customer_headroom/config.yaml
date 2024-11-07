@@ -146,6 +146,7 @@ build_dataset:
   aggregation_level: &aggregation_level 'basket' #change to basket or lx id
   headroom_cust_id_link_tbl: *headroom_cust_id_link_tbl
 fit_rec:
+  model_prefix: &model_prefix ""
   # input
   etl_data_tbl: *etl_data_tbl
   user_id: *user_id
@@ -175,6 +176,7 @@ fit_rec:
   param_name: &param_name "data_params"
   rec_name: &rec_name "recommender"
 predict:
+  model_prefix: *model_prefix
   # input
   etl_data_tbl: *etl_data_tbl
   fixed_stretch_etl_data_tbl: *fixed_stretch_etl_data_tbl
