@@ -11,7 +11,7 @@ from dtaml.logging import get_logger
 from dtaml.utils.table import factory_table
 
 import customer_headroom.utils.persist_utils as persist_utils
-from customer_headroom.etl.build_dataset import TransactionsManager
+from customer_headroom.etl.build_dataset import TransactionsManager, TransactionsManagerFixedStretch
 from customer_headroom.etl.etl_utils import (
     find_all_segments,
     get_campaign,
@@ -27,7 +27,7 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
-
+config.dates.etl_date
 
 # COMMAND ----------
 
@@ -254,15 +254,71 @@ if build_dataset == "True":
 
 # COMMAND ----------
 
-
-# import json
-
-# str_seg_list = json.dumps(seg_list, indent=2)
+# seg_list has
+dbutils.notebook.exit(str({"seg_list": seg_list}))
 
 # COMMAND ----------
 
-# seg_list has
-dbutils.notebook.exit(str({"seg_list": seg_list}))
+config_bd = config["build_dataset"]
+articles_df = spark.table("analytics_trans_prod.lu_article")
+trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
+
+# COMMAND ----------
+
+# Building data for baseline + fixed stretch approach
+
+if config['fixed_stretch']:
+  config_sim = config["baseline_stretch_simulations"]
+  config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
+
+  trx_manager_fixed_stretch = TransactionsManagerFixedStretch(
+        etl_date=get_date(config.dates.etl_date),
+        lookback_days=config.dates.lookback_days,
+        grouping_columns=config_sim['grouping_columns'],
+        rolling_window = config_sim['rolling_window'],
+        rolling_window_col = config_sim["rolling_window_col"],
+        l1_ids=config_bd["l1_ids"],
+        lx=config_bd["lx"],
+        lx_ids=config_bd["lx_ids"],  # getting all the products in this l2 id
+        user_key=config_bd["user_id"],
+        exclude_items=literal_eval(config["exclude_items"]),
+        baseline_percentiles = config_sim["baseline_percentiles"],
+    )
+  weekly_data = trx_manager_fixed_stretch.get(trx_line_df, articles_df)
+
+  fixed_stretch_etl_data_tbl_name= persist_utils.create_beam_table(
+    table_prefix=config_bd.fixed_stretch_etl_data_tbl.prefix,
+    lab_database=config.lab_database,
+    factory_database=config.factory_database,
+    sensitivity=config.sensitivity,
+    schema=weekly_data,
+    partition_by=config_bd.fixed_stretch_etl_data_tbl.partitionByList,
+    overwrite_table=True,
+    assert_equality=False,
+    add_load_timestamp=True,
+)
+logger.info(f"""fixed_stretch_etl_data_tbl_name: {fixed_stretch_etl_data_tbl_name}""")
+
+persist_utils.insert_df_into_table(
+    target_tbl_name=fixed_stretch_etl_data_tbl_name,
+    insert_df=weekly_data,
+    insert_append=True,
+    add_columns=True,
+)
+
+# fixed_stretch_etl_data_tbl_name = persist_utils.get_table_name(
+#    factory_database=config.factory_database,
+#     lab_database=config.lab_database,
+#   table_prefix=config_bd.fixed_stretch_etl_data_tbl.prefix,
+#   sensitivity=config.sensitivity
+# )
+
+# logger.info(f"""fixed_stretch_etl_data_tbl_name: {fixed_stretch_etl_data_tbl_name}""")
+
+# fixed_stretch_etl_data_tbl = persist_utils.read_table(
+#     table_name=fixed_stretch_etl_data_tbl_name
+# )
+
 
 # COMMAND ----------
 
