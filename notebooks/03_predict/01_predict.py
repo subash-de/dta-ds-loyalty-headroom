@@ -124,11 +124,11 @@ for seg in seg_list:
         table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
     )
 
-    rec_name = (config_pd.rec_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix==config_pd["model_prefix"])
+    rec_name = (config_pd.rec_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix=config_pd["model_prefix"])
     logger.info(f"{seg}: Read Recommender name={rec_name}")
     rec_algo = persist_utils.get_latest_version(model_name=rec_name)
 
-    data_processor_name = (config_pd.data_processor_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix==config_pd["model_prefix"])
+    data_processor_name = (config_pd.data_processor_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix=config_pd["model_prefix"])
     logger.info(f"{seg}: Read Data Processor name={data_processor_name}")
     data_processor = persist_utils.get_latest_version(model_name=data_processor_name)
 
