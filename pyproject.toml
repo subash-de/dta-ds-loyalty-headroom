@@ -12,6 +12,8 @@ dtaml = {version = "2.4", extras=["pipelines"],source = "mlops"}
 mlflow-skinny = "^2.15.0"
 omegaconf = "^2.3.0"
 jupyter = "^1.1.1"
+jupyterlab = "4.2.5"
+notebook = "7.2.2"
 
 
 [[tool.poetry.source]]
