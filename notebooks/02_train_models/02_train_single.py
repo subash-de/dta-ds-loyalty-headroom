@@ -40,6 +40,27 @@ else:
 
 # COMMAND ----------
 
+from datetime import date, timedelta
+import matplotlib.pyplot as plt
+import numpy as np
+
+from pyspark.sql import functions as F
+from pyspark.sql.functions import stddev
+start_date = date(2024, 10, 30)
+end_date = date(2023, 10, 30)
+days_diff = (end_date - start_date).days + 1
+print(days_diff)
+
+start_date_before_accu = start_date - timedelta(days=days_diff+1)
+end_date_before_accu = start_date - timedelta(days=1)
+
+# start_date_before_accu = start_date_before_accu.strftime('%Y%m%d')
+# end_date_before_accu = end_date_before_accu.strftime('%Y%m%d')
+print(start_date_before_accu)
+print(end_date_before_accu)
+
+# COMMAND ----------
+
 
 def find_all_segments(data, partitionByList):
     segs = (
@@ -130,8 +151,8 @@ def run_fit_rec(seg, config):
     rec_data = data_process_manager.get(seg_data)
     logger.info(f"{seg}: Recommender Data Created")
 
-    data_process_manager_name = (config_fr.data_processor_name + "_{ext}").format(
-        campaign=campaign, ext=ext_str
+    data_process_manager_name = (config_fr.data_processor_name + "_{ext}" + "{model_prefix}").format(
+        campaign=campaign, ext=ext_str, model_prefix=config_fr['model_prefix']
     )
     logger.info(
         f"{seg}: Saving Preprocessor obj={data_process_manager}, name={data_process_manager_name}"
@@ -152,7 +173,7 @@ def run_fit_rec(seg, config):
         param_grid=config_fr["param_grid"],
     )
 
-    rec_name = (config_fr.rec_name + "_{ext}").format(ext=ext_str)
+    rec_name = (config_fr.rec_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix = config_fr['model_prefix'])
     logger.info(f"{seg}: Saving Recommender obj={rec_algo}, name={rec_name}")
 
     persist_utils.register_model(
@@ -162,7 +183,7 @@ def run_fit_rec(seg, config):
         description="Headroom: Registered Recommender Model",
     )
 
-    param_name = (config_fr.param_name + "_{ext}").format(ext=ext_str)
+    param_name = (config_fr.param_name + "_{ext}"+ "{model_prefix}").format(ext=ext_str, model_prefix = config_fr['model_prefix'])
     logger.info(f"{seg}: Saving Parameters obj={rec_algo}, name={param_name}")
     persist_utils.register_model(
         model_name=param_name,

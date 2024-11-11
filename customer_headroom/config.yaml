@@ -8,6 +8,7 @@ factory_stg_database: datascienceoffers_analysestg_prod
 lab_database: loyalty_azlab_prod
 sensitivity: p
 
+fixed_stretch: True
 
 debug:
   tables:
@@ -16,22 +17,34 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data
-    partitionByList: ["campaign"]
+    prefix: headroom_segmentation_data_2
+    partitionByList: [ "campaign" ]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations
-    partitionByList: &segPartition ["campaign", "experian_hh_composition", "segmentation"]
+    prefix: headroom_segmentations_2
+    partitionByList: &segPartition [ "campaign", "experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data
+    prefix: headroom_etl_data_2
+    partitionByList: *segPartition
+  fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
+    prefix: headroom_fixed_stretch_etl_data_2
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroomX_predictions
+    prefix: headroomX_predictions_2
+    partitionByList: *segPartition
+  fixed_stretch_tbl: &fixed_stretch_tbl
+    prefix: headroom_fixed_stretch_prediction_2
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroomX_allocation
+    prefix: headroomX_allocation_2
+    partitionByList: ["campaign", "offer_id"]
+  full_export_tbl: &full_export_tbl
+    prefix: headroom_test_cells_allocation_2
+    partitionByList: ["campaign", "offer_id"]
+  full_export_selected_tbl: &full_export_selected_tbl
+    prefix: head_room_test_cells_selected_allocation_2
     partitionByList: ["campaign", "offer_id"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
-    prefix: headroom_cust_id_link
+    prefix: headroom_cust_id_link_2
     partitionByList: ["campaign"]
 
 mail_containers: # mount paths for different envs
@@ -68,10 +81,13 @@ dates:
   etl_date: 20241006 # "today"  # changed
   # Amount of days to look back
   lookback_days: 363 # 28*13-1
+  # Rolling sum end date
+  rolling_sum_etl_date: "2024-09-09"
   # TODO: what is this used for?
   lookback_days_registration: 363 # 28*13-1
   # Date format
   date_format: '%Y%m%d'
+  date_format_transactions: '%Y-%m-%d' 
 # filters:
 columns:
   user_id: &user_id "cust_id"
@@ -108,7 +124,7 @@ segmentation:
 use_segments:
   all: True
   # seg_list e.g. [{'experian_hh_composition': 'Cat_U', 'segmentation': 1}, ...]
-  seg_list: {}
+  # seg_list: {}
   segmentations_tbl: *segmentations_tbl
   partitionByList: *segPartition
 build_dataset:
@@ -125,10 +141,12 @@ build_dataset:
   christmas_remove_range: ["1218", "0101"]
   # output
   etl_data_tbl: *etl_data_tbl
+  fixed_stretch_etl_data_tbl: *fixed_stretch_etl_data_tbl
   partitionByList: *segPartition
   aggregation_level: &aggregation_level 'basket' #change to basket or lx id
   headroom_cust_id_link_tbl: *headroom_cust_id_link_tbl
 fit_rec:
+  model_prefix: &model_prefix ""
   # input
   etl_data_tbl: *etl_data_tbl
   user_id: *user_id
@@ -158,8 +176,10 @@ fit_rec:
   param_name: &param_name "data_params"
   rec_name: &rec_name "recommender"
 predict:
+  model_prefix: *model_prefix
   # input
   etl_data_tbl: *etl_data_tbl
+  fixed_stretch_etl_data_tbl: *fixed_stretch_etl_data_tbl
   data_processor_name: *data_processor_name
   rec_name: *rec_name
   feature_col: *feature_col
@@ -193,9 +213,20 @@ offline_eval:
   kfold: True
   n_splits: 5
   shuffle: True
+baseline_stretch_simulations:
+  department: 'FD'
+  rolling_window: 4
+  date_col: "date"
+  col_to_sum: "sales_amt"
+  grouping_columns: "cust_id"
+  baseline_percentiles: 85
+  stretch_amounts: [0,10,20,30]
+  # output
+  fixed_stretch_tbl: *fixed_stretch_tbl
 allocation:
   # input
   prediction_tbl: *prediction_tbl
+  fixed_stretch_tbl: *fixed_stretch_tbl
   feature_col: *feature_col
   # TODO: Put this information in a table
   offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
@@ -256,6 +287,8 @@ allocation:
   fill_offer: 14140
   # Output
   headroom_export_tbl: *headroom_export_tbl
+  full_export_tbl: *full_export_tbl
+  full_export_selected_tbl: *full_export_selected_tbl
   tcol_allocate_separately : False # False
   exclude_high_spend: None
   min_num_basket: None
