@@ -34,7 +34,7 @@ stages:
       python:
         enable: true
         dependencies: poetry
-        enable_tests: false
+        enable_tests: true
         tests_flake8: true
         tests_prospector: true
 
