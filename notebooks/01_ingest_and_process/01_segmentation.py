@@ -3,9 +3,7 @@
 
 # COMMAND ----------
 
-# TODO: make segmentation into a job parameter
-segmentation = widgets.get("segmentation", "True")
-
+spark.version
 
 # COMMAND ----------
 

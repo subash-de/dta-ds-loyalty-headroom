@@ -74,6 +74,8 @@ last_registration_date: {last_registration_date}
 
 logger.info("Begin Allocation")
 config_al = config["allocation"]
+
+# Headroom allocation
 under_predict_adjustment_factor = config_al["headroom_factor"]
 
 prediction_tbl_name = persist_utils.get_table_name(
@@ -264,26 +266,81 @@ persist_utils.insert_df_into_table(
 
 # COMMAND ----------
 
+# Fixed stretch allocation
 
-config_al = config["allocation"]
-headroom_tbl_name = persist_utils.get_table_name(
-    factory_database=config.factory_database,
+if config['fixed_stretch']:
+    config_sim = config['baseline_stretch_simulations']
+    fixed_stretch_tbl_name = persist_utils.get_table_name(
+        factory_database=config.factory_database,
+        lab_database=config.lab_database,
+        table_prefix=config_sim.fixed_stretch_tbl.prefix,
+        sensitivity=config.sensitivity,
+
+    )
+
+    logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
+
+    fixed_stretch_tbl = persist_utils.read_table(
+        table_name=fixed_stretch_tbl_name
+    )
+
+    fixed_stretch_allocation_manager = Allocator(
+            feature_col=config_al["feature_col"],
+            offer_limits=config["offer_limits"],
+            offer_desc=config["offers_desc"],
+            user_key=config_al["user_key"],
+            outlier_min=config_al["outlier_min"],
+            outlier_max=config_al["outlier_max"],
+            max_increase=config_al["max_increase"],
+            min_increase=config_al["min_increase"],
+            headroom_factor=config_al["headroom_factor"],
+            fill_offer=config_al["fill_offer"],
+            prev_not_bought_factor=config_al["prev_not_bought_factor"],
+        )
+
+    fixed_stretch_export = fixed_stretch_allocation_manager.get(predictions= fixed_stretch_tbl, headroom = False)
+    fixed_stretch_export = fixed_stretch_export.withColumn("campaign", F.lit(campaign))
+
+    # merging headroom export and fixed stretch export
+    exports_merged = headroom_export.unionByName(fixed_stretch_export).orderBy('cust_id')
+
+    # Removing customers with no headroom output
+    headroom_customers = exports_merged.filter(exports_merged["test_type"] == "headroom").select("cust_id").distinct()
+    all_export = exports_merged.join(headroom_customers, on="cust_id", how="inner")
+
+
+    test_cells_tbl_name = persist_utils.create_beam_table(
+    table_prefix=config_al.full_export_tbl.prefix,
     lab_database=config.lab_database,
-    table_prefix=config_al.headroom_export_tbl.prefix,
+    factory_database=config.factory_database,
     sensitivity=config.sensitivity,
-)
-logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
+    schema=all_export,
+    partition_by=config_al.full_export_tbl.partitionByList,
+    overwrite_table=True,
+    assert_equality=False,
+    add_load_timestamp=True,
+    )
+    logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
-headroom_tbl = persist_utils.read_table(
-    table_name=headroom_tbl_name, where=f"campaign={campaign}"
-)
-display(headroom_tbl.orderBy(F.rand()))
+    persist_utils.insert_df_into_table(
+    target_tbl_name=test_cells_tbl_name,
+    insert_df=all_export,
+    insert_append=True,
+    add_columns=True,
+    )
 
-# COMMAND ----------
+    # test_cells_tbl_name = persist_utils.get_table_name(
+    # factory_database=config.factory_database,
+    # lab_database=config.lab_database,
+    # table_prefix=config_al.full_export_tbl.prefix,
+    # sensitivity=config.sensitivity
+    #     )
 
-headroom_tbl.groupBy("desc").count().withColumn(
-    "percentage", F.round(F.col("count") / F.sum("count").over(W.partitionBy()), 3)
-).display()
+    # logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
+
+    # test_cells_tbl = persist_utils.read_table(
+    #     table_name=test_cells_tbl_name
+    # )
 
 # COMMAND ----------
 
