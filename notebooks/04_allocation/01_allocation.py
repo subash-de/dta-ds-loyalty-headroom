@@ -42,6 +42,7 @@ def get_campaign(campaign, etl_date):
     return campaign
 
 
+
 # COMMAND ----------
 
 debug = False
@@ -68,6 +69,10 @@ campaign: {campaign}
 last_registration_date: {last_registration_date}
 """
 )
+
+# COMMAND ----------
+
+campaign_df = spark.table("campaign_analyse_prod.campaign_eligibility_p_tbl")
 
 # COMMAND ----------
 
@@ -132,6 +137,7 @@ if config_al["tcol_allocate_separately"]:
         offer_desc=config["offers_desc_top"],  # change this for new top offer
         user_key=config_al["user_key"],
         lx_key=config_al["lx_key"],
+        email_eligibility=config["eligible_customers"],
         outlier_min=config_al["outlier_min"],
         outlier_max=config_al["outlier_max"],
         max_increase=config_al["max_increase"],
@@ -140,7 +146,7 @@ if config_al["tcol_allocate_separately"]:
         fill_offer=config_al["fill_offer"],  # change this for top customer
         prev_not_bought_factor=config_al["prev_not_bought_factor"],
     )
-    headroom_export_top = allocation_manager_top.get(prediction_top).withColumn(
+    headroom_export_top = allocation_manager_top.get(prediction_top, campaign_df=campaign_df).withColumn(
         "campaign", F.lit(campaign)
     )
     logger.info("Allocation top customer - finished")
@@ -154,6 +160,7 @@ if config_al["tcol_allocate_separately"]:
         offer_limits=config["offer_limits"],
         offer_desc=config["offers_desc"],
         user_key=config_al["user_key"],
+        email_eligibility=config["eligible_customers"],
         outlier_min=config_al["outlier_min"],
         outlier_max=config_al["outlier_max"],
         max_increase=config_al["max_increase"],
@@ -163,7 +170,8 @@ if config_al["tcol_allocate_separately"]:
         prev_not_bought_factor=config_al["prev_not_bought_factor"],
     )
     headroom_export_not_top = allocation_manager_not_top.get(
-        prediction_not_top
+        prediction_not_top,
+        campaign_df=campaign_df,
     ).withColumn("campaign", F.lit(campaign))
     logger.info("Allocation NOT top customer - finished")
 
@@ -177,6 +185,7 @@ else:
         offer_desc=config["offers_desc"],
         user_key=config_al["user_key"],
         lx_key=config_al["lx_key"],
+        email_eligibility=config["eligible_customers"],
         outlier_min=config_al["outlier_min"],
         outlier_max=config_al["outlier_max"],
         max_increase=config_al["max_increase"],
@@ -190,7 +199,7 @@ else:
         aggregate_level=config_al["aggregate_level"],
     )
 
-    headroom_export = allocation_manager.get(predictions).withColumn(
+    headroom_export = allocation_manager.get(predictions, campaign_df=campaign_df).withColumn(
         "campaign", F.lit(campaign)
     )
     
@@ -224,7 +233,7 @@ if config_al["aggregate_level"] == "basket":
             f"Remove customer whos spend_plus_headroom > {config['exclude_high_spend']}"
         )
         headroom_export = headroom_export.filter(
-            F.col("spend_plus_headroom") <= config["exclude_high_spend"]
+            F.col("spend_plus_stretch") <= config["exclude_high_spend"]
         )
 
 if config["min_num_basket"] is not None:
@@ -263,7 +272,6 @@ persist_utils.insert_df_into_table(
     add_columns=True,
 )
 
-
 # COMMAND ----------
 
 # Fixed stretch allocation
@@ -289,6 +297,7 @@ if config['fixed_stretch']:
             offer_limits=config["offer_limits"],
             offer_desc=config["offers_desc"],
             user_key=config_al["user_key"],
+            email_eligibility=config["eligible_customers"],
             outlier_min=config_al["outlier_min"],
             outlier_max=config_al["outlier_max"],
             max_increase=config_al["max_increase"],
@@ -298,7 +307,7 @@ if config['fixed_stretch']:
             prev_not_bought_factor=config_al["prev_not_bought_factor"],
         )
 
-    fixed_stretch_export = fixed_stretch_allocation_manager.get(predictions= fixed_stretch_tbl, headroom = False)
+    fixed_stretch_export = fixed_stretch_allocation_manager.get(predictions= fixed_stretch_tbl, headroom = False, campaign_df=campaign_df)
     fixed_stretch_export = fixed_stretch_export.withColumn("campaign", F.lit(campaign))
 
     # merging headroom export and fixed stretch export
@@ -308,25 +317,24 @@ if config['fixed_stretch']:
     headroom_customers = exports_merged.filter(exports_merged["test_type"] == "headroom").select("cust_id").distinct()
     all_export = exports_merged.join(headroom_customers, on="cust_id", how="inner")
 
-
     test_cells_tbl_name = persist_utils.create_beam_table(
-    table_prefix=config_al.full_export_tbl.prefix,
-    lab_database=config.lab_database,
-    factory_database=config.factory_database,
-    sensitivity=config.sensitivity,
-    schema=all_export,
-    partition_by=config_al.full_export_tbl.partitionByList,
-    overwrite_table=True,
-    assert_equality=False,
-    add_load_timestamp=True,
+        table_prefix=config_al.full_export_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=all_export,
+        partition_by=config_al.full_export_tbl.partitionByList,
+        overwrite_table=True,
+        assert_equality=False,
+        add_load_timestamp=True,
     )
     logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
     persist_utils.insert_df_into_table(
-    target_tbl_name=test_cells_tbl_name,
-    insert_df=all_export,
-    insert_append=True,
-    add_columns=True,
+        target_tbl_name=test_cells_tbl_name,
+        insert_df=all_export,
+        insert_append=True,
+        add_columns=True,
     )
 
     # test_cells_tbl_name = persist_utils.get_table_name(
@@ -341,6 +349,7 @@ if config['fixed_stretch']:
     # test_cells_tbl = persist_utils.read_table(
     #     table_name=test_cells_tbl_name
     # )
+
 
 # COMMAND ----------
 

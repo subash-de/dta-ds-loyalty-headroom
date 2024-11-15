@@ -82,6 +82,14 @@ build_dataset = widgets.get("build_dataset", "True")
 
 # COMMAND ----------
 
+# load factory tables
+articles_df = spark.table("analytics_trans_prod.lu_article")
+trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
+sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
+segtco_history_df = spark.table("customer_azbase_prod.segtco_history")
+
+# COMMAND ----------
+
 if build_dataset == "True":
     # Step 4: Build Dataset
 
@@ -89,12 +97,6 @@ if build_dataset == "True":
 
     logger.info("Begin building dataset")
     config_bd = config["build_dataset"]
-
-    # load factory tables
-    articles_df = spark.table("analytics_trans_prod.lu_article")
-    trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
-    sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
-    segtco_history_df = spark.table("customer_azbase_prod.segtco_history")
 
     # Load Segmentation Dataset
     # TODO: Replace with customer cluster work to reduce data sizes to appropiate groups.
@@ -260,8 +262,6 @@ dbutils.notebook.exit(str({"seg_list": seg_list}))
 # COMMAND ----------
 
 config_bd = config["build_dataset"]
-articles_df = spark.table("analytics_trans_prod.lu_article")
-trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
 
 # COMMAND ----------
 

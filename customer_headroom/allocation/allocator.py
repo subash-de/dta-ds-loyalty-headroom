@@ -3,13 +3,16 @@ from itertools import chain
 from typing import Dict, List, Optional, Tuple
 import re
 
+from dtaml.logging import get_logger
+
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
+
 # from dtaml._internals.databricks import get_spark
 # spark = get_spark()
-
+logger = get_logger("customer-headroom")
 
 class Allocator(object):
     def __init__(
@@ -18,6 +21,7 @@ class Allocator(object):
         offer_limits: Dict[str, Tuple[float]],
         user_key: str = "cust_id",
         lx_key: str = "l2_id",
+        email_eligibility: bool = False,
         outlier_min: float = -0.5,
         outlier_max: float = 200.0,
         max_increase: float = 80.0,
@@ -37,6 +41,7 @@ class Allocator(object):
         self.offer_limits = offer_limits
         self.user_key = user_key
         self.lx_key = lx_key
+        self.email_eligibility = email_eligibility
         self.outlier_min = outlier_min
         self.outlier_max = outlier_max
         self.max_increase = max_increase
@@ -100,7 +105,7 @@ class Allocator(object):
             return "Missing"
 
     def get(
-        self, predictions: DataFrame, audience: Optional[DataFrame] = None, headroom: bool = True
+        self, predictions: DataFrame, audience: Optional[DataFrame] = None, headroom: bool = True, campaign_df: DataFrame = None
     ) -> DataFrame:
         """
         Allocate customers from Headroom predictions.
@@ -125,6 +130,10 @@ class Allocator(object):
             test_predictions = self.allocate_offers_for_all_baselines(predictions)
 
             export = self.prepare_export(test_predictions)
+        
+        if self.email_eligibility:
+            logger.info("Limiting to only email eligible customers")
+            export = self.filter_eligible_customers(export, self.email_eligibility, campaign_df)
 
         return export
 
@@ -425,5 +434,21 @@ class Allocator(object):
                 "rand",
             )
         )
-       
+
         return data_export
+
+    def filter_eligible_customers(self, df, email_eligibility, campaign_df):
+        if not email_eligibility: 
+            return df
+        opt_in_cust = (
+            campaign_df
+            .filter(
+                (F.col("channel") == "Email") &
+                (F.col("country") == "UK") &
+                (F.col("type") == "Sparks") &
+                (F.col("marketing_status") == "Opt-in Active")
+            )
+            .select("cust_id")
+            .distinct()
+        )
+        return df.join(opt_in_cust, on="cust_id", how="inner")

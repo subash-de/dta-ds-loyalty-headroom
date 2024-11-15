@@ -21,11 +21,11 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
-# seg_list = eval(dbutils.widgets.get("seg_list"))
-# if seg_list == []:
-#     dbutils.notebook.exit(True)
-# else:
-#     logger.info(f"seg_list: {seg_list}")
+seg_list = eval(dbutils.widgets.get("seg_list"))
+if seg_list == []:
+    dbutils.notebook.exit(True)
+else:
+    logger.info(f"seg_list: {seg_list}")
 
 # COMMAND ----------
 
@@ -114,7 +114,6 @@ etl_data_tbl_name
 config_pd = config["predict"]
 
 # COMMAND ----------
-
 
 for seg in seg_list:
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
