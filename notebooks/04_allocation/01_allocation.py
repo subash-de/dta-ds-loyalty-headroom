@@ -41,6 +41,24 @@ def get_campaign(campaign, etl_date):
         campaign = get_date(etl_date)
     return campaign
 
+def filter_eligible_customers(df, config):
+    if not config['eligible_customers']:
+        print("")
+        return df
+    campaign_df = spark.table("campaign_analyse_prod.campaign_eligibility_p_tbl")
+    opt_in_cust = (
+        campaign_df
+        .filter(
+            (F.col("channel") == "Email") &
+            (F.col("country") == "UK") &
+            (F.col("type") == "Sparks") &
+            (F.col("marketing_status") == "Opt-in Active")
+        )
+        .select("cust_id")
+        .distinct()
+    )
+    return df.join(opt_in_cust, on="cust_id", how="inner")
+
 
 
 # COMMAND ----------
@@ -251,6 +269,8 @@ if config["min_num_basket"] is not None:
 headroom_export_cnt = headroom_export.count()
 logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
 
+headroom_export = filter_eligible_customers(headroom_export, config)
+
 headroom_tbl_name = persist_utils.create_beam_table(
     table_prefix=config_al.headroom_export_tbl.prefix,
     lab_database=config.lab_database,
@@ -309,6 +329,7 @@ if config['fixed_stretch']:
 
     fixed_stretch_export = fixed_stretch_allocation_manager.get(predictions= fixed_stretch_tbl, headroom = False, campaign_df=campaign_df)
     fixed_stretch_export = fixed_stretch_export.withColumn("campaign", F.lit(campaign))
+    fixed_stretch_export = filter_eligible_customers(fixed_stretch_export, config)
 
     # merging headroom export and fixed stretch export
     exports_merged = headroom_export.unionByName(fixed_stretch_export).orderBy('cust_id')

@@ -206,6 +206,8 @@ if config['fixed_stretch']:
         sensitivity=config.sensitivity,
     )
 
+    logger.info(f"""fixed_stretch_etl_data_tbl_name: {fixed_stretch_etl_data_tbl_name}""")
+
     fixed_stretch_etl_tbl = persist_utils.read_table(
         table_name=fixed_stretch_etl_data_tbl_name
     )
