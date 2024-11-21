@@ -186,7 +186,9 @@ logger.info(f"""predictions_cnt: {predictions_cnt}""")
 # allocate for spend and save
 if config_al["tcol_allocate_separately"]:
     # TCOL segment
-    segtco_history_df = spark.table("customer_azbase_prod.segtco_history")
+    segtco_history_df = persist_utils.read_table(
+        table_name = config.factory_tbl_segtco_history
+        )
     segtco_history_ = tmo_utils.get_preceding_segtco_history(
         segtco_history_df, campaign
     )
