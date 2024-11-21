@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta
+from functools import reduce
 from typing import Dict, Iterable, List, Optional, Tuple, Union
+from dtaml.logging import get_logger
 
 from pyspark.sql import Column, DataFrame
 from pyspark.sql import Window as W
 from pyspark.sql import functions as F
-from pyspark.sql.functions import to_date, datediff, col, lit 
 from pyspark.sql import types as T
 
+logger = get_logger("customer-headroom")
 # from great_expectations.dataset.sparkdf_dataset import SparkDFDataset
 
 
@@ -107,6 +109,8 @@ class TransactionsManager(BaseManager):
         etl_date: str,
         lookback_days: str,
         l1_ids: list = ("GM"),
+        category_level: bool = False,
+        l2_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
         lx: str = "l2",
         lx_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
         user_key: str = "cust_id",
@@ -129,6 +133,8 @@ class TransactionsManager(BaseManager):
             ).strftime(date_format)
         )
         self.l1_ids = l1_ids
+        self.category_level = category_level
+        self.l2_ids = l2_ids
         self.lx = lx
         self.lx_ids = lx_ids
         self.user_key = user_key
@@ -224,14 +230,37 @@ class TransactionsManager(BaseManager):
             "article_id",
             "basket_id",
             "sales_amt",
+            "unit_full_price",
+            "item_qty",
             "date",
         ).filter(F.col("SALES_AMT") > 0.5)
-        # Find article ids of specific LX items
-        lx_all = lu_article.filter(lu_article["l2_id"].isin(list(self.lx_ids))).select(
+
+
+        # Get all article ids
+        lx_all = lu_article.filter(lu_article["l2_id"].isin(list(self.l2_ids))).select(
             ["article_id"]
             + [f"l{i}_id" for i in range(1, 7)]
             + [f"l{i}_name" for i in range(1, 7)]
         )
+        if self.category_level:
+            # Create synthetic lx ids for the offer target articles
+            for offer in self.lx_ids.keys():
+                ids_in_offer = self.lx_ids[offer]
+                conditions = ([F.col(str(hierarchy_level)).isin(list(hierarchy_id)) 
+                               for hierarchy_level, hierarchy_id in ids_in_offer.items()]
+                )
+                # Combine the conditions using 'or' with reduce if filtering for multiple conditions
+                combined_condition = reduce(lambda x, y: x | y, conditions)
+                logger.info(f"Offer category: {offer}")
+                logger.info(f"Combined condition: {combined_condition}")
+                articles_in_offer = lu_article.filter(combined_condition).select(
+                    ["article_id"]
+                    + [f"l{i}_id" for i in range(1, 7)]
+                    + [f"l{i}_name" for i in range(1, 7)]
+                )
+                articles_in_offer = articles_in_offer.withColumn(f"{self.lx}_id", F.lit(offer))
+                lx_all = lx_all.union(articles_in_offer)
+
         # Find Customer Transactions who have purchased specific LX items
         customer_lx_transactions = customer_transactions.join(lx_all, ["article_id"])
         return customer_lx_transactions
@@ -670,24 +699,15 @@ class TransactionsManager(BaseManager):
             )
 
         return customer_lx_trans_grouped_all
-    
+
 class TransactionsManagerFixedStretch(TransactionsManager):
     def __init__(
         self,
-        etl_date: str,
-        lookback_days: str,
         grouping_columns: Union[List[str], str],
         rolling_window: int,
         rolling_window_col: str,
         baseline_percentiles: Union[List[int], int],
-        l1_ids: list = ("GM"),
-        lx: str = "l2",
-        lx_ids: Iterable = ("01", "02", "03", "04", "05", "07"),
-        user_key: str = "cust_id",
-        date_format: Optional[str] = "%Y%m%d",
-        channels: List[str] = ["POS"],
-        exclude_items: Dict[str, str] = {"l3_id": ["MM14"]},
-        christmas_remove_range: Optional[Tuple[str]] = ("1218", "0101"),
+        **kwargs,
     ):
         """
         Initializes the TransactionsManagerFixedStretch class.
@@ -699,6 +719,8 @@ class TransactionsManagerFixedStretch(TransactionsManager):
             rolling_window (int): The number of weeks to include in the rolling window.
             rolling_window_col (str): Name of the column to store the rolling sum in.
             l1_ids (list, optional): List of L1 identifiers for filtering (e.g. "GM", "FD").
+            category_level (bool): Boolean indicator of whether the predictions will be on category level.
+            l2_ids (list): List of L2 ids that are in scope.
             lx (str, optional): Level identifier (e.g., "l2").
             lx_ids (Iterable, optional): List of lx to include in transactions.
             date_format (Optional[str], optional): Format for parsing dates.
@@ -706,18 +728,7 @@ class TransactionsManagerFixedStretch(TransactionsManager):
             exclude_items (Dict[str, str], optional): Items to exclude from transactions.
             christmas_remove_range (Optional[Tuple[str]], optional): Range to exclude Christmas period.
         """
-        super().__init__(
-            etl_date=etl_date,
-            lookback_days=lookback_days,
-            l1_ids=l1_ids,
-            lx=lx,
-            lx_ids=lx_ids,
-            user_key=user_key,
-            date_format=date_format,
-            channels=channels,
-            exclude_items=exclude_items,
-            christmas_remove_range=christmas_remove_range,
-        )
+        super().__init__(**kwargs)
 
         # Initialize attributes specific to TransactionsManagerFixedStretch
         self.grouping_columns = (
@@ -728,8 +739,6 @@ class TransactionsManagerFixedStretch(TransactionsManager):
         self.baseline_percentiles = (
             baseline_percentiles if isinstance(baseline_percentiles, list) else [baseline_percentiles]
         )
-        # self.stretch_amounts = stretch_amounts
-
 
     def get(
         self,
@@ -770,7 +779,7 @@ class TransactionsManagerFixedStretch(TransactionsManager):
         percentile_df = self.calculate_percentiles(weekly_df)
         
         return percentile_df
-    
+
     def calculate_weekly_rolling_sum(self,
                                      cust_lx_trx: DataFrame,
                                      ) -> DataFrame:
@@ -820,7 +829,207 @@ class TransactionsManagerFixedStretch(TransactionsManager):
 
         return percentile_df
 
-    
+class TransactionsManagerOneUnitStretch(TransactionsManager):
+    def __init__(
+        self,
+        grouping_columns: Union[List[str], str],
+        rolling_window: int,
+        rolling_window_col: str,
+        **kwargs,
+    ):
+        """
+        Initializes the TransactionsManagerFixedStretch class.
+
+        Parameters:
+            etl_date (str): The end date of timeframe in string format.
+            lookback_days (str): Number of days to look back from the etl_date.
+            grouping_columns (Union[List[str], str]): Columns to group the data by.
+            rolling_window (int): The number of weeks to include in the rolling window.
+            rolling_window_col (str): Name of the column to store the rolling sum in.
+            l1_ids (list, optional): List of L1 identifiers for filtering (e.g. "GM", "FD").
+            category_level (bool): Boolean indicator of whether the predictions will be on category level.
+            l2_ids (list): List of L2 ids that are in scope.
+            lx (str, optional): Level identifier (e.g., "l2").
+            lx_ids (Iterable, optional): List of lx to include in transactions.
+            date_format (Optional[str], optional): Format for parsing dates.
+            channels (List[str], optional): Channels to include in transactions.
+            exclude_items (Dict[str, str], optional): Items to exclude from transactions.
+            christmas_remove_range (Optional[Tuple[str]], optional): Range to exclude Christmas period.
+        """
+        super().__init__(**kwargs)
+
+        # Initialize attributes specific to TransactionsManagerFixedStretch
+        self.grouping_columns = (
+            grouping_columns if isinstance(grouping_columns, list) else [grouping_columns]
+        )
+        self.rolling_window = rolling_window
+        self.rolling_window_col = rolling_window_col
+
+    def get(
+        self,
+        trx_line: DataFrame,
+        lu_article: DataFrame,
+        percentile_for_one_additional_unit_price: float = 0.75,
+        percentile_for_customer_one_additional_unit_price: float = 0.85,
+        article_threshold_for_fallback: int = 10,
+        cust_seg: Optional[DataFrame] = None,
+    ) -> DataFrame:
+        """
+        Entry method to run TransactionsManager
+        """
+        trx_line = (
+            self._add_date(trx_line)
+            .filter(F.col("date") <= self.etl_date)
+            .filter(F.col("date") >= self.lookback_date)
+            .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
+            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(self.get_common_filters())
+        )
+
+        if self.christmas_remove_range is not None:
+            trx_line = self.remove_christmas_transactions(
+                trx_line, christmas_range=self.christmas_remove_range
+            )
+
+        # Remove items from transaction list, e.g. BWS items
+        trx_line = self.remove_items(trx_line)
+
+        if cust_seg is not None:
+            # Only keep customers in segmentations
+            trx_line = trx_line.join(
+                cust_seg.select(self.user_key).distinct(), on=self.user_key
+            )
+
+        cust_lx_trx = self.get_customer_transactions(trx_line, lu_article)
+        # Calculate number of articles purchased for rolling 4 weeks time window
+        weekly_number_of_articles = self.calculate_units_weekly_rolling_sum(cust_lx_trx)
+        # Calculate average number of articles purchased for any rolling 4 weeks time window
+        average_number_of_articles = (weekly_number_of_articles
+                                    .filter(weekly_number_of_articles[self.rolling_window_col]>0)
+                                    .groupBy(self.user_key)
+                                    .agg(F.avg(self.rolling_window_col).alias("avg_weekly_article_count"))
+        )
+        # Calculate the one article unit price for each category
+        one_additional_unit_price_per_id = self.calculate_category_article_unit_price(
+            cust_lx_trx, percentile_for_one_additional_unit_price
+        )
+        # Calculate the one article unit price for each category for each customer based on their shopping pattern
+        customer_one_additional_unit_price_per_id = self.calculate_customer_category_article_unit_price(
+            cust_lx_trx, percentile_for_customer_one_additional_unit_price
+        )
+        
+        customer_one_additional_unit_price_stretch = customer_one_additional_unit_price_per_id.join(
+            one_additional_unit_price_per_id, 
+            on=f"{self.lx}_id",
+            how="left",
+        )
+        # Consolidate the one article unit price for each category for each customer
+        customer_one_additional_unit_price_stretch = self.calculate_final_customer_category_article_unit_price(
+            customer_one_additional_unit_price_stretch, article_threshold_for_fallback
+        )
+
+        # Add average rolling sum of articles count to the final dataframe
+        customer_one_additional_unit_price_stretch = customer_one_additional_unit_price_stretch.join(
+            average_number_of_articles,
+            on=self.user_key,
+            how="left",
+        )
+        customer_one_additional_unit_price_stretch = (customer_one_additional_unit_price_stretch
+                                                    .fillna(0, subset=["avg_weekly_article_count"])
+        )
+
+        return customer_one_additional_unit_price_stretch
+
+    def calculate_units_weekly_rolling_sum(self,
+                                           cust_lx_trx: DataFrame,
+                                           ) -> DataFrame:
+        
+        df = self.add_week_number(cust_lx_trx, "date", self.lookback_date)
+        
+        # Grouping data by grouping columns and week number
+        grouping_columns_with_week = self.grouping_columns + ["week_number"]
+        weekly_df = df.groupBy(*grouping_columns_with_week).agg(
+            F.sum("item_qty").alias("number_of_articles")
+        )
+
+        # Filling 0s for missing weeks
+        distinct_columns = {}
+        for col in grouping_columns_with_week:
+            distinct_columns[col] = weekly_df.select(col).distinct()
+        cross_joined = distinct_columns[grouping_columns_with_week[0]]
+        for col in grouping_columns_with_week[1:]:
+            cross_joined = cross_joined.crossJoin(distinct_columns[col])
+        weekly_df = cross_joined.join(weekly_df, on=grouping_columns_with_week, how="left")
+        weekly_df = weekly_df.fillna({"number_of_articles": 0})
+
+        # Finding rolling sum
+        w = (
+            W()
+            .partitionBy(*self.grouping_columns)
+            .orderBy("week_number")
+            .rowsBetween(-(self.rolling_window - 1), W.currentRow)
+        )
+
+        weekly_df = weekly_df.withColumn(
+            self.rolling_window_col,
+            F.sum("number_of_articles").over(w),
+        )
+
+        weekly_df = weekly_df.filter(F.col("week_number") >= self.rolling_window)
+
+        return weekly_df
+
+    def calculate_category_article_unit_price(self,
+                                             cust_lx_trx: DataFrame,
+                                             percentile_for_one_additional_unit_price: float,
+                                             ) -> DataFrame:
+        # Calculate unit price per article
+        unit_price_per_article = cust_lx_trx.groupby([f"{self.lx}_id", "article_id"]).agg(
+            F.max("unit_full_price").alias("unit_price")
+        )
+
+        # Calculate the one additional unit price per lx id
+        one_additional_unit_price_per_id = unit_price_per_article.groupby(f"{self.lx}_id").agg(
+            F.expr(f"percentile_approx(unit_price, {percentile_for_one_additional_unit_price})").alias("one_additional_unit_price")
+        )
+
+        return one_additional_unit_price_per_id
+
+    def calculate_customer_category_article_unit_price(self,
+                                                       cust_lx_trx: DataFrame,
+                                                       percentile_for_customer_one_additional_unit_price: float,
+                                                       ) -> DataFrame:
+        # Calculate one additional unit price and total number of articles for each customer and each lx id
+        customer_one_additional_unit_price_per_id = (cust_lx_trx
+            .groupby(["cust_id", f"{self.lx}_id"])
+            .agg(
+                F.expr(f"percentile_approx(unit_full_price, {percentile_for_customer_one_additional_unit_price})").alias("customer_one_additional_unit_price"),
+                F.sum("item_qty").alias("total_number_of_articles"))
+        )
+
+        return customer_one_additional_unit_price_per_id
+
+    def calculate_final_customer_category_article_unit_price(self,
+                                                             customer_one_additional_unit_stretch: DataFrame,
+                                                             article_threshold_for_fallback: float,
+                                                            ) -> DataFrame:
+
+        # If the number of articles a customer has bought is lower than the threshold, then we use the fixed fallback unit price
+        customer_one_additional_unit_stretch = customer_one_additional_unit_stretch.withColumn(
+            "customer_one_additional_unit_price_final", F.when(
+                (F.col("total_number_of_articles") <= article_threshold_for_fallback) &
+                (F.col("one_additional_unit_price").isNotNull()
+            ), F.col("one_additional_unit_price")).otherwise(F.col("customer_one_additional_unit_price"))
+        )
+
+        # Make the fixed fallback unit price the minimum stretch a customer could get
+        customer_one_additional_unit_stretch = customer_one_additional_unit_stretch.withColumn(
+            "customer_one_additional_unit_price_final",
+            F.greatest("customer_one_additional_unit_price_final", "one_additional_unit_price")
+        )
+
+        return customer_one_additional_unit_stretch
+
 class IdMappingManager(object):
     def get(self, sparks_account: DataFrame) -> DataFrame:
         """

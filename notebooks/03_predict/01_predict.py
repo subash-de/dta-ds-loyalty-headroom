@@ -86,15 +86,22 @@ logger.info("Begin Predictions")
 config_pd = config["predict"]
 partitionByList = config_pd["partitionByList"]
 
-# get list of pred items depending on lx id
+# get list of pred items depending on lx id and whether the prediction is on category level or not
 lu_article = spark.read.table("analytics_trans_prod.lu_article")
+
 pred_items = (
-    lu_article.filter(F.col("l2_id").isin(config_pd["pred_items"]))
+    lu_article.filter(F.col("l2_id").isin(config_pd["l2_ids"]))
     .select(f'{config_pd["pred_key"]}_id')
     .distinct()
     .toPandas()
 )
-list_pred_items = list(pred_items[f'{config_pd["pred_key"]}_id'])
+if config["category_level"]:
+    offer_pred_ids = list(config_pd['pred_items'].keys())
+    # If predicting on the category level, predict items are all existing ids and synthetic ones
+    list_pred_items = list(pred_items[f'{config_pd["pred_key"]}_id']) + offer_pred_ids
+else:
+    # If predicting on the full basket level, predict items are only all existing ids
+    list_pred_items = list(pred_items[f'{config_pd["pred_key"]}_id'])
 
 etl_data_tbl_name = persist_utils.get_table_name(
     factory_database=config.factory_database,
@@ -106,12 +113,7 @@ etl_data_tbl_name = persist_utils.get_table_name(
 
 # COMMAND ----------
 
-etl_data_tbl_name
-
-# COMMAND ----------
-
-
-config_pd = config["predict"]
+list_pred_items
 
 # COMMAND ----------
 
@@ -123,11 +125,17 @@ for seg in seg_list:
         table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
     )
 
-    rec_name = (config_pd.rec_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix=config_pd["model_prefix"])
+    rec_name = (config_pd.rec_name + "_{ext}" + "{model_prefix}").format(
+        ext=ext_str, 
+        model_prefix=config_pd["model_prefix"],
+    )
     logger.info(f"{seg}: Read Recommender name={rec_name}")
     rec_algo = persist_utils.get_latest_version(model_name=rec_name)
 
-    data_processor_name = (config_pd.data_processor_name + "_{ext}" + "{model_prefix}").format(ext=ext_str, model_prefix=config_pd["model_prefix"])
+    data_processor_name = (config_pd.data_processor_name + "_{ext}" + "{model_prefix}").format(
+        ext=ext_str, 
+        model_prefix=config_pd["model_prefix"],
+    )
     logger.info(f"{seg}: Read Data Processor name={data_processor_name}")
     data_processor = persist_utils.get_latest_version(model_name=data_processor_name)
 
@@ -149,6 +157,10 @@ for seg in seg_list:
         .withColumn("experian_hh_composition", F.lit(seg["experian_hh_composition"]))
         .withColumn("segmentation", F.lit(seg["segmentation"]))
     )  # ----------------------------------------------
+    # If the prediction is on category level, we only need to save the relevant categories
+    if config["category_level"]:
+        predictions = predictions.filter(predictions[f'{config_pd["pred_key"]}_id'].isin(offer_pred_ids))
+
     prediction_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_pd.prediction_tbl.prefix,
         lab_database=config.lab_database,
@@ -177,10 +189,6 @@ for seg in seg_list:
 
 # COMMAND ----------
 
-prediction_tbl_name
-
-# COMMAND ----------
-
 
 prediction_tbl_name = persist_utils.get_table_name(
     factory_database=config.factory_database,
@@ -197,8 +205,12 @@ prediction_tbl = persist_utils.read_table(
 
 # COMMAND ----------
 
+prediction_tbl.display()
+
+# COMMAND ----------
+
 # Fixed stretch predict
-if config['fixed_stretch']:
+if config["fixed_stretch"]:
     fixed_stretch_etl_data_tbl_name = persist_utils.get_table_name(
         factory_database=config.factory_database,
         lab_database=config.lab_database,
@@ -212,28 +224,29 @@ if config['fixed_stretch']:
         table_name=fixed_stretch_etl_data_tbl_name
     )
 
+
     config_sim = config["baseline_stretch_simulations"]
     config_sim["rolling_window_col"] = f"rolling_{config_sim['rolling_window']}_week_sales"
 
     fixed_stretch_predicition_manager = PredictorFixedStretch(
-    grouping_columns = config_sim['grouping_columns'],
-    rolling_window_col = config_sim["rolling_window_col"],
-    baseline_percentiles = config_sim['baseline_percentiles'],
-    stretch_amounts = config_sim['stretch_amounts'],                                        
+        grouping_columns = config_sim['grouping_columns'],
+        rolling_window_col = config_sim["rolling_window_col"],
+        baseline_percentiles = config_sim['baseline_percentiles'],
+        stretch_amounts = config_sim['stretch_amounts'],                               
     )
     baseline_per_customer = fixed_stretch_predicition_manager.get(fixed_stretch_etl_tbl)
 
     fixed_stretch_tbl_name= persist_utils.create_beam_table(
-    table_prefix=config_sim.fixed_stretch_tbl.prefix,
-    lab_database=config.lab_database,
-    factory_database=config.factory_database,
-    sensitivity=config.sensitivity,
-    schema=baseline_per_customer,
-    partition_by=config_sim.fixed_stretch_tbl.partitionByList,
-    overwrite_table=True,
-    assert_equality=False,
-    add_load_timestamp=True,
-)
+        table_prefix=config_sim.fixed_stretch_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=baseline_per_customer,
+        partition_by=config_sim.fixed_stretch_tbl.partitionByList,
+        overwrite_table=True,
+        assert_equality=False,
+        add_load_timestamp=True,
+    )
     logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
 
     persist_utils.insert_df_into_table(
@@ -243,24 +256,115 @@ if config['fixed_stretch']:
         add_columns=True,
     )
 
-    # fixed_stretch_tbl_name = persist_utils.get_table_name(
-    # factory_database=config.factory_database,
-    #     lab_database=config.lab_database,
-    # table_prefix=config_sim.fixed_stretch_tbl.prefix,
-    # sensitivity=config.sensitivity
-    # )
+    fixed_stretch_tbl_name = persist_utils.get_table_name(
+        factory_database=config.factory_database,
+        lab_database=config.lab_database,
+        table_prefix=config_sim.fixed_stretch_tbl.prefix,
+        sensitivity=config.sensitivity,
+    )
 
-    # logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
+    logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
 
 
-    # fixed_stretch_tbl = persist_utils.read_table(
-    #     table_name=fixed_stretch_tbl_name
-    # )
+    fixed_stretch_tbl = persist_utils.read_table(
+        table_name=fixed_stretch_tbl_name,
+    )
+
+# COMMAND ----------
+
+# One article unit stretch predict
+if config["one_article_unit_stretch"]:
+    config_pd = config["predict"]
+    one_article_unit_stretch_etl_data_tbl_name = persist_utils.get_table_name(
+        factory_database=config.factory_database,
+        lab_database=config.lab_database,
+        table_prefix=config_pd.one_article_unit_stretch_etl_data_tbl.prefix,
+        sensitivity=config.sensitivity,
+    )
+
+    logger.info(f"""one_article_unit_stretch_etl_data_tbl_name: {one_article_unit_stretch_etl_data_tbl_name}""")
+    one_article_unit_stretch_etl_data_tbl = persist_utils.read_table(
+        table_name=one_article_unit_stretch_etl_data_tbl_name
+    )
+    # Get one additional unit price for each category
+    one_additional_unit_price_per_id = (one_article_unit_stretch_etl_data_tbl
+                                        .groupby(f'{config_pd["pred_key"]}_id')
+                                        .agg(F.max('one_additional_unit_price').alias('one_additional_unit_price'))
+    )
+
+    # Join the table for baseline
+    one_article_unit_stretch_tbl = (fixed_stretch_tbl
+                                    .select(["cust_id", f'{config_pd["pred_key"]}_id', "85th_percentile"])
+                                    .join(
+                                        one_article_unit_stretch_etl_data_tbl.select(
+                                            ["cust_id", f'{config_pd["pred_key"]}_id', "customer_one_additional_unit_price_final", "avg_weekly_article_count"]),
+                                        on=["cust_id", f'{config_pd["pred_key"]}_id'],
+                                        how="left"
+                                    ))
+
+    # Join the table for the fallback article unit price
+    one_article_unit_stretch_tbl = one_article_unit_stretch_tbl.join(one_additional_unit_price_per_id,
+                                                                     on=[f'{config_pd["pred_key"]}_id'], how='left')
+
+
+    # Fill in the fallback article unit price if the customized article unit price is null
+    one_article_unit_stretch_tbl = (one_article_unit_stretch_tbl
+                                    .withColumn("customer_one_additional_unit_price_stretch", 
+                                                F.when(
+                                                F.col("customer_one_additional_unit_price_final").isNull(), 
+                                                F.col("one_additional_unit_price")
+                                                ).otherwise(F.col("customer_one_additional_unit_price_final")))
+    )
+
+    # Double check all customers have the one additional unit price stretch
+    assert one_article_unit_stretch_tbl.filter(one_article_unit_stretch_tbl["customer_one_additional_unit_price_stretch"].isNull()).count() == 0, "Not all customers have the one additional unit price stretch"
+
+    # Add the one article unit price stretch to the baseline
+    one_article_unit_stretch_tbl = (one_article_unit_stretch_tbl
+                                    .withColumn("85_stretch_one_article_unit", 
+                                                F.col("85th_percentile") + 
+                                                F.col("customer_one_additional_unit_price_stretch"))
+    )
+
+    # Drop irrelevant columns
+    one_article_unit_stretch_tbl = one_article_unit_stretch_tbl.drop("one_additional_unit_price", "customer_one_additional_unit_price_final")
+
+    # Fill in the avg_weekly_article_count if null
+    one_article_unit_stretch_tbl = one_article_unit_stretch_tbl.fillna(0, subset=["avg_weekly_article_count"])
+
+    one_article_unit_stretch_tbl_name= persist_utils.create_beam_table(
+        table_prefix=config_sim.one_article_unit_stretch_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=one_article_unit_stretch_tbl,
+        partition_by=config_sim.one_article_unit_stretch_tbl.partitionByList,
+        overwrite_table=True,
+        assert_equality=False,
+        add_load_timestamp=True,
+    )
+    logger.info(f"""one_article_unit_stretch_tbl_name: {one_article_unit_stretch_tbl_name}""")
+
+    persist_utils.insert_df_into_table(
+        target_tbl_name=one_article_unit_stretch_tbl_name,
+        insert_df=one_article_unit_stretch_tbl,
+        insert_append=True,
+        add_columns=True,
+    )
+
+    one_article_unit_stretch_tbl_name = persist_utils.get_table_name(
+        factory_database=config.factory_database,
+        lab_database=config.lab_database,
+        table_prefix=config_sim.one_article_unit_stretch_tbl.prefix,
+        sensitivity=config.sensitivity
+        )
+
+    logger.info(f"""one_article_unit_stretch_tbl_name: {one_article_unit_stretch_tbl_name}""")
+
+    one_article_unit_stretch_tbl = persist_utils.read_table(
+        table_name=one_article_unit_stretch_tbl_name
+    )
 
 # COMMAND ----------
 
 dbutils.notebook.exit(True)
-
-# COMMAND ----------
-
-

@@ -1,6 +1,6 @@
 from functools import partial
 from itertools import chain
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 import re
 
 from dtaml.logging import get_logger
@@ -105,11 +105,19 @@ class Allocator(object):
             return "Missing"
 
     def get(
-        self, predictions: DataFrame, audience: Optional[DataFrame] = None, headroom: bool = True, campaign_df: DataFrame = None
+        self, 
+        predictions: DataFrame, 
+        audience: Optional[DataFrame] = None, 
+        headroom: bool = True,
+        grouping_columns: Union[List[str], str] = "cust_id",
+        campaign_df: Optional[DataFrame] = None,
     ) -> DataFrame:
         """
         Allocate customers from Headroom predictions.
         """
+        grouping_columns = (
+            grouping_columns if isinstance(grouping_columns, list) else [grouping_columns]
+        )
 
         if headroom:
             if audience:
@@ -125,9 +133,9 @@ class Allocator(object):
 
             export = self.prepare_export(headroom_predictions)
 
-            export = export.withColumn("test_type", F.lit('headroom'))
+            export = export.withColumn("test_type", F.lit("headroom"))
         else:
-            test_predictions = self.allocate_offers_for_all_baselines(predictions)
+            test_predictions = self.allocate_offers_for_all_baselines(predictions, grouping_columns)
 
             export = self.prepare_export(test_predictions)
         
@@ -381,28 +389,39 @@ class Allocator(object):
 
         return data_out
 
-    def allocate_offers_for_all_baselines(self, fixed_stretch_tbl):
+    def allocate_offers_for_all_baselines(self, fixed_stretch_tbl, grouping_columns):
         # List of baseline columns (automatically detected)
         fixed_stretch_pattern = r"^\d+_stretch_\d+_perc$"
         columns_to_allocate = [col for col in fixed_stretch_tbl.columns if re.match(fixed_stretch_pattern, col)]
-        
+
         # Initialize an empty DataFrame to store the combined result
         combined_allocation_df = None
-        fixed_stretch_tbl = fixed_stretch_tbl.withColumnRenamed('85th_percentile', 'sum_total_spend')
-        
+        fixed_stretch_tbl = fixed_stretch_tbl.withColumnRenamed("85th_percentile", "sum_total_spend")
+
+        # Check if baseline_plus_stretch col is already present in the dataframe
+        if "baseline_plus_stretch" in fixed_stretch_tbl.columns:
+            columns_to_allocate = ["baseline_plus_stretch"]
+
         # Iterate over each baseline column and allocate offers
         for col in columns_to_allocate:
-            # Select necessary columns including 'cust_id', '85th_percentile', and the current baseline column
-            selected_columns_df = fixed_stretch_tbl.select('cust_id', 'sum_total_spend', col)
-            
+            # Select necessary columns such as "cust_id" and the current baseline column
+            if col == "baseline_plus_stretch":
+                selected_columns_df = fixed_stretch_tbl.select(
+                    grouping_columns + ["sum_total_spend", "test_type", col]
+                )
+            else:
+                selected_columns_df = fixed_stretch_tbl.select(
+                    grouping_columns + ["sum_total_spend", col]
+                )
             # Rename the current baseline column to 'current_baseline' so that allocate_offer can work on it
             renamed_df = selected_columns_df.withColumnRenamed(col, "baseline_plus_stretch")
-            
+
             # Call the allocate_offer function, passing the DataFrame with the renamed column
             allocation_df = self.allocate_offer(renamed_df)
-            
+
             # Add a new column to indicate the baseline column used for the allocation
-            allocation_df = allocation_df.withColumn('test_type', F.lit(col))
+            if col != "baseline_plus_stretch":
+                allocation_df = allocation_df.withColumn("test_type", F.lit(col))
                         
             # Combine the result with the previous results
             if combined_allocation_df is None:
