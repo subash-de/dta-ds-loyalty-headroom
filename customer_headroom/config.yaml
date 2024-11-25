@@ -19,6 +19,7 @@ factory_tbl_customer_master: "analytics_trans_prod.customer_master"
 factory_tbl_all_transaction_line: "analytics_trans_prod.all_transaction_line"
 factory_tbl_sparks_account: "analytics_trans_prod.sparks_account"
 factory_tbl_lu_article: "analytics_trans_prod.lu_article"
+factory_tbl_segtco_history: "customer_azbase_prod.segtco_history"
 
 
 debug:
