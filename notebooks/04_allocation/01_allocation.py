@@ -15,6 +15,7 @@ import pandas as pd
 import customer_headroom.utils.persist_utils as persist_utils
 from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.utils import tmo_utils
+import customer_headroom.allocation.allocator_utils as alloc_utils
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -132,14 +133,9 @@ offer_variants_tbl_name = persist_utils.get_table_name(
 
 logger.info(f"""offer_variants_tbl_name: {offer_variants_tbl_name}""")
 
-
 offer_variants_tbl = persist_utils.read_table(
     table_name=offer_variants_tbl_name
 )
-
-# COMMAND ----------
-
-offer_variants_tbl.display()
 
 # COMMAND ----------
 
@@ -180,6 +176,12 @@ predictions = predictions.withColumn(
 )
 predictions_cnt = predictions.count()
 logger.info(f"""predictions_cnt: {predictions_cnt}""")
+
+# COMMAND ----------
+
+predictions.display()
+
+# COMMAND ----------
 
 # spend and save feature column l2_id_total_spend_basket
 
@@ -312,8 +314,13 @@ else:
             "campaign", F.lit(campaign)
         )
 
+
+# COMMAND ----------
+
 headroom_export_cnt = headroom_export.count()
 logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
+
+# COMMAND ----------
 
 stg_headroom_tbl_name = persist_utils.create_beam_table(
     table_prefix=config_al.headroom_export_tbl.prefix,
@@ -336,6 +343,12 @@ persist_utils.insert_df_into_table(
     add_columns=True,
 )
 
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
 if config_al["aggregate_level"] == "basket":
     if config["exclude_high_spend"] is not None:
         logger.info(
@@ -344,6 +357,12 @@ if config_al["aggregate_level"] == "basket":
         headroom_export = headroom_export.filter(
             F.col("spend_plus_stretch") <= config["exclude_high_spend"]
         )
+elif config_al["aggregate_level"] == "lx id":
+    headroom_export = alloc_utils.category_headroom_upper_lim_excl(
+        offer_variants_tbl,
+        headroom_export,
+        config_al["lx_key"]
+    )
 
 if config["min_num_basket"] is not None:
     logger.info(
@@ -359,6 +378,8 @@ if config["min_num_basket"] is not None:
 
 headroom_export_cnt = headroom_export.count()
 logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
+
+# COMMAND ----------
 
 headroom_tbl_name = persist_utils.create_beam_table(
     table_prefix=config_al.headroom_export_tbl.prefix,
@@ -380,10 +401,6 @@ persist_utils.insert_df_into_table(
     insert_append=True,
     add_columns=True,
 )
-
-# COMMAND ----------
-
-headroom_export.display()
 
 # COMMAND ----------
 
@@ -690,6 +707,10 @@ print(fixed_stretch_export.select('cust_id').join(headroom_export.select('cust_i
 print(fixed_stretch_export.select('cust_id').join(headroom_export.select('cust_id'), on='cust_id', how='inner').select('cust_id').distinct().count())
 print(fixed_stretch_export.select('cust_id').distinct().count())
 
+
+# COMMAND ----------
+
+headroom_export.filter(F.col("spend_plus_stretch") > 220).count()
 
 # COMMAND ----------
 
