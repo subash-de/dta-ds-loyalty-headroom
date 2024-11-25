@@ -441,7 +441,7 @@ if config["fixed_stretch"]:
                 fixed_stretch_export = fixed_stretch_export.unionByName(fixed_stretch_export_temp)
     else:
         # Get full basket offer
-        id_to_limit_map, id_to_desc_map = get_offer_mapping("full_basket")
+        id_to_limit_map, id_to_desc_map = get_offer_mapping(offer_variants_tbl, "full_basket")
 
         fixed_stretch_allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
