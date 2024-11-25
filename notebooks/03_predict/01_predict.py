@@ -87,7 +87,9 @@ config_pd = config["predict"]
 partitionByList = config_pd["partitionByList"]
 
 # get list of pred items depending on lx id and whether the prediction is on category level or not
-lu_article = spark.read.table("analytics_trans_prod.lu_article")
+lu_article = persist_utils.read_table(
+  table_name = config.factory_tbl_lu_article
+)
 
 pred_items = (
     lu_article.filter(F.col("l2_id").isin(config_pd["l2_ids"]))

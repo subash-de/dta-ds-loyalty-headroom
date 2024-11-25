@@ -92,11 +92,18 @@ print(config_bd)
 # COMMAND ----------
 
 # Load factory tables
-articles_df = spark.table("analytics_trans_prod.lu_article")
-trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
-sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
-segtco_history_df = spark.table("customer_azbase_prod.segtco_history")
-
+articles_df = persist_utils.read_table(
+  table_name = config.factory_tbl_lu_article
+)
+trx_line_df = persist_utils.read_table(
+  table_name = config.factory_tbl_all_transaction_line
+)
+sparks_account_df = persist_utils.read_table(
+  table_name = config.factory_tbl_sparks_account
+)
+segtco_history_df = persist_utils.read_table(
+  table_name = config.factory_tbl_segtco_history
+)
 # COMMAND ----------
 
 if build_dataset == "True":
@@ -212,7 +219,9 @@ if build_dataset == "True":
     etl_data_tbl = persist_utils.read_table(
         table_name=etl_data_tbl_name, where=f"campaign={campaign}"
     )
-    sparks = spark.sql("select account_id, uk_digital_id,  cust_id from analytics_trans_prod.sparks_account")
+    sparks = persist_utils.read_table(
+        table_name = config.factory_tbl_sparks_account
+        ).select("account_id", "uk_digital_id",  "cust_id")
     sparks = (sparks.withColumn("row",F.row_number().over(W.partitionBy("cust_id").orderBy("account_id") )).filter(F.col("row") == 1).drop("row"))
 
     cust_id_link = (

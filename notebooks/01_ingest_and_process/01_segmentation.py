@@ -62,11 +62,18 @@ config_sg = config["segmentation"]
 
 # load factory tables
 # Registered customer information
-sparks_account_df = spark.table("analytics_trans_prod.sparks_account")
+sparks_account_df = persist_utils.read_table(
+  table_name = config.factory_tbl_sparks_account
+)
 # All customer attributes (including Experian)
-cust_master_df = spark.sql("select * from analytics_trans_prod.customer_master")
+cust_master_df = persist_utils.read_table(
+  table_name = config.factory_tbl_customer_master
+)
+
 # All transactions per customer at line level (with product details)
-trx_line_df = spark.table("analytics_trans_prod.all_transaction_line")
+trx_line_df = persist_utils.read_table(
+  table_name = config.factory_tbl_all_transaction_line
+)
 
 
 # COMMAND ----------
