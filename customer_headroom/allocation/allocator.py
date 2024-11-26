@@ -20,6 +20,7 @@ class Allocator(object):
         self,
         feature_col: str,
         offer_limits: Dict[str, Tuple[float]],
+        offer_variants: Optional[DataFrame] = None,
         user_key: str = "cust_id",
         lx_key: str = "l2_id",
         email_eligibility: bool = False,
@@ -40,6 +41,7 @@ class Allocator(object):
     ):
         self.feature_col = feature_col
         self.offer_limits = offer_limits
+        self.offer_variants = offer_variants
         self.user_key = user_key
         self.lx_key = lx_key
         self.email_eligibility = email_eligibility
@@ -139,12 +141,20 @@ class Allocator(object):
             export = self.prepare_export(headroom_predictions)
 
             export = export.withColumn("test_type", F.lit("headroom"))
+
         else:
             test_predictions = self.allocate_offers_for_all_baselines(
                 predictions, grouping_columns
             )
 
             export = self.prepare_export(test_predictions)
+
+        if self.aggregate_level != "basket":
+            export = self.category_headroom_upper_lim_excl(
+                offer_variants_df=self.offer_variants,
+                headroom_df=export,
+                lx_key=self.lx_key,
+            )
 
         if self.email_eligibility:
             logger.info("Limiting to only email eligible customers")
