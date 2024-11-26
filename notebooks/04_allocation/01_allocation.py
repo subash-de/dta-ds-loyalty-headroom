@@ -15,7 +15,6 @@ import pandas as pd
 import customer_headroom.utils.persist_utils as persist_utils
 from customer_headroom.allocation.allocator import Allocator
 from customer_headroom.utils import tmo_utils
-import customer_headroom.allocation.allocator_utils as alloc_utils
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -211,9 +210,11 @@ if config_al["tcol_allocate_separately"]:
     allocation_manager_top = Allocator(
         feature_col=config_al["feature_col"],
         offer_limits=config["offer_limits_top"],  # change this for new top offer
+        offer_variants=offer_variants_tbl,
         offer_desc=config["offers_desc_top"],  # change this for new top offer
         user_key=config_al["user_key"],
         lx_key=config_al["lx_key"],
+        aggregate_level=config_al["aggregate_level"],
         email_eligibility=config["eligible_customers"],
         outlier_min=config_al["outlier_min"],
         outlier_max=config_al["outlier_max"],
@@ -235,8 +236,11 @@ if config_al["tcol_allocate_separately"]:
     allocation_manager_not_top = Allocator(
         feature_col=config_al["feature_col"],
         offer_limits=config["offer_limits"],
+        offer_variants=offer_variants_tbl,
         offer_desc=config["offers_desc"],
-        user_key=config_al["user_key"],
+        user_key=config_al["user_key"],                    
+        lx_key=config_al["lx_key"],
+        aggregate_level=config_al["aggregate_level"],
         email_eligibility=config["eligible_customers"],
         outlier_min=config_al["outlier_min"],
         outlier_max=config_al["outlier_max"],
@@ -264,6 +268,7 @@ else:
             allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
                 offer_limits=id_to_limit_map,
+                offer_variants=offer_variants_tbl,
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
                 lx_key=config_al["lx_key"],
@@ -294,6 +299,7 @@ else:
         allocation_manager = Allocator(
             feature_col=config_al["feature_col"],
             offer_limits=id_to_limit_map,
+            offer_variants=offer_variants_tbl,
             offer_desc=id_to_desc_map,
             user_key=config_al["user_key"],
             lx_key=config_al["lx_key"],
@@ -345,10 +351,6 @@ persist_utils.insert_df_into_table(
 
 # COMMAND ----------
 
-
-
-# COMMAND ----------
-
 if config_al["aggregate_level"] == "basket":
     if config["exclude_high_spend"] is not None:
         logger.info(
@@ -357,12 +359,6 @@ if config_al["aggregate_level"] == "basket":
         headroom_export = headroom_export.filter(
             F.col("spend_plus_stretch") <= config["exclude_high_spend"]
         )
-elif config_al["aggregate_level"] == "lx id":
-    headroom_export = alloc_utils.category_headroom_upper_lim_excl(
-        offer_variants_tbl,
-        headroom_export,
-        config_al["lx_key"]
-    )
 
 if config["min_num_basket"] is not None:
     logger.info(
@@ -434,8 +430,10 @@ if config["fixed_stretch"]:
             fixed_stretch_allocation_manager = Allocator(
                     feature_col=config_al["feature_col"],
                     offer_limits=id_to_limit_map,
+                    offer_variants=offer_variants_tbl,
                     offer_desc=id_to_desc_map,
                     user_key=config_al["user_key"],
+                    lx_key=config_al["lx_key"],
                     outlier_min=config_al["outlier_min"],
                     outlier_max=config_al["outlier_max"],
                     max_increase=config_al["max_increase"],
@@ -443,6 +441,7 @@ if config["fixed_stretch"]:
                     headroom_factor=config_al["headroom_factor"],
                     fill_offer=config_al["fill_offer"],
                     prev_not_bought_factor=config_al["prev_not_bought_factor"],
+                    aggregate_level=config_al["aggregate_level"],
                 )
 
             fixed_stretch_export_temp = fixed_stretch_allocation_manager.get(
@@ -463,8 +462,11 @@ if config["fixed_stretch"]:
         fixed_stretch_allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
                 offer_limits=id_to_limit_map,
+                offer_variants=offer_variants_tbl,
                 offer_desc=id_to_desc_map,
-                user_key=config_al["user_key"],
+                user_key=config_al["user_key"],                    
+                lx_key=config_al["lx_key"],
+                aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
                 max_increase=config_al["max_increase"],
@@ -530,8 +532,11 @@ if config["one_article_unit_stretch"]:
         one_article_plus_headroom_stretch_allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
                 offer_limits=id_to_limit_map,
+                offer_variants=offer_variants_tbl,
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
+                lx_key=config_al["lx_key"],
+                aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
                 max_increase=config_al["max_increase"],
@@ -592,8 +597,11 @@ if config["one_article_unit_stretch"] & config["fixed_stretch"]:
       one_article_plus_fixed_stretch_allocation_manager = Allocator(
               feature_col=config_al["feature_col"],
               offer_limits=id_to_limit_map,
+              offer_variants=offer_variants_tbl,
               offer_desc=id_to_desc_map,
               user_key=config_al["user_key"],
+              lx_key=config_al["lx_key"],
+              aggregate_level=config_al["aggregate_level"],   
               outlier_min=config_al["outlier_min"],
               outlier_max=config_al["outlier_max"],
               max_increase=config_al["max_increase"],
@@ -710,7 +718,7 @@ print(fixed_stretch_export.select('cust_id').distinct().count())
 
 # COMMAND ----------
 
-headroom_export.filter(F.col("spend_plus_stretch") > 220).count()
+# test_cells_tbl.filter(F.col("spend_plus_stretch") > 220).select("test_type").groupby("test_type").count().display()
 
 # COMMAND ----------
 
