@@ -630,6 +630,44 @@ all_export = exports_merged.join(headroom_customers, on="cust_id", how="inner")
 
 # COMMAND ----------
 
+# Standardize the allocation output table format
+if config["category_level"] == True:
+  all_export = all_export.withColumnRenamed(f'{config_al["lx_key"]}_id', "scope")
+  all_export = all_export.withColumn("scope", 
+                                     F.concat(F.col("scope"), 
+                                              F.lit("_" + config["segmentation"]["l1_id"].lower())
+                                            ))
+else:
+  all_export = all_export.withColumn("scope", F.lit("full_basket_" + config["segmentation"]["l1_id"].lower()))
+
+all_export = all_export.withColumn("mechanic", F.lit(config["mechanic"]))
+
+# COMMAND ----------
+
+# Add account_id and uk_digital_id to the allocation output table
+cust_id_link_tbl_name = persist_utils.get_table_name(
+  factory_database=config.factory_database,
+  lab_database=config.lab_database,
+  table_prefix=config["build_dataset"].headroom_cust_id_link_tbl.prefix,
+  sensitivity=config.sensitivity
+)
+
+logger.info(f"""cust_id_link_tbl_name: {cust_id_link_tbl_name}""")
+
+cust_id_link_tbl = persist_utils.read_table(
+    table_name=cust_id_link_tbl_name
+)
+
+all_export = all_export.join(
+  cust_id_link_tbl.filter(F.col("account_id").isNotNull()).select(["cust_id", "account_id", "uk_digital_id"]), 
+  on="cust_id", 
+  how="inner"
+)
+
+assert all_export.filter(F.col("account_id").isNull()).count() == 0, "Not all customers have an account ID"
+
+# COMMAND ----------
+
 test_cells_tbl_name = persist_utils.create_beam_table(
     table_prefix=config_al.full_export_tbl.prefix,
     lab_database=config.lab_database,
@@ -644,10 +682,10 @@ test_cells_tbl_name = persist_utils.create_beam_table(
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
 persist_utils.insert_df_into_table(
-target_tbl_name=test_cells_tbl_name,
-insert_df=all_export,
-insert_append=True,
-add_columns=True,
+    target_tbl_name=test_cells_tbl_name,
+    insert_df=all_export,
+    insert_append=True,
+    add_columns=True,
 )
 
 
@@ -677,8 +715,7 @@ test_cells_tbl.groupby("cust_id").count().select('count').distinct().display()
 
 # COMMAND ----------
 
-if config["category_level"]:
-  test_cells_tbl.groupby(["cust_id", f'{config_al["lx_key"]}_id']).count().select('count').distinct().display()
+test_cells_tbl.groupby(["cust_id", "scope"]).count().select('count').distinct().display()
 
 # COMMAND ----------
 
