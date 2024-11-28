@@ -9,8 +9,8 @@ lab_database: loyalty_azlab_prod
 sensitivity: p
 
 fixed_stretch: True
-one_article_unit_stretch: True
-category_level: True
+one_article_unit_stretch: False
+category_level: False
 eligible_customers: False
 
 mechanic: accumulator
@@ -114,13 +114,13 @@ dates:
 # filters:
 columns:
   user_id: &user_id "cust_id"
-  item_id: &item_id "l3_id" #change to different lx id and need to the same as lx entry
+  item_id: &item_id "l2_id" #change to different lx id and need to the same as lx entry
   l1_ids: &l1_ids ["FD"]
   # ["FD"]
   # ["GM"]
-  lx: &lx "l3" #change to different lx id
+  lx: &lx "l2" #change to different lx id
   # lx: &lx "l2"
-  feature_col: &feature_col "l3_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+  feature_col: &feature_col "l2_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
   # "mean_spend_timespan"
   # "average_basket_value" "mean_total_spend_basket"
   #"total_spend" #"number_of_transactions"
@@ -168,9 +168,9 @@ build_dataset:
                           "l6_id": ["F191907", "F19623", "F191528", "F1990", "F198981", "F19312"]},
   }
   # lx_ids: &lx_ids {
-  #     'womenswear': {"l2_id": ["01"]},
-  #     'beauty': {"l2_id": ["07"]},
-  #  }
+  #   'menswear': {"l2_id": ["03"]},
+  #   'lingerie': {"l2_id": ["02"]},
+  # }
   # ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
   # "EX08" - Non Trading
   # ["01", "02", "03", "04", "05", "07"]
@@ -182,8 +182,8 @@ build_dataset:
   fixed_stretch_etl_data_tbl: *fixed_stretch_etl_data_tbl
   one_article_unit_stretch_etl_data_tbl: *one_article_unit_stretch_etl_data_tbl
   partitionByList: *segPartition
-  aggregation_level: &aggregation_level "lx id" #change to basket or lx id
-  # aggregation_level: &aggregation_level "basket"
+  # aggregation_level: &aggregation_level "lx id" #change to basket or lx id
+  aggregation_level: &aggregation_level "basket"
   headroom_cust_id_link_tbl: *headroom_cust_id_link_tbl
 fit_rec:
   # input
@@ -260,12 +260,12 @@ baseline_stretch_simulations:
   rolling_window: 4
   date_col: "date"
   col_to_sum: "sales_amt"
-  grouping_columns: ["cust_id", "l3_id"]
-  # grouping_columns: ["cust_id"]
+  # grouping_columns: ["cust_id", "l3_id"]
+  grouping_columns: ["cust_id"]
   baseline_percentiles: 85
   # stretch_amounts: [20] # gm category
-  stretch_amounts: [30] # food category
-  # stretch_amounts: [20, 30]
+  # stretch_amounts: [30] # food category
+  stretch_amounts: [10, 20] # food full basket
   percentile_for_one_additional_unit_price: 0.75
   percentile_for_customer_one_additional_unit_price: 0.85
   article_threshold_for_fallback: 10
@@ -278,6 +278,10 @@ allocation:
   prediction_tbl: *prediction_tbl
   fixed_stretch_tbl: *fixed_stretch_tbl
   feature_col: *feature_col
+  multiple_reward_level_for_test_cell: 
+    {"85_stretch_10_perc": [7 , 10],
+    "85_stretch_20_perc": [10],
+    "headroom": [10]}
   # TODO: Put this information in a table
   offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
                 '14140': "£5 off when you spend £30 on M&S food in store",
@@ -343,7 +347,7 @@ allocation:
   exclude_high_spend: None
   min_num_basket: None
 test_cell_selection:
-  test_cells: ["one_article_unit_plus_headroom", "one_article_unit_plus_fixed_stretch", "headroom"]
+  test_cells: ["85_stretch_10_perc_7_perc_reward", "85_stretch_10_perc_10_perc_reward", "85_stretch_20_perc_10_perc_reward", "headroom_10_perc_reward"]
   selection_type: "volume" #can be percentage, volume or random
   treatment_ratio: 0.5
   random: None
@@ -353,12 +357,14 @@ test_cell_selection:
                "85_stretch_30_perc": 0.1,
                "headroom": 0.5}
   volume: 
-    treatment: {"one_article_unit_plus_headroom": 50000,
-               "one_article_unit_plus_85_stretch_20_perc": 50000,
-               "headroom": 50000}
-    control: {"one_article_unit_plus_headroom": 50000,
-               "one_article_unit_plus_85_stretch_20_perc": 50000,
-               "headroom": 50000}
+    treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
+               "85_stretch_10_perc_10_perc_reward": 325000,
+               "85_stretch_20_perc_10_perc_reward": 325000,
+               "headroom_10_perc_reward": 325000}
+    control: {"85_stretch_10_perc_7_perc_reward": 81250,
+               "85_stretch_10_perc_10_perc_reward": 81250,
+               "85_stretch_20_perc_10_perc_reward": 81250,
+               "headroom_10_perc_reward": 81250} # food full basket
 
   # volume: 
   #   treatment: {"one_article_unit_plus_headroom": 433333.3333333333,

@@ -1,3 +1,4 @@
+import ast
 from functools import partial
 from itertools import chain
 from typing import Dict, List, Optional, Tuple, Union
@@ -103,6 +104,35 @@ class Allocator(object):
             return offer_desc[str(offer)]
         else:
             return "Missing"
+    
+    @staticmethod
+    def get_offer_mapping(offer_variants_tbl, department, pred_item, reward_perc):
+        # if the reward percentage is unique, then don't need to filter for reward percentage to obtain the offer mapping
+        if reward_perc == "unique":
+            offers = offer_variants_tbl.filter(
+                (offer_variants_tbl["l1_id"] == department) & 
+                (offer_variants_tbl["target"] == pred_item)
+            )
+        else:
+            offers = offer_variants_tbl.filter(
+                (offer_variants_tbl["l1_id"] == department) & 
+                (offer_variants_tbl["target"] == pred_item) &
+                (offer_variants_tbl["reward_perc"] == int(reward_perc))
+            )
+
+        id_to_limit_map = dict(
+            offers.select(
+                ["offer_id", "offer_limits"]
+            ).rdd.map(lambda row: (str(row[0]), ast.literal_eval(row[1]))).collect()
+        )
+        id_to_desc_map = dict(
+            offers.select(
+                ["offer_id", "offer_desc"]
+            ).rdd.map(lambda row: (str(row[0]), row[1])).collect()
+        )
+
+        assert len(id_to_limit_map) > 0, f"No offer variants found for {department} {pred_item} at {reward_perc} reward percentage."
+        return id_to_limit_map, id_to_desc_map
 
     def get(
         self, 

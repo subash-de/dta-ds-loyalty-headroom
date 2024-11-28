@@ -152,7 +152,7 @@ else:
         sensitivity=config.sensitivity,
         schema=full_export_selected,
         partition_by=config_al.full_export_selected_tbl.partitionByList,
-        overwrite_table=overwrite_table_indicator,
+        overwrite_table=True,
         assert_equality=False,
         add_load_timestamp=True,
     )
@@ -198,7 +198,7 @@ test_cells_selected_tbl.groupby("test_group").count().display()
 
 # COMMAND ----------
 
-test_cells_selected_tbl.groupby(f"{config_pd['pred_key']}_id").count().display()
+test_cells_selected_tbl.groupby("scope").count().display()
 
 # COMMAND ----------
 
