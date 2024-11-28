@@ -351,15 +351,6 @@ persist_utils.insert_df_into_table(
 
 # COMMAND ----------
 
-if config_al["aggregate_level"] == "basket":
-    if config["exclude_high_spend"] is not None:
-        logger.info(
-            f"Remove customer whos spend_plus_stretch > {config['exclude_high_spend']}"
-        )
-        headroom_export = headroom_export.filter(
-            F.col("spend_plus_stretch") <= config["exclude_high_spend"]
-        )
-
 if config["min_num_basket"] is not None:
     logger.info(
         f"Remove customer who have less than {config['min_num_basket']} basket"
