@@ -406,21 +406,6 @@ logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
 
 # COMMAND ----------
 
-headroom_tbl_name = persist_utils.create_beam_table(
-    table_prefix=config_al.headroom_export_tbl.prefix,
-    lab_database=config.lab_database,
-    factory_database=config.factory_database,
-    sensitivity=config.sensitivity,
-    schema=headroom_export,
-    partition_by=config_al.headroom_export_tbl.partitionByList,
-    overwrite_table=True,
-    assert_equality=False,
-    add_load_timestamp=True,
-)
-logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
-
-# COMMAND ----------
-
 headroom_export.groupBy('cust_id').count().select('count').distinct().display()
 
 # COMMAND ----------
