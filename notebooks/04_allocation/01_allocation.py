@@ -211,6 +211,7 @@ for reward in reward_percs:
             offer_desc=config["offers_desc_top"],  # change this for new top offer
             user_key=config_al["user_key"],
             lx_key=config_al["lx_key"],
+            offer_variants=offer_variants_tbl,
             aggregate_level=config_al["aggregate_level"],
             email_eligibility=config["eligible_customers"],
             outlier_min=config_al["outlier_min"],
@@ -237,6 +238,7 @@ for reward in reward_percs:
             user_key=config_al["user_key"],
             lx_key=config_al["lx_key"],
             aggregate_level=config_al["aggregate_level"],
+            offer_variants=offer_variants_tbl,
             email_eligibility=config["eligible_customers"],
             outlier_min=config_al["outlier_min"],
             outlier_max=config_al["outlier_max"],
@@ -272,6 +274,8 @@ for reward in reward_percs:
                     offer_desc=id_to_desc_map,
                     user_key=config_al["user_key"],
                     lx_key=config_al["lx_key"],
+                    aggregate_level=config_al["aggregate_level"],
+                    offer_variants=offer_variants_tbl,
                     outlier_min=config_al["outlier_min"],
                     outlier_max=config_al["outlier_max"],
                     max_increase=config_al["max_increase"],
@@ -282,7 +286,6 @@ for reward in reward_percs:
                     prev_not_bought_factor_lx_id_indpendent=config_al[
                         "prev_not_bought_factor_lx_id_indpendent"
                     ],
-                    aggregate_level=config_al["aggregate_level"],
                 )
 
                 headroom_export_temp = allocation_manager.get(predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item), campaign_df=campaign_df).withColumn(
@@ -303,10 +306,11 @@ for reward in reward_percs:
             allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
                 offer_limits=id_to_limit_map,
-                offer_variants=offer_variants_tbl,
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
                 lx_key=config_al["lx_key"],
+                offer_variants=offer_variants_tbl,
+                aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
                 max_increase=config_al["max_increase"],
@@ -317,7 +321,6 @@ for reward in reward_percs:
                 prev_not_bought_factor_lx_id_indpendent=config_al[
                     "prev_not_bought_factor_lx_id_indpendent"
                 ],
-                aggregate_level=config_al["aggregate_level"],
             )
 
             headroom_export = allocation_manager.get(predictions, campaign_df=campaign_df).withColumn(
@@ -483,6 +486,7 @@ if config["fixed_stretch"]:
                             offer_desc=id_to_desc_map,
                             user_key=config_al["user_key"],
                             lx_key=config_al["lx_key"],
+                            offer_variants=offer_variants_tbl,
                             aggregate_level=config_al["aggregate_level"],
                             outlier_min=config_al["outlier_min"],
                             outlier_max=config_al["outlier_max"],
@@ -517,6 +521,7 @@ if config["fixed_stretch"]:
                         offer_limits=id_to_limit_map,
                         offer_desc=id_to_desc_map,
                         user_key=config_al["user_key"],
+                        offer_variants=offer_variants_tbl,
                         lx_key=config_al["lx_key"],
                         aggregate_level=config_al["aggregate_level"],
                         outlier_min=config_al["outlier_min"],
@@ -601,10 +606,10 @@ if config["one_article_unit_stretch"]:
         one_article_plus_headroom_stretch_allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
                 offer_limits=id_to_limit_map,
-                offer_variants=offer_variants_tbl,
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
                 lx_key=config_al["lx_key"],
+                offer_variants=offer_variants_tbl,
                 aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
@@ -670,10 +675,10 @@ if config["one_article_unit_stretch"] & config["fixed_stretch"]:
       one_article_plus_fixed_stretch_allocation_manager = Allocator(
               feature_col=config_al["feature_col"],
               offer_limits=id_to_limit_map,
-              offer_variants=offer_variants_tbl,
               offer_desc=id_to_desc_map,
               user_key=config_al["user_key"],
               lx_key=config_al["lx_key"],
+              offer_variants=offer_variants_tbl,
               aggregate_level=config_al["aggregate_level"],   
               outlier_min=config_al["outlier_min"],
               outlier_max=config_al["outlier_max"],
