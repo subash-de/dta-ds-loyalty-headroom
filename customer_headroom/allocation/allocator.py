@@ -149,12 +149,12 @@ class Allocator(object):
 
             export = self.prepare_export(test_predictions)
 
-        if self.aggregate_level != "basket":
-            export = self.category_headroom_upper_lim_excl(
-                offer_variants_df=self.offer_variants,
-                headroom_df=export,
-                lx_key=self.lx_key,
-            )
+        export = self.category_headroom_upper_lim_excl(
+            offer_variants_df=self.offer_variants,
+            headroom_df=export,
+            lx_key=self.lx_key,
+            aggregate_level=self.aggregate_level,
+        )
 
         if self.email_eligibility:
             logger.info("Limiting to only email eligible customers")
@@ -508,6 +508,7 @@ class Allocator(object):
         offer_variants_df: DataFrame,
         headroom_df: DataFrame,
         lx_key: str,
+        aggregatel_level: str,
     ):
         """Figures out the upper limit for an offer and excludes customers that have a predicted headroom of more than the upper limit for each category
 
@@ -519,6 +520,8 @@ class Allocator(object):
             the allocated offer for each customer category pair
         lx_key: str, required
             the hierarchy level that the headroom is being calculated at
+        aggregate_level: str, required
+            is it a basket level headroom/stretch prediction or is it category level? This will dictate which threshold to identify
 
         Returns
         -------
@@ -547,10 +550,21 @@ class Allocator(object):
             .withColumnRenamed("Target", lx_key)
         )
 
-        headroom_filtered_df = (
-            headroom_df.join(max_upper_limit, on=lx_key, how="inner")
-            .filter(F.col("spend_plus_stretch") < F.col("max_upper_limit"))
-            .drop("max_upper_limit")
-        )
+        if aggregatel_level != "basket":
+            headroom_filtered_df = (
+                headroom_df.join(max_upper_limit, on=lx_key, how="inner")
+                .filter(F.col("spend_plus_stretch") < F.col("max_upper_limit"))
+                .drop("max_upper_limit")
+            )
+        else:
+            upper_limit = (
+                offer_variants_df.filter(F.col("target").contains("basket"))
+                .select(F.max("upper_limit"))
+                .collect()[0][0]
+            )
+
+            headroom_filtered_df = headroom_df.filter(
+                F.col("spend_plus_stretch") <= upper_limit
+            )
 
         return headroom_filtered_df
