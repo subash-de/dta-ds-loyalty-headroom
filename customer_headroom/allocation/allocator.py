@@ -15,11 +15,13 @@ from pyspark.sql import types as T
 # spark = get_spark()
 logger = get_logger("customer-headroom")
 
+
 class Allocator(object):
     def __init__(
         self,
         feature_col: str,
         offer_limits: Dict[str, Tuple[float]],
+        offer_variants: Optional[DataFrame] = None,
         user_key: str = "cust_id",
         lx_key: str = "l2_id",
         email_eligibility: bool = False,
@@ -40,6 +42,7 @@ class Allocator(object):
     ):
         self.feature_col = feature_col
         self.offer_limits = offer_limits
+        self.offer_variants = offer_variants
         self.user_key = user_key
         self.lx_key = lx_key
         self.email_eligibility = email_eligibility
@@ -104,40 +107,42 @@ class Allocator(object):
             return offer_desc[str(offer)]
         else:
             return "Missing"
-    
+
     @staticmethod
     def get_offer_mapping(offer_variants_tbl, department, pred_item, reward_perc):
         # if the reward percentage is unique, then don't need to filter for reward percentage to obtain the offer mapping
         if reward_perc == "unique":
             offers = offer_variants_tbl.filter(
-                (offer_variants_tbl["l1_id"] == department) & 
-                (offer_variants_tbl["target"] == pred_item)
+                (offer_variants_tbl["l1_id"] == department)
+                & (offer_variants_tbl["target"] == pred_item)
             )
         else:
             offers = offer_variants_tbl.filter(
-                (offer_variants_tbl["l1_id"] == department) & 
-                (offer_variants_tbl["target"] == pred_item) &
-                (offer_variants_tbl["reward_perc"] == int(reward_perc))
+                (offer_variants_tbl["l1_id"] == department)
+                & (offer_variants_tbl["target"] == pred_item)
+                & (offer_variants_tbl["reward_perc"] == int(reward_perc))
             )
 
         id_to_limit_map = dict(
-            offers.select(
-                ["offer_id", "offer_limits"]
-            ).rdd.map(lambda row: (str(row[0]), ast.literal_eval(row[1]))).collect()
+            offers.select(["offer_id", "offer_limits"])
+            .rdd.map(lambda row: (str(row[0]), ast.literal_eval(row[1])))
+            .collect()
         )
         id_to_desc_map = dict(
-            offers.select(
-                ["offer_id", "offer_desc"]
-            ).rdd.map(lambda row: (str(row[0]), row[1])).collect()
+            offers.select(["offer_id", "offer_desc"])
+            .rdd.map(lambda row: (str(row[0]), row[1]))
+            .collect()
         )
 
-        assert len(id_to_limit_map) > 0, f"No offer variants found for {department} {pred_item} at {reward_perc} reward percentage."
+        assert (
+            len(id_to_limit_map) > 0
+        ), f"No offer variants found for {department} {pred_item} at {reward_perc} reward percentage."
         return id_to_limit_map, id_to_desc_map
 
     def get(
-        self, 
-        predictions: DataFrame, 
-        audience: Optional[DataFrame] = None, 
+        self,
+        predictions: DataFrame,
+        audience: Optional[DataFrame] = None,
         headroom: bool = True,
         grouping_columns: Union[List[str], str] = "cust_id",
         campaign_df: Optional[DataFrame] = None,
@@ -146,13 +151,17 @@ class Allocator(object):
         Allocate customers from Headroom predictions.
         """
         grouping_columns = (
-            grouping_columns if isinstance(grouping_columns, list) else [grouping_columns]
+            grouping_columns
+            if isinstance(grouping_columns, list)
+            else [grouping_columns]
         )
 
         if headroom:
             if audience:
                 predictions = predictions.join(
-                    audience.select(self.user_key).distinct(), on=self.user_key, how="right"
+                    audience.select(self.user_key).distinct(),
+                    on=self.user_key,
+                    how="right",
                 )
 
             prediction_scores = self.get_prediction_scores(predictions)
@@ -164,14 +173,26 @@ class Allocator(object):
             export = self.prepare_export(headroom_predictions)
 
             export = export.withColumn("test_type", F.lit("headroom"))
+
         else:
-            test_predictions = self.allocate_offers_for_all_baselines(predictions, grouping_columns)
+            test_predictions = self.allocate_offers_for_all_baselines(
+                predictions, grouping_columns
+            )
 
             export = self.prepare_export(test_predictions)
-        
+
+        export = self.category_headroom_upper_lim_excl(
+            offer_variants_df=self.offer_variants,
+            headroom_df=export,
+            lx_key=self.lx_key,
+            aggregate_level=self.aggregate_level,
+        )
+
         if self.email_eligibility:
             logger.info("Limiting to only email eligible customers")
-            export = self.filter_eligible_customers(export, self.email_eligibility, campaign_df)
+            export = self.filter_eligible_customers(
+                export, self.email_eligibility, campaign_df
+            )
 
         return export
 
@@ -357,8 +378,10 @@ class Allocator(object):
                     "used_headroom_frac",
                 )
             )
-        
-        data_hrm = data_hrm.withColumnRenamed("total_used_headroom", "baseline_plus_stretch")
+
+        data_hrm = data_hrm.withColumnRenamed(
+            "total_used_headroom", "baseline_plus_stretch"
+        )
 
         data_out = self.allocate_offer(data_hrm)
 
@@ -375,7 +398,8 @@ class Allocator(object):
             data_hrm = data_hrm.withColumn(
                 "offer_id",
                 F.when(
-                    (F.col("baseline_plus_stretch") >= v[0]) & (F.col("baseline_plus_stretch") < v[1]),
+                    (F.col("baseline_plus_stretch") >= v[0])
+                    & (F.col("baseline_plus_stretch") < v[1]),
                     offer_id,
                 ).otherwise(F.col("offer_id")),
             )
@@ -422,11 +446,17 @@ class Allocator(object):
     def allocate_offers_for_all_baselines(self, fixed_stretch_tbl, grouping_columns):
         # List of baseline columns (automatically detected)
         fixed_stretch_pattern = r"^\d+_stretch_\d+_perc$"
-        columns_to_allocate = [col for col in fixed_stretch_tbl.columns if re.match(fixed_stretch_pattern, col)]
+        columns_to_allocate = [
+            col
+            for col in fixed_stretch_tbl.columns
+            if re.match(fixed_stretch_pattern, col)
+        ]
 
         # Initialize an empty DataFrame to store the combined result
         combined_allocation_df = None
-        fixed_stretch_tbl = fixed_stretch_tbl.withColumnRenamed("85th_percentile", "sum_total_spend")
+        fixed_stretch_tbl = fixed_stretch_tbl.withColumnRenamed(
+            "85th_percentile", "sum_total_spend"
+        )
 
         # Check if baseline_plus_stretch col is already present in the dataframe
         if "baseline_plus_stretch" in fixed_stretch_tbl.columns:
@@ -444,7 +474,9 @@ class Allocator(object):
                     grouping_columns + ["sum_total_spend", col]
                 )
             # Rename the current baseline column to 'current_baseline' so that allocate_offer can work on it
-            renamed_df = selected_columns_df.withColumnRenamed(col, "baseline_plus_stretch")
+            renamed_df = selected_columns_df.withColumnRenamed(
+                col, "baseline_plus_stretch"
+            )
 
             # Call the allocate_offer function, passing the DataFrame with the renamed column
             allocation_df = self.allocate_offer(renamed_df)
@@ -452,13 +484,15 @@ class Allocator(object):
             # Add a new column to indicate the baseline column used for the allocation
             if col != "baseline_plus_stretch":
                 allocation_df = allocation_df.withColumn("test_type", F.lit(col))
-                        
+
             # Combine the result with the previous results
             if combined_allocation_df is None:
                 combined_allocation_df = allocation_df
             else:
-                combined_allocation_df = combined_allocation_df.unionByName(allocation_df)
-        
+                combined_allocation_df = combined_allocation_df.unionByName(
+                    allocation_df
+                )
+
         return combined_allocation_df
 
     def prepare_export(self, data):
@@ -487,17 +521,82 @@ class Allocator(object):
         return data_export
 
     def filter_eligible_customers(self, df, email_eligibility, campaign_df):
-        if not email_eligibility: 
+        if not email_eligibility:
             return df
         opt_in_cust = (
-            campaign_df
-            .filter(
-                (F.col("channel") == "Email") &
-                (F.col("country") == "UK") &
-                (F.col("type") == "Sparks") &
-                (F.col("marketing_status") == "Opt-in Active")
+            campaign_df.filter(
+                (F.col("channel") == "Email")
+                & (F.col("country") == "UK")
+                & (F.col("type") == "Sparks")
+                & (F.col("marketing_status") == "Opt-in Active")
             )
             .select("cust_id")
             .distinct()
         )
         return df.join(opt_in_cust, on="cust_id", how="inner")
+
+    @staticmethod
+    def category_headroom_upper_lim_excl(
+        offer_variants_df: DataFrame,
+        headroom_df: DataFrame,
+        lx_key: str,
+        aggregate_level: str,
+    ):
+        """Figures out the upper limit for an offer and excludes customers that have a predicted headroom of more than the upper limit for each category
+
+        Parameters
+        ----------
+        offer_variants_df : DataFrame, required
+            the 'moot' i.e. the table describing the thresholds of each offer variant
+        headroom_df: DataFrame, required
+            the allocated offer for each customer category pair
+        lx_key: str, required
+            the hierarchy level that the headroom is being calculated at
+        aggregate_level: str, required
+            is it a basket level headroom/stretch prediction or is it category level? This will dictate which threshold to identify
+
+        Returns
+        -------
+        headroom_filtered_df
+            a dataframe with the headroom filtered for each category based on if their predicted headroom exceeds the max threshold
+        """
+
+        if "id" not in lx_key:
+            lx_key = lx_key + "_id"
+
+        offer_variants_df = (
+            offer_variants_df.withColumn(
+                "offer_limits_int",
+                F.split(
+                    F.regexp_replace(F.col("offer_limits"), "[\\[\\]]", ""), ","
+                ).cast("array<int>"),
+            )
+            .withColumn("upper_limit", F.expr("offer_limits_int[1]"))
+            .drop("offer_limits_int")
+        )
+
+        max_upper_limit = (
+            offer_variants_df.select(*["Target", "upper_limit"])
+            .groupby("Target")
+            .agg(F.max("upper_limit").alias("max_upper_limit"))
+            .withColumnRenamed("Target", lx_key)
+        )
+
+        if aggregate_level != "basket":
+            headroom_filtered_df = (
+                headroom_df.join(max_upper_limit, on=lx_key, how="inner")
+                .filter(F.col("spend_plus_stretch") < F.col("max_upper_limit"))
+                .drop("max_upper_limit")
+            )
+        else:
+            upper_limit = (
+                offer_variants_df.filter(F.col("target").contains("basket"))
+                .select(F.max("upper_limit"))
+                .collect()[0][0]
+            )
+
+            headroom_filtered_df = headroom_df.filter(
+                F.col("spend_plus_stretch") <= upper_limit
+            )
+
+        return headroom_filtered_df

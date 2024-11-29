@@ -114,14 +114,9 @@ offer_variants_tbl_name = persist_utils.get_table_name(
 
 logger.info(f"""offer_variants_tbl_name: {offer_variants_tbl_name}""")
 
-
 offer_variants_tbl = persist_utils.read_table(
     table_name=offer_variants_tbl_name
 )
-
-# COMMAND ----------
-
-offer_variants_tbl.display()
 
 # COMMAND ----------
 
@@ -171,6 +166,11 @@ predictions = predictions.withColumn(
 predictions_cnt = predictions.count()
 logger.info(f"""predictions_cnt: {predictions_cnt}""")
 
+# COMMAND ----------
+
+predictions.display()
+
+# COMMAND ----------
 
 if "headroom" in test_cells_with_multiple_reward_levels:
     reward_percs = config_al["multiple_reward_level_for_test_cell"]["headroom"]
@@ -211,6 +211,8 @@ for reward in reward_percs:
             offer_desc=config["offers_desc_top"],  # change this for new top offer
             user_key=config_al["user_key"],
             lx_key=config_al["lx_key"],
+            offer_variants=offer_variants_tbl,
+            aggregate_level=config_al["aggregate_level"],
             email_eligibility=config["eligible_customers"],
             outlier_min=config_al["outlier_min"],
             outlier_max=config_al["outlier_max"],
@@ -234,6 +236,9 @@ for reward in reward_percs:
             offer_limits=config["offer_limits"],
             offer_desc=config["offers_desc"],
             user_key=config_al["user_key"],
+            lx_key=config_al["lx_key"],
+            aggregate_level=config_al["aggregate_level"],
+            offer_variants=offer_variants_tbl,
             email_eligibility=config["eligible_customers"],
             outlier_min=config_al["outlier_min"],
             outlier_max=config_al["outlier_max"],
@@ -269,6 +274,8 @@ for reward in reward_percs:
                     offer_desc=id_to_desc_map,
                     user_key=config_al["user_key"],
                     lx_key=config_al["lx_key"],
+                    aggregate_level=config_al["aggregate_level"],
+                    offer_variants=offer_variants_tbl,
                     outlier_min=config_al["outlier_min"],
                     outlier_max=config_al["outlier_max"],
                     max_increase=config_al["max_increase"],
@@ -279,7 +286,6 @@ for reward in reward_percs:
                     prev_not_bought_factor_lx_id_indpendent=config_al[
                         "prev_not_bought_factor_lx_id_indpendent"
                     ],
-                    aggregate_level=config_al["aggregate_level"],
                 )
 
                 headroom_export_temp = allocation_manager.get(predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item), campaign_df=campaign_df).withColumn(
@@ -303,6 +309,8 @@ for reward in reward_percs:
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
                 lx_key=config_al["lx_key"],
+                offer_variants=offer_variants_tbl,
+                aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
                 max_increase=config_al["max_increase"],
@@ -313,12 +321,12 @@ for reward in reward_percs:
                 prev_not_bought_factor_lx_id_indpendent=config_al[
                     "prev_not_bought_factor_lx_id_indpendent"
                 ],
-                aggregate_level=config_al["aggregate_level"],
             )
 
             headroom_export = allocation_manager.get(predictions, campaign_df=campaign_df).withColumn(
                 "campaign", F.lit(campaign)
             )
+            
     if reward != "unique":
         headroom_export = headroom_export.withColumn("test_type", F.lit(f"headroom_{str(reward)}_perc_reward"))
 
@@ -354,7 +362,8 @@ for reward in reward_percs:
             headroom_export = headroom_export.filter(
                 F.col("spend_plus_stretch") <= config["exclude_high_spend"]
             )
-
+            
+# COMMAND ----------
     if config["min_num_basket"] is not None:
         logger.info(
             f"Remove customer who have less than {config['min_num_basket']} basket"
@@ -392,13 +401,12 @@ for reward in reward_percs:
         add_columns=True,
     )
 
+headroom_export_cnt = headroom_export.count()
+logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
+
 # COMMAND ----------
 
 headroom_export.groupBy('cust_id').count().select('count').distinct().display()
-
-# COMMAND ----------
-
-headroom_export.display()
 
 # COMMAND ----------
 
@@ -423,6 +431,7 @@ if config["fixed_stretch"]:
     fixed_stretch_tbl = persist_utils.read_table(
         table_name=fixed_stretch_tbl_name
     )
+    
     fixed_stretch_pattern = r"^\d+_stretch_\d+_perc$"
     test_cells = [col for col in fixed_stretch_tbl.columns if re.match(fixed_stretch_pattern, col)]
     # For each test cell, we need to check if there are multiple reward levels. If so, we need to run the allocation for each reward level.
@@ -461,6 +470,9 @@ if config["fixed_stretch"]:
                             offer_limits=id_to_limit_map,
                             offer_desc=id_to_desc_map,
                             user_key=config_al["user_key"],
+                            lx_key=config_al["lx_key"],
+                            offer_variants=offer_variants_tbl,
+                            aggregate_level=config_al["aggregate_level"],
                             outlier_min=config_al["outlier_min"],
                             outlier_max=config_al["outlier_max"],
                             max_increase=config_al["max_increase"],
@@ -494,6 +506,9 @@ if config["fixed_stretch"]:
                         offer_limits=id_to_limit_map,
                         offer_desc=id_to_desc_map,
                         user_key=config_al["user_key"],
+                        offer_variants=offer_variants_tbl,
+                        lx_key=config_al["lx_key"],
+                        aggregate_level=config_al["aggregate_level"],
                         outlier_min=config_al["outlier_min"],
                         outlier_max=config_al["outlier_max"],
                         max_increase=config_al["max_increase"],
@@ -578,6 +593,9 @@ if config["one_article_unit_stretch"]:
                 offer_limits=id_to_limit_map,
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
+                lx_key=config_al["lx_key"],
+                offer_variants=offer_variants_tbl,
+                aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
                 max_increase=config_al["max_increase"],
@@ -644,6 +662,9 @@ if config["one_article_unit_stretch"] & config["fixed_stretch"]:
               offer_limits=id_to_limit_map,
               offer_desc=id_to_desc_map,
               user_key=config_al["user_key"],
+              lx_key=config_al["lx_key"],
+              offer_variants=offer_variants_tbl,
+              aggregate_level=config_al["aggregate_level"],   
               outlier_min=config_al["outlier_min"],
               outlier_max=config_al["outlier_max"],
               max_increase=config_al["max_increase"],
@@ -794,6 +815,10 @@ print(fixed_stretch_export_final.select('cust_id').join(headroom_export.select('
 print(fixed_stretch_export_final.select('cust_id').join(headroom_export.select('cust_id'), on='cust_id', how='inner').select('cust_id').distinct().count())
 print(fixed_stretch_export_final.select('cust_id').distinct().count())
 
+
+# COMMAND ----------
+
+# test_cells_tbl.filter(F.col("spend_plus_stretch") > 220).select("test_type").groupby("test_type").count().display()
 
 # COMMAND ----------
 
