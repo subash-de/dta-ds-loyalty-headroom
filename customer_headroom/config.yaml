@@ -31,44 +31,44 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data
+    prefix: headroom_segmentation_data_val_category_test_gm
     partitionByList: [ "campaign" ]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations
+    prefix: headroom_segmentations_val_category_test_gm
     partitionByList: &segPartition [ "campaign", "experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data
+    prefix: headroom_etl_data_val_category_test_gm
     partitionByList: *segPartition
   fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
-    prefix: headroom_fixed_stretch_etl_data
+    prefix: headroom_fixed_stretch_etl_data_val_category_test_gm
     partitionByList: *segPartition
   one_article_unit_stretch_etl_data_tbl: &one_article_unit_stretch_etl_data_tbl
-    prefix: headroom_one_article_unit_stretch_etl_data
+    prefix: headroom_one_article_unit_stretch_etl_data_val_category_test_gm
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroom_predictions
+    prefix: headroom_predictions_val_category_test_gm
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
-    prefix: headroom_fixed_stretch
+    prefix: headroom_fixed_stretch_tbl_np_val_category_test_gm
     partitionByList: *segPartition
   one_article_unit_stretch_tbl: &one_article_unit_stretch_tbl
-    prefix: headroom_one_article_unit_stretch
+    prefix: headroom_one_article_unit_stretch_tbl_np_val_category_test_gm
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation
+    prefix: headroom_allocation_val_category_test_gm
     partitionByList: ["campaign", "offer_id"]
   full_export_tbl: &full_export_tbl
-    prefix: headroom_test_cells_allocation
-    partitionByList: ["campaign", "scope", "mechanic"]
+    prefix: headroom_test_cells_allocation_val_category_test_gm
+    partitionByList: ["campaign", "offer_id"]
   full_export_selected_tbl: &full_export_selected_tbl
-    prefix: headroom_test_cells_selected_allocation
-    partitionByList: ["campaign", "scope", "mechanic"]
+    prefix: headroom_test_cells_selected_allocation_val_category_test_gm
+    partitionByList: ["campaign", "offer_id"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
-    prefix: headroom_cust_id_link
+    prefix: headroom_cust_id_link_val_category_test_gm
     partitionByList: ["campaign"]
   offer_variants_tbl: &offer_variants_tbl
     prefix: headroom_accumulator_offer_variants
-    partitionByList: ["target"]
+    partitionByList: ["Target"]
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
