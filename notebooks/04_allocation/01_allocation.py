@@ -763,7 +763,7 @@ test_cells_tbl_name = persist_utils.create_beam_table(
     sensitivity=config.sensitivity,
     schema=all_export,
     partition_by=config_al.full_export_tbl.partitionByList,
-    overwrite_table=True,
+    overwrite_table=False,
     assert_equality=False,
     add_load_timestamp=True,
 )
@@ -775,8 +775,6 @@ persist_utils.insert_df_into_table(
     insert_append=True,
     add_columns=True,
 )
-
-
 
 # COMMAND ----------
 

@@ -9,7 +9,7 @@ lab_database: loyalty_azlab_prod
 sensitivity: p
 
 fixed_stretch: True
-one_article_unit_stretch: False
+one_article_unit_stretch: True
 category_level: False
 eligible_customers: False
 
@@ -31,31 +31,31 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data
+    prefix: headroom_segmentation_data_fd_full_basket
     partitionByList: [ "campaign" ]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations
+    prefix: headroom_segmentations_fd_full_basket
     partitionByList: &segPartition [ "campaign", "experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data
+    prefix: headroom_etl_data_fd_full_basket
     partitionByList: *segPartition
   fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
-    prefix: headroom_fixed_stretch_etl_data
+    prefix: headroom_fixed_stretch_etl_data_fd_full_basket
     partitionByList: *segPartition
   one_article_unit_stretch_etl_data_tbl: &one_article_unit_stretch_etl_data_tbl
-    prefix: headroom_one_article_unit_stretch_etl_data
+    prefix: headroom_one_article_unit_stretch_etl_data_fd_full_basket
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroom_predictions
+    prefix: headroom_predictions_fd_full_basket
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
-    prefix: headroom_fixed_stretch
+    prefix: headroom_fixed_stretch_fd_full_basket
     partitionByList: *segPartition
   one_article_unit_stretch_tbl: &one_article_unit_stretch_tbl
-    prefix: headroom_one_article_unit_stretch
+    prefix: headroom_one_article_unit_stretch_fd_full_basket
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation
+    prefix: headroom_allocation_fd_full_basket
     partitionByList: ["campaign", "offer_id"]
   full_export_tbl: &full_export_tbl
     prefix: headroom_test_cells_allocation
@@ -110,12 +110,12 @@ dates:
   lookback_days_registration: 363 # 28*13-1
   # Date format
   date_format: '%Y%m%d'
-  date_format_transactions: '%Y-%m-%d' 
+  date_format_transactions: '%Y-%m-%d'
 # filters:
 columns:
   user_id: &user_id "cust_id"
   item_id: &item_id "l2_id" #change to different lx id and need to the same as lx entry
-  l1_ids: &l1_ids ["FD"]
+  l1_ids: &l1_ids "FD"
   # ["FD"]
   # ["GM"]
   lx: &lx "l2" #change to different lx id
@@ -132,7 +132,7 @@ columns:
 segmentation:
   # input
   # TODO: put this in base of yaml
-  l1_id: "FD"
+  l1_id: *l1_ids
   user_id: *user_id
   num_cols: *seg_num_cols
   cat_cols: *seg_cat_cols
@@ -167,13 +167,6 @@ build_dataset:
     'ambient_food': {"l5_id": ["F19762"],
                           "l6_id": ["F191907", "F19623", "F191528", "F1990", "F198981", "F19312"]},
   }
-  # lx_ids: &lx_ids {
-  #   'menswear': {"l2_id": ["03"]},
-  #   'lingerie': {"l2_id": ["02"]},
-  # }
-  # ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
-  # "EX08" - Non Trading
-  # ["01", "02", "03", "04", "05", "07"]
   window_days: 30
   time_window_days : 28 # spend and save 7, accumulator 4 weeks, so 28 days
   christmas_remove_range: ["1218", "0101"]
@@ -214,7 +207,7 @@ fit_rec:
   data_processor_name: &data_processor_name "data_processor"
   param_name: &param_name "data_params"
   rec_name: &rec_name "recommender"
-  model_prefix: &model_prefix ""
+  model_prefix: &model_prefix "_full_basket"
 predict:
   model_prefix: *model_prefix
   # input
@@ -227,12 +220,6 @@ predict:
   l2_ids: *l2_ids
   pred_key: *lx
   pred_items: *lx_ids
-  # pred_items: ["average_time_window_max_spend_basket",
-  #             "50percentile_time_window_max_spend_basket",
-  #             "75percentile_time_window_max_spend_basket",
-  #             "85percentile_time_window_max_spend_basket",
-  #             "90percentile_time_window_max_spend_basket",
-  #             "100percentile_time_window_max_spend_basket",] #*lx_ids
   cat_cols: *seg_cat_cols
   partitionByList: *segPartition
   # output
@@ -256,15 +243,11 @@ offline_eval:
   n_splits: 5
   shuffle: True
 baseline_stretch_simulations:
-  department: 'FD'
   rolling_window: 4
   date_col: "date"
   col_to_sum: "sales_amt"
-  # grouping_columns: ["cust_id", "l3_id"]
   grouping_columns: ["cust_id"]
   baseline_percentiles: 85
-  # stretch_amounts: [20] # gm category
-  # stretch_amounts: [30] # food category
   stretch_amounts: [10, 20] # food full basket
   percentile_for_one_additional_unit_price: 0.75
   percentile_for_customer_one_additional_unit_price: 0.85
@@ -278,7 +261,7 @@ allocation:
   prediction_tbl: *prediction_tbl
   fixed_stretch_tbl: *fixed_stretch_tbl
   feature_col: *feature_col
-  multiple_reward_level_for_test_cell: 
+  multiple_reward_level_for_test_cell:
     {"85_stretch_10_perc": [7 , 10],
     "85_stretch_20_perc": [10],
     "headroom": [10]}
@@ -351,28 +334,37 @@ test_cell_selection:
   selection_type: "volume" #can be percentage, volume or random
   treatment_ratio: 0.5
   random: None
-  percentage: {"85_stretch_0_perc": 0.1,
-               "85_stretch_10_perc": 0.1,
-               "85_stretch_20_perc": 0.1,
-               "85_stretch_30_perc": 0.1,
-               "headroom": 0.5}
-  volume: 
-    treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
-               "85_stretch_10_perc_10_perc_reward": 325000,
-               "85_stretch_20_perc_10_perc_reward": 325000,
-               "headroom_10_perc_reward": 325000}
-    control: {"85_stretch_10_perc_7_perc_reward": 81250,
-               "85_stretch_10_perc_10_perc_reward": 81250,
-               "85_stretch_20_perc_10_perc_reward": 81250,
-               "headroom_10_perc_reward": 81250} # food full basket
+  percentage: None
+  volume:
+      basket:
+        fd:
+          treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
+                     "85_stretch_10_perc_10_perc_reward": 325000,
+                     "85_stretch_20_perc_10_perc_reward": 325000,
+                     "headroom_10_perc_reward": 325000}
+          control: {"85_stretch_10_perc_7_perc_reward": 81250,
+                     "85_stretch_10_perc_10_perc_reward": 81250,
+                     "85_stretch_20_perc_10_perc_reward": 81250,
+                     "headroom_10_perc_reward": 81250}
+      lx_id:
+        fd:
+          treatment: { "one_article_unit_plus_headroom": 50000,
+                       "one_article_unit_plus_85_stretch_30_perc": 50000,
+                       "headroom": 50000 }
+          control: { "one_article_unit_plus_headroom": 50000,
+                     "one_article_unit_plus_85_stretch_30_perc": 50000,
+                     "headroom": 50000 }
+        gm:
+          treatment: { "one_article_unit_plus_headroom": 50000,
+                       "one_article_unit_plus_85_stretch_20_perc": 50000,
+                       "headroom": 50000 }
+          control: { "one_article_unit_plus_headroom": 50000,
+                     "one_article_unit_plus_85_stretch_20_perc": 50000,
+                     "headroom": 50000 }
 
-  # volume: 
-  #   treatment: {"one_article_unit_plus_headroom": 433333.3333333333,
-  #              "one_article_unit_plus_85_stretch_30_perc": 433333.3333333333,
-  #              "headroom": 433333.3333333333}
-  #   control: {"one_article_unit_plus_headroom": 108333.33333333333,
-  #              "one_article_unit_plus_85_stretch_30_perc": 108333.33333333333,
-  #              "headroom": 108333.33333333333}
+
+        # food full basket
+
 sections:
   ss:
     # TODO: Put this information in a table

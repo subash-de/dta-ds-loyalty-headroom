@@ -160,7 +160,7 @@ class TransactionsManager(BaseManager):
             .filter(F.col("date") <= self.etl_date)
             .filter(F.col("date") >= self.lookback_date)
             .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
-            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(F.col("l1_id").isin([self.l1_ids]))
             .filter(self.get_common_filters())
         )
 
@@ -237,7 +237,7 @@ class TransactionsManager(BaseManager):
 
 
         # Get all article ids
-        lx_all = lu_article.filter(lu_article["l2_id"].isin(list(self.l2_ids))).select(
+        lx_all = lu_article.filter(lu_article["l2_id"].isin([self.l2_ids])).select(
             ["article_id"]
             + [f"l{i}_id" for i in range(1, 7)]
             + [f"l{i}_name" for i in range(1, 7)]
@@ -754,7 +754,7 @@ class TransactionsManagerFixedStretch(TransactionsManager):
             .filter(F.col("date") <= self.etl_date)
             .filter(F.col("date") >= self.lookback_date)
             .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
-            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(F.col("l1_id").isin([self.l1_ids]))
             .filter(self.get_common_filters())
         )
 
@@ -882,7 +882,7 @@ class TransactionsManagerOneUnitStretch(TransactionsManager):
             .filter(F.col("date") <= self.etl_date)
             .filter(F.col("date") >= self.lookback_date)
             .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
-            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(F.col("l1_id").isin([self.l1_ids]))
             .filter(self.get_common_filters())
         )
 

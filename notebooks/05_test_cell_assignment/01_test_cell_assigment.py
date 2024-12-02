@@ -39,134 +39,129 @@ test_cells_tbl = persist_utils.read_table(
 
 config_pd = config["predict"]
 config_tcs = config["test_cell_selection"]
+config_bd = config["build_dataset"]
+config_al = config["allocation"]
 total_number_of_customers = test_cells_tbl.select('cust_id').distinct().count()
 
 # COMMAND ----------
 
-test_cells_tbl = test_cells_tbl.filter(F.col("test_type").isin(config_tcs["test_cells"]))
+test_cells_tbl.select('scope').distinct().display()
+
+# COMMAND ----------
+
+test_cells_tbl.filter(F.col("test_type").isin(config_tcs["test_cells"]))
 test_cells_tbl.groupBy('cust_id').count().select('count').distinct().display()
 
 # COMMAND ----------
 
-if config["category_level"]:
-  number_of_offers = len(config_pd["pred_items"].keys())
-  number_of_customers_per_offer = int(total_number_of_customers/number_of_offers)
-  full_export_selected_tabel_name = None
-  # Get the sequence of offers for customer assignment: the offer with the smallest customer base first
-  sequence_of_assignment = (
-      test_cells_tbl.filter(
-        (test_cells_tbl["test_type"] == "headroom") &
-        (test_cells_tbl["estimated_spend"] > 0))
-        .groupby(f"{config_pd['pred_key']}_id")
-        .agg(F.countDistinct("cust_id").alias("distinct_customer_count"))
-        .orderBy('distinct_customer_count', ascending=True)
-        .select(f"{config_pd['pred_key']}_id")
-        .rdd.flatMap(lambda x: x).collect()
-  )
+from pyspark.sql.functions import col, countDistinct
 
-  for offer in sequence_of_assignment:
-    logger.info(f"Assigning customers for {offer}")
-    available_customers = test_cells_tbl.filter(
-                                (test_cells_tbl[f"{config_pd['pred_key']}_id"] == offer) &
-                                (test_cells_tbl["test_type"] == "headroom") &
-                                (test_cells_tbl["estimated_spend"] > 0)
-                          ).select("cust_id").distinct().orderBy(F.rand())
+# Assigning customers
+number_of_offers = test_cells_tbl.select('scope').distinct().count()
+number_of_offers = len(config_pd["pred_items"].keys())
+number_of_customers_per_offer = int(total_number_of_customers/number_of_offers)
+full_export_selected_table_name = None
 
-    assert available_customers.count() >= number_of_customers_per_offer, f"There are not enough customers for {offer}"
+# Get the sequence of offers for food category customer assignment
+full_basket_cols = test_cells_tbl\
+    .filter(col('scope').startswith('full_basket'))\
+    .select('scope')\
+    .distinct().rdd.flatMap(lambda x: x).collect()
 
-    # Remove customers that have already been assigned to a category
-    if full_export_selected_tabel_name is not None:
-      allocated_customers = persist_utils.read_table(table_name=full_export_selected_tabel_name)
+sequence_of_assignment_for_categories = (
+    test_cells_tbl.filter(
+        (col('test_type').startswith('headroom')) &
+        (test_cells_tbl["estimated_spend"] > 0) &
+        (~col("scope").isin(full_basket_cols))
+    )
+    .groupby("scope")
+    .agg(countDistinct("cust_id").alias("distinct_customer_count"))
+    .orderBy('distinct_customer_count', ascending=True)
+    .select("scope")
+    .rdd.flatMap(lambda x: x).collect()
+)
 
-      available_customers = available_customers.join(
-        allocated_customers.select("cust_id").distinct(), on="cust_id", how="leftanti"
-      )
-    logger.info(f"Number of customers avaiable for {offer} allocation: {available_customers.count()}")
-    test_cells_tbl_offer = (test_cells_tbl
-                            .filter(test_cells_tbl[f"{config_pd['pred_key']}_id"] == offer)
-                            .join(available_customers, on="cust_id", how="inner")
+sequence_of_assignment = sequence_of_assignment_for_categories + locals().get('full_basket_cols', [])
+
+# COMMAND ----------
+
+for offer in sequence_of_assignment:
+  logger.info(f"Assigning customers for {offer}")
+  available_customers = test_cells_tbl.filter(
+                              (test_cells_tbl["scope"] == offer) &
+                              (col('test_type').startswith('headroom')) &
+                              (test_cells_tbl["estimated_spend"] > 0)
+                        ).select("cust_id").distinct().orderBy(F.rand())
+
+  assert available_customers.count() >= number_of_customers_per_offer, f"There are not enough customers for {offer}"
+
+  # Remove customers that have already been assigned to a category
+  if full_export_selected_table_name is not None:
+    allocated_customers = persist_utils.read_table(table_name=full_export_selected_table_name)
+
+    available_customers = available_customers.join(
+      allocated_customers.select("cust_id").distinct(), on="cust_id", how="leftanti"
     )
 
-    full_export_selected_offer = test_cell_assignment.assignment(
-        df=test_cells_tbl_offer, 
-        user_id=config_al["user_key"],
-        treatment_ratio=config_tcs["treatment_ratio"],
-        test_cell_split=config_tcs[config_tcs["selection_type"]],
-        method=config_tcs["selection_type"],
-    )
-
-    if test_cell_assignment.qa_for_assignment(
-        original_df=test_cells_tbl_offer,
-        allocation_df=full_export_selected_offer,
-        user_id=config_al["user_key"],
-        test_cell_split=config_tcs[config_tcs["selection_type"]],
-        method=config_tcs["selection_type"]
-    ):
-      # If we have created the table before, we don't need to overwrite it
-      # Just need to append in the new result
-      if full_export_selected_tabel_name is None:
-        overwrite_table_indicator = True
-      else:
-        overwrite_table_indicator = False
-      full_export_selected_tbl_name = persist_utils.create_beam_table(
-          table_prefix=config_al.full_export_selected_tbl.prefix,
-          lab_database=config.lab_database,
-          factory_database=config.factory_database,
-          sensitivity=config.sensitivity,
-          schema=full_export_selected_offer,
-          partition_by=config_al.full_export_selected_tbl.partitionByList,
-          overwrite_table=overwrite_table_indicator,
-          assert_equality=False,
-          add_load_timestamp=True,
-      )
-      logger.info(f"""Writing test cell assignment results to {full_export_selected_tbl_name}""")
-      full_export_selected_tabel_name = full_export_selected_tbl_name
-      persist_utils.insert_df_into_table(
-          target_tbl_name=full_export_selected_tbl_name,
-          insert_df=full_export_selected_offer,
-          insert_append=True,
-          add_columns=True,
-      )
-      logger.info(f"Number of customers allocated for {offer}: {full_export_selected_offer.select(config_al['user_key']).distinct().count()}")
-    else:
-      logger.error("QA for test cell assignment failed")
-
-else:
-  full_export_selected = test_cell_assignment.assignment(
-    df=test_cells_tbl, 
-    user_id=config_al["user_key"],
-    treatment_ratio=config_tcs["treatment_ratio"],
-    test_cell_split=config_tcs[config_tcs["selection_type"]],
-    method=config_tcs["selection_type"],
+  logger.info(f"Number of customers available for {offer} allocation: {available_customers.count()}")
+  test_cells_tbl_offer = (test_cells_tbl
+                          .filter(test_cells_tbl["scope"] == offer)
+                          .join(available_customers, on="cust_id", how="inner")
   )
   
-  if test_cell_assignment.qa_for_assignment(original_df=test_cells_tbl,
-                                          allocation_df=full_export_selected,
-                                          user_id=config_al["user_key"],
-                                          test_cell_split=config_tcs[config_tcs["selection_type"]],
-                                          method=config_tcs["selection_type"]):
+  test_cell_split = (
+    config_tcs[config_tcs["selection_type"]]['basket'][config_bd['l1_ids'].lower()]
+    if offer.startswith('full_basket')
+    else config_tcs[config_tcs["selection_type"]]['lx_id'][config_bd['l1_ids'].lower()]
+  )
+
+  test_cells_tbl_offer = test_cells_tbl_offer.filter(F.col('test_type').isin(list(test_cell_split['treatment'].keys())))
+  print(f"Number of customers available for {offer} allocation: {test_cells_tbl_offer.select('cust_id').distinct().count()}")
+
+
+  full_export_selected_offer = test_cell_assignment.assignment(
+      df=test_cells_tbl_offer,
+      user_id=config_al["user_key"],
+      treatment_ratio=config_tcs["treatment_ratio"],
+      test_cell_split=test_cell_split,
+      method=config_tcs["selection_type"],
+  )
+
+  if test_cell_assignment.qa_for_assignment(
+      original_df=test_cells_tbl_offer,
+      allocation_df=full_export_selected_offer,
+      user_id=config_al["user_key"],
+      test_cell_split=test_cell_split,
+      method=config_tcs["selection_type"]
+  ):
+    # If we have created the table before, we don't need to overwrite it
+    # Just need to append in the new result
+    if full_export_selected_table_name is None:
+      overwrite_table_indicator = True
+    else:
+      overwrite_table_indicator = False
     full_export_selected_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_al.full_export_selected_tbl.prefix,
         lab_database=config.lab_database,
         factory_database=config.factory_database,
         sensitivity=config.sensitivity,
-        schema=full_export_selected,
+        schema=full_export_selected_offer,
         partition_by=config_al.full_export_selected_tbl.partitionByList,
-        overwrite_table=True,
+        overwrite_table=overwrite_table_indicator,
         assert_equality=False,
         add_load_timestamp=True,
     )
     logger.info(f"""Writing test cell assignment results to {full_export_selected_tbl_name}""")
-    full_export_selected_tabel_name = full_export_selected_tbl_name
+    full_export_selected_table_name = full_export_selected_tbl_name
     persist_utils.insert_df_into_table(
         target_tbl_name=full_export_selected_tbl_name,
-        insert_df=full_export_selected,
+        insert_df=full_export_selected_offer,
         insert_append=True,
         add_columns=True,
     )
+    logger.info(f"Number of customers allocated for {offer}: {full_export_selected_offer.select(config_al['user_key']).distinct().count()}")
   else:
     logger.error("QA for test cell assignment failed")
-
 
 
 # COMMAND ----------
@@ -190,11 +185,11 @@ test_cells_selected_tbl.groupby("cust_id").count().select("count").distinct().di
 
 # COMMAND ----------
 
-test_cells_selected_tbl.groupby("test_type").count().display()
+test_cells_selected_tbl.groupBy('scope','test_type', 'test_group').agg({'cust_id': 'count'}).display()
 
 # COMMAND ----------
 
-test_cells_selected_tbl.groupby("test_group").count().display()
+test_cells_selected_tbl.groupby("test_type", "test_group").count().display()
 
 # COMMAND ----------
 
