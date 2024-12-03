@@ -128,6 +128,7 @@ campaign_df = None
 
 logger.info("Begin Allocation")
 config_al = config["allocation"]
+config_sim = config["baseline_stretch_simulations"]
 
 # COMMAND ----------
 
@@ -188,7 +189,7 @@ for reward in reward_percs:
         segtco_history_ = tmo_utils.get_preceding_segtco_history(
             segtco_history_df, campaign
         )
-        if config["build_dataset"]["l1_ids"][0] == "FD":
+        if config["build_dataset"]["l1_ids"] == "FD":
             cust_seg_col = "cust_band_fd"
         else:
             cust_seg_col = "cust_band_ch"
@@ -264,7 +265,7 @@ for reward in reward_percs:
             for pred_item in list(config["predict"]["pred_items"]):
                 id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(   
                     offer_variants_tbl=offer_variants_tbl,
-                    department=config["build_dataset"]["l1_ids"][0], 
+                    department=config["build_dataset"]["l1_ids"],
                     pred_item=pred_item, 
                     reward_perc=reward)
 
@@ -288,9 +289,12 @@ for reward in reward_percs:
                     ],
                 )
 
-                headroom_export_temp = allocation_manager.get(predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item), campaign_df=campaign_df).withColumn(
-                    "campaign", F.lit(campaign)
-                )
+                headroom_export_temp = allocation_manager.get(
+                    predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item),
+                    campaign_df=campaign_df,
+                    grouping_columns=config_sim["grouping_columns"])\
+                    .withColumn("campaign", F.lit(campaign))
+
                 if headroom_export is None:
                     headroom_export = headroom_export_temp
                 else:
@@ -299,7 +303,7 @@ for reward in reward_percs:
             # Get full basket offer
             id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
                 offer_variants_tbl=offer_variants_tbl,
-                department=config["build_dataset"]["l1_ids"][0],
+                department=config["build_dataset"]["l1_ids"],
                 pred_item="full_basket",
                 reward_perc=reward)
 
@@ -418,7 +422,6 @@ if config["category_level"]:
 # Fixed stretch allocation
 
 if config["fixed_stretch"]:
-    config_sim = config["baseline_stretch_simulations"]
     fixed_stretch_tbl_name = persist_utils.get_table_name(
         factory_database=config.factory_database,
         lab_database=config.lab_database,
@@ -461,7 +464,7 @@ if config["fixed_stretch"]:
                 for pred_item in list(config["predict"]["pred_items"]):
                     id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
                         offer_variants_tbl=offer_variants_tbl,
-                        department=config["build_dataset"]["l1_ids"][0],
+                        department=config["build_dataset"]["l1_ids"],
                         pred_item=pred_item,
                         reward_perc=reward)
 
@@ -497,7 +500,7 @@ if config["fixed_stretch"]:
                 # Get full basket offer
                 id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
                     offer_variants_tbl=offer_variants_tbl,
-                    department=config["build_dataset"]["l1_ids"][0], 
+                    department=config["build_dataset"]["l1_ids"],
                     pred_item="full_basket", 
                     reward_perc=reward)
 
@@ -545,7 +548,6 @@ fixed_stretch_export_final.groupBy("cust_id").count().select("count").distinct()
 
 # one article unit + headroom stretch allocation
 if config["one_article_unit_stretch"]:
-    config_sim = config['baseline_stretch_simulations']
     one_article_unit_stretch_tbl_name = persist_utils.get_table_name(
         factory_database=config.factory_database,
         lab_database=config.lab_database,
@@ -584,7 +586,7 @@ if config["one_article_unit_stretch"]:
     for pred_item in list(config["predict"]["pred_items"]):
         id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
             offer_variants_tbl=offer_variants_tbl,
-            department=config["build_dataset"]["l1_ids"][0], 
+            department=config["build_dataset"]["l1_ids"],
             pred_item=pred_item, 
             reward_perc="unique")
 
@@ -653,7 +655,7 @@ if config["one_article_unit_stretch"] & config["fixed_stretch"]:
   for pred_item in list(config["predict"]["pred_items"]):
       id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
           offer_variants_tbl=offer_variants_tbl,
-          department=config["build_dataset"]["l1_ids"][0], 
+          department=config["build_dataset"]["l1_ids"],
           pred_item=pred_item, 
           reward_perc="unique")
 
