@@ -207,6 +207,9 @@ def run_fit_rec(seg, config, seg_data, run_id):
                 )
             except Exception as e:
                 err[data_process_manager_name] = str(e)
+            
+            mlflow.log_metric("rating_scale_min", data_process_manager.rating_scale[0])
+            mlflow.log_metric("rating_scale_max", data_process_manager.rating_scale[1])
 
         with mlflow.start_run(experiment_id=experiment_id, nested=True) as rec_algo_run:
 
@@ -230,6 +233,9 @@ def run_fit_rec(seg, config, seg_data, run_id):
                 )
             except Exception as e:
                 err[rec_name] = str(e)
+            
+            for param, value in fit_params.items():
+                mlflow.log_param(param, value)
 
         with mlflow.start_run(
             experiment_id=experiment_id, nested=True
@@ -248,6 +254,9 @@ def run_fit_rec(seg, config, seg_data, run_id):
                 )
             except Exception as e:
                 err[param_name] = str(e)
+
+            for param, value in fit_params.items():
+                mlflow.log_param(param, value)
 
     return (model_tags, seg, data_process_manager_name, rec_name, param_name, run_id, err)
 
