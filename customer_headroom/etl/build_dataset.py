@@ -139,7 +139,10 @@ class TransactionsManager(BaseManager):
         self.lx_ids = lx_ids
         self.user_key = user_key
         self.date_format = date_format
-        self.channels = channels
+        if l1_ids == "GM":
+            self.channels = ["POS", "ONLINE"]
+        else:
+            self.channels = channels
         self.exclude_items = exclude_items
         self.window_days = window_days
         self.christmas_remove_range = christmas_remove_range
