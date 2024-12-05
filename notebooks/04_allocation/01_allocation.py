@@ -338,7 +338,9 @@ for reward in reward_percs:
                 F.col("spend_plus_stretch") <= config["exclude_high_spend"]
             )
             
+
 # COMMAND ----------
+
     if config["min_num_basket"] is not None:
         logger.info(
             f"Remove customer who have less than {config['min_num_basket']} basket"
@@ -696,6 +698,7 @@ else:
   all_export = exports_merged.withColumn("scope", F.lit("full_basket_" + config["segmentation"]["l1_id"].lower()))
 
 all_export = all_export.withColumn("mechanic", F.lit(config["mechanic"]))
+all_export = all_export.withColumn("test_accounts", F.lit(False))
 
 # COMMAND ----------
 

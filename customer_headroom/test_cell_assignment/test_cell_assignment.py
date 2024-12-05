@@ -41,9 +41,6 @@ def assignment(df: DataFrame,
         else:
             test_types_in_config = set(test_cell_split.keys())
 
-    # Window spec to ensure one row per customer
-    window_spec = Window.partitionBy(user_id).orderBy(F.rand())
-    df = df.withColumn("row_number", F.row_number().over(window_spec))
     # Get distinct customers, shuffle for randomization
     distinct_cust = df.select(user_id).distinct().orderBy(F.rand())
     window_spec = Window.orderBy(F.lit(1))

@@ -21,7 +21,29 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
+def get_date(date):
+    if str(date).lower() == "today":
+        date = datetime.now().strftime("%Y%m%d")
+    return int(date)
+
+
+def get_campaign(campaign, etl_date):
+    if (campaign == "{campaign}") or (campaign == ""):
+        campaign = get_date(etl_date)
+    return campaign
+
+
+# COMMAND ----------
+
+config_pd = config["predict"]
+config_tcs = config["test_cell_selection"]
+config_bd = config["build_dataset"]
 config_al = config["allocation"]
+
+campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
+
+# COMMAND ----------
+
 test_cells_tbl_name = persist_utils.get_table_name(
   factory_database=config.factory_database,
   lab_database=config.lab_database,
@@ -32,29 +54,48 @@ test_cells_tbl_name = persist_utils.get_table_name(
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
 test_cells_tbl = persist_utils.read_table(
-    table_name=test_cells_tbl_name
+    table_name=test_cells_tbl_name,
+    where=f"""
+    campaign={campaign} and 
+    scope LIKE "%_{config_bd['l1_ids'].lower()}" and 
+    mechanic="{config['mechanic']}"
+    """
+)
+
+test_accounts_tbl_name = persist_utils.get_table_name(
+  factory_database=config.factory_database,
+  lab_database=config.lab_database,
+  table_prefix=config["tables"]["test_accounts_tbl"].prefix,
+  sensitivity=config.sensitivity
+)
+
+logger.info(f"""test_accounts_tbl_name: {test_accounts_tbl_name}""")
+
+test_accounts_tbl = persist_utils.read_table(
+  table_name=test_accounts_tbl_name
 )
 
 # COMMAND ----------
 
-config_pd = config["predict"]
-config_tcs = config["test_cell_selection"]
-config_bd = config["build_dataset"]
-config_al = config["allocation"]
 total_number_of_customers = test_cells_tbl.select('cust_id').distinct().count()
 
 # COMMAND ----------
 
-test_cells_tbl.select('scope').distinct().display()
+test_cells_tbl = test_cells_tbl.join(
+  test_accounts_tbl,
+  test_cells_tbl["uk_digital_id"] == test_accounts_tbl["WCS_ID"],
+  how="left_anti"
+)
 
 # COMMAND ----------
 
-test_cells_tbl.filter(F.col("test_type").isin(config_tcs["test_cells"]))
-test_cells_tbl.groupBy('cust_id').count().select('count').distinct().display()
+test_cells_tbl.select("scope").distinct().display()
 
 # COMMAND ----------
 
-from pyspark.sql.functions import col, countDistinct
+test_cells_tbl.groupBy("cust_id").count().select("count").distinct().display()
+
+# COMMAND ----------
 
 # Assigning customers
 number_of_offers = test_cells_tbl.select('scope').distinct().count()
@@ -64,18 +105,18 @@ full_export_selected_table_name = None
 
 # Get the sequence of offers for food category customer assignment
 full_basket_cols = test_cells_tbl\
-    .filter(col('scope').startswith('full_basket'))\
+    .filter(F.col('scope').startswith('full_basket'))\
     .select('scope')\
     .distinct().rdd.flatMap(lambda x: x).collect()
 
 sequence_of_assignment_for_categories = (
     test_cells_tbl.filter(
-        (col('test_type').startswith('headroom')) &
+        (F.col('test_type').startswith('headroom')) &
         (test_cells_tbl["estimated_spend"] > 0) &
-        (~col("scope").isin(full_basket_cols))
+        (~F.col("scope").isin(full_basket_cols))
     )
     .groupby("scope")
-    .agg(countDistinct("cust_id").alias("distinct_customer_count"))
+    .agg(F.countDistinct("cust_id").alias("distinct_customer_count"))
     .orderBy('distinct_customer_count', ascending=True)
     .select("scope")
     .rdd.flatMap(lambda x: x).collect()
@@ -89,7 +130,7 @@ for offer in sequence_of_assignment:
   logger.info(f"Assigning customers for {offer}")
   available_customers = test_cells_tbl.filter(
                               (test_cells_tbl["scope"] == offer) &
-                              (col('test_type').startswith('headroom')) &
+                              (F.col('test_type').startswith('headroom')) &
                               (test_cells_tbl["estimated_spend"] > 0)
                         ).select("cust_id").distinct().orderBy(F.rand())
 
@@ -194,6 +235,80 @@ test_cells_selected_tbl.groupby("test_type", "test_group").count().display()
 # COMMAND ----------
 
 test_cells_selected_tbl.groupby("scope").count().display()
+
+# COMMAND ----------
+
+# allocate random offers for test accounts
+num_test_accounts = test_accounts_tbl.select("WCS_ID").distinct().count()
+
+# COMMAND ----------
+
+window_spec = W.partitionBy("scope").orderBy(F.rand())
+
+test_account_offer_allocation = test_cells_selected_tbl.withColumn("row_number", F.row_number().over(window_spec))
+
+test_account_offer_allocation = test_account_offer_allocation.filter(F.col("row_number") <= num_test_accounts)
+
+# COMMAND ----------
+
+window_spec = W.orderBy(F.rand())
+
+test_accounts_tbl_temp = test_accounts_tbl.withColumn("row_number", F.row_number().over(window_spec))
+
+
+# COMMAND ----------
+
+test_account_offer_allocation = test_account_offer_allocation.join(
+  test_accounts_tbl_temp.select(["WCS_ID", "row_number"]),
+  on="row_number",
+  how="left"
+).drop("row_number")
+
+# COMMAND ----------
+
+test_account_offer_allocation.groupBy("WCS_ID").count().select("count").distinct().display()
+
+# COMMAND ----------
+
+test_account_offer_allocation = (test_account_offer_allocation
+                                 .drop("uk_digital_id")
+                                 .withColumnRenamed("WCS_ID", "uk_digital_id")
+                                 .withColumn("test_group", F.lit("treatment"))
+                                 .withColumn("test_accounts", F.lit(True))
+)
+test_account_offer_allocation = test_account_offer_allocation.select(test_cells_selected_tbl.columns)
+
+reference_schema = test_cells_selected_tbl.select("cust_id", "account_id", "test_type", "spend_plus_stretch", "estimated_spend", "estimated_stretch").schema
+for field in reference_schema:
+  test_account_offer_allocation = test_account_offer_allocation.withColumn(field.name, F.lit(None).cast(field.dataType))
+
+# COMMAND ----------
+
+full_export_selected_tbl_name = persist_utils.create_beam_table(
+    table_prefix=config_al.full_export_selected_tbl.prefix,
+    lab_database=config.lab_database,
+    factory_database=config.factory_database,
+    sensitivity=config.sensitivity,
+    schema=test_account_offer_allocation,
+    partition_by=config_al.full_export_selected_tbl.partitionByList,
+    overwrite_table=False,
+    assert_equality=False,
+    add_load_timestamp=True,
+)
+logger.info(f"""Writing test accounts offer allocation results to {full_export_selected_tbl_name}""")
+
+persist_utils.insert_df_into_table(
+    target_tbl_name=full_export_selected_tbl_name,
+    insert_df=test_account_offer_allocation,
+    insert_append=True,
+    add_columns=True,
+    delete_where=f"""
+    campaign={campaign} and
+    scope IN ({','.join(map(repr, test_account_offer_allocation.select("scope").distinct().toPandas()["scope"]))}) and
+    mechanic="{config['mechanic']}" and
+    test_accounts=TRUE
+    """
+)
 
 # COMMAND ----------
 

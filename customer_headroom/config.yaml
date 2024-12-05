@@ -62,13 +62,16 @@ tables:
     partitionByList: ["campaign", "scope", "mechanic"]
   full_export_selected_tbl: &full_export_selected_tbl
     prefix: headroom_test_cells_selected_allocation
-    partitionByList: ["campaign", "scope", "mechanic"]
+    partitionByList: ["campaign", "scope", "mechanic", "test_accounts"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
     prefix: headroom_cust_id_link
     partitionByList: ["campaign"]
   offer_variants_tbl: &offer_variants_tbl
     prefix: headroom_accumulator_offer_variants
     partitionByList: ["target"]
+  test_accounts_tbl: &test_accounts_tbl
+    prefix: headroom_accumulator_test_accounts
+    partitionByList: ["campaign"]
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
