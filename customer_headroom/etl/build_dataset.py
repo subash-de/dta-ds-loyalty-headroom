@@ -240,7 +240,7 @@ class TransactionsManager(BaseManager):
 
 
         # Get all article ids
-        lx_all = lu_article.filter(lu_article["l2_id"].isin([self.l2_ids])).select(
+        lx_all = lu_article.filter(lu_article["l2_id"].isin(list(self.l2_ids))).select(
             ["article_id"]
             + [f"l{i}_id" for i in range(1, 7)]
             + [f"l{i}_name" for i in range(1, 7)]

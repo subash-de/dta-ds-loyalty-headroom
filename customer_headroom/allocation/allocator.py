@@ -168,7 +168,7 @@ class Allocator(object):
 
             prediction_scores_tagged = self.tag_outliers(prediction_scores)
 
-            headroom_predictions = self.get_headroom(prediction_scores_tagged)
+            headroom_predictions = self.get_headroom(prediction_scores_tagged, grouping_columns)
 
             export = self.prepare_export(headroom_predictions)
 
@@ -311,7 +311,7 @@ class Allocator(object):
         return data_export
     """
 
-    def get_headroom(self, data):
+    def get_headroom(self, data, grouping_columns):
         # get used_headroom_fraction
         data_hrm = data.withColumn(
             "used_headroom_frac",
@@ -350,7 +350,7 @@ class Allocator(object):
                     "total_used_headroom",
                     "used_headroom_frac",
                 )
-                .groupby(self.user_key)
+                .groupby(grouping_columns)
                 .agg(
                     F.sum("total_used_headroom").alias("total_used_headroom"),
                     F.sum("sum_total_spend").alias("sum_total_spend"),

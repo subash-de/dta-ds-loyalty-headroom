@@ -76,35 +76,6 @@ last_registration_date: {last_registration_date}
 # COMMAND ----------
 
 
-pip install openpyxl
-
-# COMMAND ----------
-
-offer_variants_pandas = pd.read_excel("Food offer variants.xlsx", sheet_name='Sheet1')
-offer_variants = spark.createDataFrame(offer_variants_pandas)
-
-# COMMAND ----------
-
-offer_variants_tbl_name= persist_utils.create_beam_table(
-    table_prefix=config.tables.offer_variants_tbl.prefix,
-    lab_database=config.lab_database,
-    factory_database=config.factory_database,
-    sensitivity=config.sensitivity,
-    schema=offer_variants,
-    partition_by=config.tables.offer_variants_tbl.partitionByList,
-    overwrite_table=True,
-    assert_equality=False,
-    add_load_timestamp=True,
-)
-logger.info(f"""offer_variants_tbl_name: {offer_variants_tbl_name}""")
-
-persist_utils.insert_df_into_table(
-    target_tbl_name=offer_variants_tbl_name,
-    insert_df=offer_variants,
-    insert_append=True,
-    add_columns=True,
-)
-
 offer_variants_tbl_name = persist_utils.get_table_name(
    factory_database=config.factory_database,
     lab_database=config.lab_database,
@@ -128,6 +99,7 @@ campaign_df = None
 
 logger.info("Begin Allocation")
 config_al = config["allocation"]
+config_sim = config["baseline_stretch_simulations"]
 
 # COMMAND ----------
 
@@ -188,7 +160,7 @@ for reward in reward_percs:
         segtco_history_ = tmo_utils.get_preceding_segtco_history(
             segtco_history_df, campaign
         )
-        if config["build_dataset"]["l1_ids"][0] == "FD":
+        if config["build_dataset"]["l1_ids"] == "FD":
             cust_seg_col = "cust_band_fd"
         else:
             cust_seg_col = "cust_band_ch"
@@ -264,7 +236,7 @@ for reward in reward_percs:
             for pred_item in list(config["predict"]["pred_items"]):
                 id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(   
                     offer_variants_tbl=offer_variants_tbl,
-                    department=config["build_dataset"]["l1_ids"][0], 
+                    department=config["build_dataset"]["l1_ids"],
                     pred_item=pred_item, 
                     reward_perc=reward)
 
@@ -288,9 +260,12 @@ for reward in reward_percs:
                     ],
                 )
 
-                headroom_export_temp = allocation_manager.get(predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item), campaign_df=campaign_df).withColumn(
-                    "campaign", F.lit(campaign)
-                )
+                headroom_export_temp = allocation_manager.get(
+                    predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item),
+                    campaign_df=campaign_df,
+                    grouping_columns=config_sim["grouping_columns"])\
+                    .withColumn("campaign", F.lit(campaign))
+
                 if headroom_export is None:
                     headroom_export = headroom_export_temp
                 else:
@@ -299,7 +274,7 @@ for reward in reward_percs:
             # Get full basket offer
             id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
                 offer_variants_tbl=offer_variants_tbl,
-                department=config["build_dataset"]["l1_ids"][0],
+                department=config["build_dataset"]["l1_ids"],
                 pred_item="full_basket",
                 reward_perc=reward)
 
@@ -418,7 +393,6 @@ if config["category_level"]:
 # Fixed stretch allocation
 
 if config["fixed_stretch"]:
-    config_sim = config["baseline_stretch_simulations"]
     fixed_stretch_tbl_name = persist_utils.get_table_name(
         factory_database=config.factory_database,
         lab_database=config.lab_database,
@@ -461,7 +435,7 @@ if config["fixed_stretch"]:
                 for pred_item in list(config["predict"]["pred_items"]):
                     id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
                         offer_variants_tbl=offer_variants_tbl,
-                        department=config["build_dataset"]["l1_ids"][0],
+                        department=config["build_dataset"]["l1_ids"],
                         pred_item=pred_item,
                         reward_perc=reward)
 
@@ -497,7 +471,7 @@ if config["fixed_stretch"]:
                 # Get full basket offer
                 id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
                     offer_variants_tbl=offer_variants_tbl,
-                    department=config["build_dataset"]["l1_ids"][0], 
+                    department=config["build_dataset"]["l1_ids"],
                     pred_item="full_basket", 
                     reward_perc=reward)
 
@@ -545,7 +519,6 @@ fixed_stretch_export_final.groupBy("cust_id").count().select("count").distinct()
 
 # one article unit + headroom stretch allocation
 if config["one_article_unit_stretch"]:
-    config_sim = config['baseline_stretch_simulations']
     one_article_unit_stretch_tbl_name = persist_utils.get_table_name(
         factory_database=config.factory_database,
         lab_database=config.lab_database,
@@ -584,7 +557,7 @@ if config["one_article_unit_stretch"]:
     for pred_item in list(config["predict"]["pred_items"]):
         id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
             offer_variants_tbl=offer_variants_tbl,
-            department=config["build_dataset"]["l1_ids"][0], 
+            department=config["build_dataset"]["l1_ids"],
             pred_item=pred_item, 
             reward_perc="unique")
 
@@ -653,7 +626,7 @@ if config["one_article_unit_stretch"] & config["fixed_stretch"]:
   for pred_item in list(config["predict"]["pred_items"]):
       id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
           offer_variants_tbl=offer_variants_tbl,
-          department=config["build_dataset"]["l1_ids"][0], 
+          department=config["build_dataset"]["l1_ids"],
           pred_item=pred_item, 
           reward_perc="unique")
 
@@ -712,23 +685,25 @@ if config["fixed_stretch"]:
 
 # COMMAND ----------
 
-# Removing customers with no headroom output
-headroom_customers = exports_merged.filter(F.col("test_type").startswith("headroom")).select("cust_id").distinct()
-all_export = exports_merged.join(headroom_customers, on="cust_id", how="inner")
-
-# COMMAND ----------
-
 # Standardize the allocation output table format
 if config["category_level"] == True:
-  all_export = all_export.withColumnRenamed(f'{config_al["lx_key"]}_id', "scope")
+  all_export = exports_merged.withColumnRenamed(f'{config_al["lx_key"]}_id', "scope")
   all_export = all_export.withColumn("scope", 
                                      F.concat(F.col("scope"), 
                                               F.lit("_" + config["segmentation"]["l1_id"].lower())
                                             ))
 else:
-  all_export = all_export.withColumn("scope", F.lit("full_basket_" + config["segmentation"]["l1_id"].lower()))
+  all_export = exports_merged.withColumn("scope", F.lit("full_basket_" + config["segmentation"]["l1_id"].lower()))
 
 all_export = all_export.withColumn("mechanic", F.lit(config["mechanic"]))
+
+# COMMAND ----------
+
+# Removing customers that don't have all test cells
+occurance_count = all_export.groupby(["cust_id", "scope"]).agg(F.count("*").alias("count"))
+max_count = occurance_count.agg(F.max("count").alias("max_count")).collect()[0][0]
+cust_scope_with_max_count = occurance_count.filter(F.col("count") == max_count)
+all_export = all_export.join(cust_scope_with_max_count.select("cust_id", "scope"), on=["cust_id", "scope"], how="inner")
 
 # COMMAND ----------
 
@@ -743,7 +718,8 @@ cust_id_link_tbl_name = persist_utils.get_table_name(
 logger.info(f"""cust_id_link_tbl_name: {cust_id_link_tbl_name}""")
 
 cust_id_link_tbl = persist_utils.read_table(
-    table_name=cust_id_link_tbl_name
+    table_name=cust_id_link_tbl_name,
+    where=f"campaign = {campaign}"
 )
 
 all_export = all_export.join(
