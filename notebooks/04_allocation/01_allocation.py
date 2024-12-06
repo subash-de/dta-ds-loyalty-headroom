@@ -749,7 +749,7 @@ test_cells_tbl_name = persist_utils.create_beam_table(
 )
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
-scope_list = ','.join(map(repr, test_account_offer_allocation.select("scope").distinct().toPandas()["scope"]))
+scope_list = ','.join(map(repr, all_export.select("scope").distinct().toPandas()["scope"]))
 
 persist_utils.insert_df_into_table(
     target_tbl_name=test_cells_tbl_name,
