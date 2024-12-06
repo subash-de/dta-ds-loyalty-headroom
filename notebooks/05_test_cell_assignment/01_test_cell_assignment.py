@@ -144,7 +144,7 @@ print(sequence_of_assignment)
 past_assigned_categories = []
 for offer in sequence_of_assignment:
   logger.info(f"Assigning customers for {offer}")
-  print(f"categories already assigned: {past_assigned_categories}")
+  logger.info(f"categories already assigned: {past_assigned_categories}")
   available_customers = test_cells_tbl.filter(
                               (test_cells_tbl["scope"] == offer) &
                               (F.col('test_type').startswith('headroom')) &
@@ -193,7 +193,7 @@ for offer in sequence_of_assignment:
       test_cell_split=test_cell_split,
       method=config_tcs["selection_type"]
   ):
-    past_assigned_categories = past_assigned_categories + [offer]
+    past_assigned_categories.append(offer)
 
     full_export_selected_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_al.full_export_selected_tbl.prefix,
