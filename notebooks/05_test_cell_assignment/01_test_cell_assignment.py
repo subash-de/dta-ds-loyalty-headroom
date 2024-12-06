@@ -44,6 +44,10 @@ campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
 
 # COMMAND ----------
 
+campaign
+
+# COMMAND ----------
+
 test_cells_tbl_name = persist_utils.get_table_name(
   factory_database=config.factory_database,
   lab_database=config.lab_database,
@@ -77,6 +81,14 @@ test_accounts_tbl = persist_utils.read_table(
 
 # COMMAND ----------
 
+test_cells_tbl.display()
+
+# COMMAND ----------
+
+test_cells_tbl
+
+# COMMAND ----------
+
 total_number_of_customers = test_cells_tbl.select('cust_id').distinct().count()
 
 # COMMAND ----------
@@ -93,7 +105,7 @@ test_cells_tbl.select("scope").distinct().display()
 
 # COMMAND ----------
 
-test_cells_tbl.groupBy("cust_id").count().select("count").distinct().display()
+test_cells_tbl.groupBy("cust_id").count().groupBy("count").count().show()
 
 # COMMAND ----------
 
@@ -101,7 +113,6 @@ test_cells_tbl.groupBy("cust_id").count().select("count").distinct().display()
 number_of_offers = test_cells_tbl.select('scope').distinct().count()
 number_of_offers = len(config_pd["pred_items"].keys())
 number_of_customers_per_offer = int(total_number_of_customers/number_of_offers)
-full_export_selected_table_name = None
 
 # Get the sequence of offers for food category customer assignment
 full_basket_cols = test_cells_tbl\
@@ -126,8 +137,14 @@ sequence_of_assignment = sequence_of_assignment_for_categories + locals().get('f
 
 # COMMAND ----------
 
+print(sequence_of_assignment)
+
+# COMMAND ----------
+
+past_assigned_categories = []
 for offer in sequence_of_assignment:
   logger.info(f"Assigning customers for {offer}")
+  print(f"categories already assigned: {past_assigned_categories}")
   available_customers = test_cells_tbl.filter(
                               (test_cells_tbl["scope"] == offer) &
                               (F.col('test_type').startswith('headroom')) &
@@ -136,9 +153,10 @@ for offer in sequence_of_assignment:
 
   assert available_customers.count() >= number_of_customers_per_offer, f"There are not enough customers for {offer}"
 
+  logger.info(f"Number of total customers that could be allocated for {offer}: {available_customers.count()}")
   # Remove customers that have already been assigned to a category
-  if full_export_selected_table_name is not None:
-    allocated_customers = persist_utils.read_table(table_name=full_export_selected_table_name)
+  if len(past_assigned_categories)>0:
+    allocated_customers = persist_utils.read_table(table_name=full_export_selected_table_name, where=f"campaign='{campaign}' and scope='{past_assigned_categories[-1]}' and mechanic='{config['mechanic']}'")
 
     available_customers = available_customers.join(
       allocated_customers.select("cust_id").distinct(), on="cust_id", how="leftanti"
@@ -157,8 +175,6 @@ for offer in sequence_of_assignment:
   )
 
   test_cells_tbl_offer = test_cells_tbl_offer.filter(F.col('test_type').isin(list(test_cell_split['treatment'].keys())))
-  print(f"Number of customers available for {offer} allocation: {test_cells_tbl_offer.select('cust_id').distinct().count()}")
-
 
   full_export_selected_offer = test_cell_assignment.assignment(
       df=test_cells_tbl_offer,
@@ -175,12 +191,8 @@ for offer in sequence_of_assignment:
       test_cell_split=test_cell_split,
       method=config_tcs["selection_type"]
   ):
-    # If we have created the table before, we don't need to overwrite it
-    # Just need to append in the new result
-    if full_export_selected_table_name is None:
-      overwrite_table_indicator = True
-    else:
-      overwrite_table_indicator = False
+    past_assigned_categories = past_assigned_categories + [offer]
+
     full_export_selected_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_al.full_export_selected_tbl.prefix,
         lab_database=config.lab_database,
@@ -188,7 +200,7 @@ for offer in sequence_of_assignment:
         sensitivity=config.sensitivity,
         schema=full_export_selected_offer,
         partition_by=config_al.full_export_selected_tbl.partitionByList,
-        overwrite_table=overwrite_table_indicator,
+        overwrite_table=False,
         assert_equality=False,
         add_load_timestamp=True,
     )
@@ -199,6 +211,7 @@ for offer in sequence_of_assignment:
         insert_df=full_export_selected_offer,
         insert_append=True,
         add_columns=True,
+        delete_where=f"campaign = '{campaign}' and scope = '{offer}' and mechanic = '{config['mechanic']}'"
     )
     logger.info(f"Number of customers allocated for {offer}: {full_export_selected_offer.select(config_al['user_key']).distinct().count()}")
   else:
@@ -216,8 +229,11 @@ test_cells_selected_tbl_name = persist_utils.get_table_name(
 
 logger.info(f"""test_cells_selected_tbl_name: {test_cells_selected_tbl_name}""")
 
+scope_list = ','.join(map(repr, sequence_of_assignment))
+
 test_cells_selected_tbl = persist_utils.read_table(
-  table_name=test_cells_selected_tbl_name
+  table_name=test_cells_selected_tbl_name,
+  where=f"campaign='{campaign}' and scope IN ({scope_list}) and mechanic='{config['mechanic']}'"
 )
 
 # COMMAND ----------
@@ -227,14 +243,6 @@ test_cells_selected_tbl.groupby("cust_id").count().select("count").distinct().di
 # COMMAND ----------
 
 test_cells_selected_tbl.groupBy('scope','test_type', 'test_group').agg({'cust_id': 'count'}).display()
-
-# COMMAND ----------
-
-test_cells_selected_tbl.groupby("test_type", "test_group").count().display()
-
-# COMMAND ----------
-
-test_cells_selected_tbl.groupby("scope").count().display()
 
 # COMMAND ----------
 
@@ -297,6 +305,8 @@ full_export_selected_tbl_name = persist_utils.create_beam_table(
 )
 logger.info(f"""Writing test accounts offer allocation results to {full_export_selected_tbl_name}""")
 
+scope_list = ','.join(map(repr, test_account_offer_allocation.select("scope").distinct().toPandas()["scope"]))
+
 persist_utils.insert_df_into_table(
     target_tbl_name=full_export_selected_tbl_name,
     insert_df=test_account_offer_allocation,
@@ -304,7 +314,7 @@ persist_utils.insert_df_into_table(
     add_columns=True,
     delete_where=f"""
     campaign={campaign} and
-    scope IN ({','.join(map(repr, test_account_offer_allocation.select("scope").distinct().toPandas()["scope"]))}) and
+    scope IN ({scope_list}) and
     mechanic="{config['mechanic']}" and
     test_accounts=TRUE
     """
