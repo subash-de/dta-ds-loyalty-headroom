@@ -749,14 +749,14 @@ test_cells_tbl_name = persist_utils.create_beam_table(
 )
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
-scope_list = tuple(row.scope for row in all_export.select("scope").distinct().collect())
+scope_list = ','.join(map(repr, test_account_offer_allocation.select("scope").distinct().toPandas()["scope"]))
 
 persist_utils.insert_df_into_table(
     target_tbl_name=test_cells_tbl_name,
     insert_df=all_export,
     insert_append=True,
     add_columns=True,
-    delete_where=f"campaign='{campaign}' AND scope IN {scope_list} AND mechanic='{config['mechanic']}'"
+    delete_where=f"campaign='{campaign}' AND scope IN ({scope_list}) AND mechanic='{config['mechanic']}'"
 )
 
 # COMMAND ----------
