@@ -155,8 +155,10 @@ for offer in sequence_of_assignment:
 
   logger.info(f"Number of total customers that could be allocated for {offer}: {available_customers.count()}")
   # Remove customers that have already been assigned to a category
+
   if len(past_assigned_categories)>0:
-    allocated_customers = persist_utils.read_table(table_name=full_export_selected_table_name, where=f"campaign='{campaign}' and scope='{past_assigned_categories[-1]}' and mechanic='{config['mechanic']}'")
+    past_assigned_categories_sql = ','.join(map(repr, past_assigned_categories))
+    allocated_customers = persist_utils.read_table(table_name=full_export_selected_table_name, where=f"campaign='{campaign}' and scope IN ({past_assigned_categories_sql}) and mechanic='{config['mechanic']}'")
 
     available_customers = available_customers.join(
       allocated_customers.select("cust_id").distinct(), on="cust_id", how="leftanti"
