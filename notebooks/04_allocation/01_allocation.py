@@ -261,10 +261,12 @@ for reward in reward_percs:
                 )
 
                 headroom_export_temp = allocation_manager.get(
-                    predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item),
+                    predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item), 
                     campaign_df=campaign_df,
-                    grouping_columns=config_sim["grouping_columns"])\
-                    .withColumn("campaign", F.lit(campaign))
+                    grouping_columns=config_sim["grouping_columns"]
+                ).withColumn(
+                    "campaign", F.lit(campaign)
+                )
 
                 if headroom_export is None:
                     headroom_export = headroom_export_temp
@@ -337,9 +339,6 @@ for reward in reward_percs:
             headroom_export = headroom_export.filter(
                 F.col("spend_plus_stretch") <= config["exclude_high_spend"]
             )
-            
-
-# COMMAND ----------
 
     if config["min_num_basket"] is not None:
         logger.info(
@@ -778,10 +777,6 @@ test_cells_tbl = persist_utils.read_table(
 
 # COMMAND ----------
 
-test_cells_tbl.display()
-
-# COMMAND ----------
-
 test_cells_tbl.groupby("cust_id").count().select('count').distinct().display()
 
 # COMMAND ----------
@@ -798,10 +793,6 @@ print(fixed_stretch_export_final.select('cust_id').join(headroom_export.select('
 print(fixed_stretch_export_final.select('cust_id').join(headroom_export.select('cust_id'), on='cust_id', how='inner').select('cust_id').distinct().count())
 print(fixed_stretch_export_final.select('cust_id').distinct().count())
 
-
-# COMMAND ----------
-
-# test_cells_tbl.filter(F.col("spend_plus_stretch") > 220).select("test_type").groupby("test_type").count().display()
 
 # COMMAND ----------
 
