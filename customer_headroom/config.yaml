@@ -76,7 +76,7 @@ tables:
   mbr_mission_dtls_tbl: &mbr_mission_dtls_tbl
     prefix: loyalty_mbr_mission_details
     sensitivity: ns
-    partitionByList: ["campaign", "mission_type_id", "ch_fd_id", "scope_type_id"]
+    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
