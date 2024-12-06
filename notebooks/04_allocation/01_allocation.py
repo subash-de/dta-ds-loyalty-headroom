@@ -731,6 +731,8 @@ all_export = all_export.join(
 )
 
 assert all_export.filter(F.col("account_id").isNull()).count() == 0, "Not all customers have an account ID"
+assert all_export.groupBy(all_export.columns).count().filter(F.col("count") > 1).count() == 0, "The table contains duplicate rows"
+
 
 # COMMAND ----------
 
@@ -747,11 +749,14 @@ test_cells_tbl_name = persist_utils.create_beam_table(
 )
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
+scope_list = ','.join(map(repr, all_export.select("scope").distinct().toPandas()["scope"]))
+
 persist_utils.insert_df_into_table(
     target_tbl_name=test_cells_tbl_name,
     insert_df=all_export,
     insert_append=True,
     add_columns=True,
+    delete_where=f"campaign='{campaign}' AND scope IN ({scope_list}) AND mechanic='{config['mechanic']}'"
 )
 
 # COMMAND ----------
@@ -766,7 +771,8 @@ test_cells_tbl_name = persist_utils.get_table_name(
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
 test_cells_tbl = persist_utils.read_table(
-    table_name=test_cells_tbl_name
+    table_name=test_cells_tbl_name,
+    where=f"campaign='{campaign}' AND scope IN {scope_list} AND mechanic='{config['mechanic']}'"
 )
 
 # COMMAND ----------
