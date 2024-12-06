@@ -88,6 +88,8 @@ Email:
   to_email: ['dapeng.wang@mnscorp.net','parthav.x.maheshwari@mnscorp.net']
   to_email_failed: ['dapeng.wang@mnscorp.net']
 
+write_mode: "overwrite" # "errorifexists"
+write_table: True
 
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
@@ -449,3 +451,10 @@ sections:
     exclude_high_spend: 270
     min_num_basket: 3
     exclude_items: None
+
+qa:
+  num_cust_per_group: 2
+  threshold_for_stretch_perc: 100
+  threshold_for_estimated_spend: 100
+  min_offer_count: 1
+  max_offer_count: 1
