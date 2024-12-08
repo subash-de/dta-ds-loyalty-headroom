@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ../setup/bootstrap
+# MAGIC %run ../bootstrap
 
 # COMMAND ----------
 
@@ -104,6 +104,7 @@ sparks_account_df = persist_utils.read_table(
 segtco_history_df = persist_utils.read_table(
   table_name = config.factory_tbl_segtco_history
 )
+
 # COMMAND ----------
 
 if build_dataset == "True":
