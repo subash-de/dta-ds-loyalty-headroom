@@ -133,7 +133,7 @@ sequence_of_assignment_for_categories = (
     .rdd.flatMap(lambda x: x).collect()
 )
 
-sequence_of_assignment = sequence_of_assignment_for_categories + locals().get('full_basket_cols', [])
+sequence_of_assignment = sequence_of_assignment_for_categories + full_basket_cols
 
 # COMMAND ----------
 
