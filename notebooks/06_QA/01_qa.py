@@ -625,7 +625,7 @@ if config["write_table"]:
 # COMMAND ----------
 
 for distinct_scope in test_cells_selected_tbl.select("scope").distinct().toPandas()["scope"]:
-  for distinct_test_type in test_cells_selected_tbl.select("test_type").distinct().toPandas()["test_type"]:
+  for distinct_test_type in test_cells_selected_tbl.filter(F.col("scope") == distinct_scope).select("test_type").distinct().toPandas()["test_type"]:
     allocation_per_test_cell = (test_cells_selected_tbl
                                 .filter(
                                   (F.col("scope") == distinct_scope) &
