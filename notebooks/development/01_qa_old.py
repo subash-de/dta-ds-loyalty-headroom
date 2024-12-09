@@ -4,7 +4,7 @@
 
 # COMMAND ----------
 
-# MAGIC %run ../setup/bootstrap
+# MAGIC %run ../bootstrap
 
 # COMMAND ----------
 
