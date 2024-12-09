@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ../setup/bootstrap
+# MAGIC %run ../bootstrap
 
 # COMMAND ----------
 
@@ -386,11 +386,6 @@ headroom_export.groupBy('cust_id').count().select('count').distinct().display()
 
 # COMMAND ----------
 
-if config["category_level"]:
-  headroom_export.select("l3_id").distinct().display()
-
-# COMMAND ----------
-
 # Fixed stretch allocation
 
 if config["fixed_stretch"]:
@@ -772,7 +767,7 @@ logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
 test_cells_tbl = persist_utils.read_table(
     table_name=test_cells_tbl_name,
-    where=f"campaign='{campaign}' AND scope IN {scope_list} AND mechanic='{config['mechanic']}'"
+    where=f"campaign='{campaign}' AND scope IN ({scope_list}) AND mechanic='{config['mechanic']}'"
 )
 
 # COMMAND ----------
