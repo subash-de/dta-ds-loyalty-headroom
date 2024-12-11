@@ -77,6 +77,17 @@ tables:
     prefix: loyalty_mbr_mission_details
     sensitivity: ns
     partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+  mbr_mission_product_mapping_tbl: &mbr_mission_product_mapping_tbl   
+    prefix: loyalty_mbr_mission_product
+    sensitivity: ns
+    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+  mbr_allocation_post_test_cell_tbl: &mbr_allocation_post_test_cell_tbl
+    prefix: loyalty_mbr_allocation_post_test_cell
+    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+  mbr_allocation_tbl: &mbr_allocation_tbl
+    prefix: loyalty_mbr_allocation
+    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
