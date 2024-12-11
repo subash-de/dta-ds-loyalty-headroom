@@ -84,9 +84,9 @@ tables:
   mbr_allocation_post_test_cell_tbl: &mbr_allocation_post_test_cell_tbl
     prefix: loyalty_mbr_allocation_post_test_cell
     partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
-  mbr_allocation_tbl: &mbr_allocation_tbl
-    prefix: loyalty_mbr_allocation
-    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+  mbr_allocation_export_tbl: &mbr_allocation_export_tbl
+    prefix: loyalty_mbr_allocation_export
+    partitionByList: ["campaign_id", "batch_id"]
 
 
 mail_containers: # mount paths for different envs
