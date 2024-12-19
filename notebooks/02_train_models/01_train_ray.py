@@ -13,7 +13,7 @@ import ray
 from ray.util.spark import setup_ray_cluster, shutdown_ray_cluster
 
 import mlflow
-from pyspark.sql.types import StructType, StructField, StringType, MapType
+from pyspark.sql.types import StructType, StructField, StringType, MapType, LongType
 from pyspark.sql.functions import col, size
 
 from datetime import datetime, timedelta
@@ -108,18 +108,39 @@ if len(segs) == 0:
 logger.info(f"segs: {segs}")
 
 seg_data_dict = {}
+memory_usage_list = []
 
 for seg in segs:
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
     ext_str = "_".join([str(seg[k]) for k in partitionByList])
 
+    feature_col = config_fr["feature_col"]
+    item_id = config_fr["item_id"]
+    user_id = config_fr["user_id"]
+
     seg_etl_data_tbl = persist_utils.read_table(
         table_name=etl_data_tbl_name, where=" and ".join(seg_ext)
-    )
+    ).select(user_id, item_id, feature_col)
 
-    seg_data_dict[ext_str] = seg_etl_data_tbl.toPandas()
+    seg_data_pandas = seg_etl_data_tbl.toPandas()
+    seg_data_dict[ext_str] = seg_data_pandas
 
-logger.info(f"Training dataset is ready for all segments!")
+    memory_usage = seg_data_pandas.memory_usage(deep=True).sum()
+    memory_usage_list.append((ext_str, memory_usage))
+
+memory_usage_schema = StructType(
+    [
+        StructField("Segment", StringType(), True),
+        StructField("Memory Usage (bytes)", LongType(), True),
+    ]
+)
+
+memory_usage_list = [(seg, int(mem_usage)) for seg, mem_usage in memory_usage_list]
+
+memory_usage_df = spark.createDataFrame(memory_usage_list, schema=memory_usage_schema)
+display(memory_usage_df)
+
+logger.info("Training dataset is ready for all segments!")
 
 # COMMAND ----------
 
@@ -207,7 +228,7 @@ def run_fit_rec(seg, config, seg_data, run_id):
                 )
             except Exception as e:
                 err[data_process_manager_name] = str(e)
-            
+
             mlflow.log_metric("rating_scale_min", data_process_manager.rating_scale[0])
             mlflow.log_metric("rating_scale_max", data_process_manager.rating_scale[1])
 
@@ -233,7 +254,7 @@ def run_fit_rec(seg, config, seg_data, run_id):
                 )
             except Exception as e:
                 err[rec_name] = str(e)
-            
+
             for param, value in fit_params.items():
                 mlflow.log_param(param, value)
 
@@ -258,7 +279,15 @@ def run_fit_rec(seg, config, seg_data, run_id):
             for param, value in fit_params.items():
                 mlflow.log_param(param, value)
 
-    return (model_tags, seg, data_process_manager_name, rec_name, param_name, run_id, err)
+    return (
+        model_tags,
+        seg,
+        data_process_manager_name,
+        rec_name,
+        param_name,
+        run_id,
+        err,
+    )
 
 
 logger.info("Begin Preprocessing dataset.")
@@ -291,15 +320,17 @@ with mlflow.start_run(experiment_id=experiment_id) as run:
 
 # COMMAND ----------
 
-schema = StructType([
-    StructField("model_tags", MapType(StringType(), StringType()), True),
-    StructField("seg", MapType(StringType(), StringType()), True),
-    StructField("data_process_manager_name", StringType(), True),
-    StructField("rec_name", StringType(), True),
-    StructField("param_name", StringType(), True),
-    StructField("run_id", StringType(), True),
-    StructField("err", MapType(StringType(), StringType()), True)
-])
+schema = StructType(
+    [
+        StructField("model_tags", MapType(StringType(), StringType()), True),
+        StructField("seg", MapType(StringType(), StringType()), True),
+        StructField("data_process_manager_name", StringType(), True),
+        StructField("rec_name", StringType(), True),
+        StructField("param_name", StringType(), True),
+        StructField("run_id", StringType(), True),
+        StructField("err", MapType(StringType(), StringType()), True),
+    ]
+)
 
 results_df = spark.createDataFrame(results, schema=schema)
 display(results_df)
