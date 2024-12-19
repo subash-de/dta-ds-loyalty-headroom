@@ -40,7 +40,7 @@ stages:
         tests_prospector: true
 
       databricks:
-        enable: false
+        enable: true
         lab_workspace: loyalty # enterprise / marketing / loyalty
         folder_name: headroom
         clean: true

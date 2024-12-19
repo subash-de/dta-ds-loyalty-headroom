@@ -9,9 +9,11 @@ lab_database: loyalty_azlab_prod
 sensitivity: p
 
 fixed_stretch: True
-one_article_unit_stretch: False
-category_level: True
+one_article_unit_stretch: True
+category_level: False
 eligible_customers: False
+
+mechanic: accumulator
 
 # ========================================================================================================
 # TABLE PROPERTIES
@@ -29,44 +31,47 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data_val_category_test_gm
+    prefix: headroom_segmentation_data_fd_full_basket
     partitionByList: [ "campaign" ]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations_val_category_test_gm
+    prefix: headroom_segmentations_fd_full_basket
     partitionByList: &segPartition [ "campaign", "experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data_val_category_test_gm
+    prefix: headroom_etl_data_fd_full_basket
     partitionByList: *segPartition
   fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
-    prefix: headroom_fixed_stretch_etl_data_val_category_test_gm
+    prefix: headroom_fixed_stretch_etl_data_fd_full_basket
     partitionByList: *segPartition
   one_article_unit_stretch_etl_data_tbl: &one_article_unit_stretch_etl_data_tbl
-    prefix: headroom_one_article_unit_stretch_etl_data_val_category_test_gm
+    prefix: headroom_one_article_unit_stretch_etl_data_fd_full_basket
     partitionByList: *segPartition
   prediction_tbl: &prediction_tbl
-    prefix: headroom_predictions_val_category_test_gm
+    prefix: headroom_predictions_fd_full_basket
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
-    prefix: headroom_fixed_stretch_tbl_np_val_category_test_gm
+    prefix: headroom_fixed_stretch_fd_full_basket
     partitionByList: *segPartition
   one_article_unit_stretch_tbl: &one_article_unit_stretch_tbl
-    prefix: headroom_one_article_unit_stretch_tbl_np_val_category_test_gm
+    prefix: headroom_one_article_unit_stretch_fd_full_basket
     partitionByList: *segPartition
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation_val_category_test_gm
+    prefix: headroom_allocation_fd_full_basket
     partitionByList: ["campaign", "offer_id"]
   full_export_tbl: &full_export_tbl
-    prefix: headroom_test_cells_allocation_val_category_test_gm
-    partitionByList: ["campaign", "offer_id"]
+    prefix: headroom_test_cells_allocation
+    partitionByList: ["campaign", "scope", "mechanic"]
   full_export_selected_tbl: &full_export_selected_tbl
-    prefix: headroom_test_cells_selected_allocation_val_category_test_gm
-    partitionByList: ["campaign", "offer_id"]
+    prefix: headroom_test_cells_selected_allocation
+    partitionByList: ["campaign", "scope", "mechanic", "test_accounts"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
-    prefix: headroom_cust_id_link_val_category_test_gm
+    prefix: headroom_cust_id_link
     partitionByList: ["campaign"]
   offer_variants_tbl: &offer_variants_tbl
     prefix: headroom_accumulator_offer_variants
-    partitionByList: ["Target"]
+    partitionByList: ["target"]
+  test_accounts_tbl: &test_accounts_tbl
+    prefix: headroom_accumulator_test_accounts
+    partitionByList: ["campaign"]
 
 mail_containers: # mount paths for different envs
   dev: "centralds"
@@ -83,6 +88,8 @@ Email:
   to_email: ['dapeng.wang@mnscorp.net','parthav.x.maheshwari@mnscorp.net']
   to_email_failed: ['dapeng.wang@mnscorp.net']
 
+write_mode: "overwrite" # "errorifexists"
+write_table: True
 
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
@@ -112,13 +119,13 @@ dates:
 # filters:
 columns:
   user_id: &user_id "cust_id"
-  item_id: &item_id "l3_id" #change to different lx id and need to the same as lx entry
-  l1_ids: &l1_ids ["GM"]
+  item_id: &item_id "l2_id" #change to different lx id and need to the same as lx entry
+  l1_ids: &l1_ids "FD"
   # ["FD"]
   # ["GM"]
-  lx: &lx "l3" #change to different lx id
+  lx: &lx "l2" #change to different lx id
   # lx: &lx "l2"
-  feature_col: &feature_col "l3_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+  feature_col: &feature_col "l2_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
   # "mean_spend_timespan"
   # "average_basket_value" "mean_total_spend_basket"
   #"total_spend" #"number_of_transactions"
@@ -130,7 +137,7 @@ columns:
 segmentation:
   # input
   # TODO: put this in base of yaml
-  l1_id: "GM"
+  l1_id: *l1_ids
   user_id: *user_id
   num_cols: *seg_num_cols
   cat_cols: *seg_cat_cols
@@ -156,22 +163,15 @@ build_dataset:
   user_id: *user_id
   l1_ids: *l1_ids
   lx: *lx
-  l2_ids: &l2_ids ["01", "02", "03", "04", "05", "07"]
-  # lx_ids: &lx_ids {
-  #   'prep_meal': {"l4_id": ["F03C", "F63C", "F64C"]},
-  #   'meat_fish_poultry': {"l4_id": ["F01C", "F38C", "F62C"]},
-  #   'fruit_veg_salads': {"l3_id": ["MM07"]},
-  #   'bakery': {"l3_id": ["MM18"]},
-  #   'ambient_food': {"l5_id": ["F19762"],
-  #                         "l6_id": ["F191907", "F19623", "F191528", "F1990", "F198981", "F19312"]},
-  # }
+  l2_ids: &l2_ids ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
   lx_ids: &lx_ids {
-    'menswear': {"l2_id": ["03"]},
-    'lingerie': {"l2_id": ["02"]},
+    'prep_meal': {"l4_id": ["F03C", "F63C", "F64C"]},
+    'meat_fish_poultry': {"l4_id": ["F01C", "F38C", "F62C"]},
+    'fruit_veg_salads': {"l3_id": ["MM07"]},
+    'bakery': {"l3_id": ["MM18"]},
+    'ambient_food': {"l5_id": ["F19762"],
+                          "l6_id": ["F191907", "F19623", "F191528", "F1990", "F198981", "F19312"]},
   }
-  # ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
-  # "EX08" - Non Trading
-  # ["01", "02", "03", "04", "05", "07"]
   window_days: 30
   time_window_days : 28 # spend and save 7, accumulator 4 weeks, so 28 days
   christmas_remove_range: ["1218", "0101"]
@@ -180,8 +180,8 @@ build_dataset:
   fixed_stretch_etl_data_tbl: *fixed_stretch_etl_data_tbl
   one_article_unit_stretch_etl_data_tbl: *one_article_unit_stretch_etl_data_tbl
   partitionByList: *segPartition
-  aggregation_level: &aggregation_level "lx id" #change to basket or lx id
-  # aggregation_level: &aggregation_level "basket"
+  # aggregation_level: &aggregation_level "lx id" #change to basket or lx id
+  aggregation_level: &aggregation_level "basket"
   headroom_cust_id_link_tbl: *headroom_cust_id_link_tbl
 fit_rec:
   # input
@@ -212,7 +212,7 @@ fit_rec:
   data_processor_name: &data_processor_name "data_processor"
   param_name: &param_name "data_params"
   rec_name: &rec_name "recommender"
-  model_prefix: &model_prefix "_241118_val_category_test_gm"
+  model_prefix: &model_prefix "_full_basket"
   main_expt_path: "/Shared/mlflow_experiments" # Workspace path
   main_expt_name: "headroom_ray_experiment"
 predict:
@@ -227,12 +227,6 @@ predict:
   l2_ids: *l2_ids
   pred_key: *lx
   pred_items: *lx_ids
-  # pred_items: ["average_time_window_max_spend_basket",
-  #             "50percentile_time_window_max_spend_basket",
-  #             "75percentile_time_window_max_spend_basket",
-  #             "85percentile_time_window_max_spend_basket",
-  #             "90percentile_time_window_max_spend_basket",
-  #             "100percentile_time_window_max_spend_basket",] #*lx_ids
   cat_cols: *seg_cat_cols
   partitionByList: *segPartition
   # output
@@ -256,16 +250,12 @@ offline_eval:
   n_splits: 5
   shuffle: True
 baseline_stretch_simulations:
-  department: 'GM'
   rolling_window: 4
   date_col: "date"
   col_to_sum: "sales_amt"
-  grouping_columns: ["cust_id", "l3_id"]
-  # grouping_columns: ["cust_id"]
+  grouping_columns: ["cust_id"]
   baseline_percentiles: 85
-  stretch_amounts: [20] # gm category
-  # stretch_amounts: [30] # food category
-  # stretch_amounts: [20, 30]
+  stretch_amounts: [10, 20] # food full basket
   percentile_for_one_additional_unit_price: 0.75
   percentile_for_customer_one_additional_unit_price: 0.85
   article_threshold_for_fallback: 10
@@ -278,6 +268,10 @@ allocation:
   prediction_tbl: *prediction_tbl
   fixed_stretch_tbl: *fixed_stretch_tbl
   feature_col: *feature_col
+  multiple_reward_level_for_test_cell:
+    {"85_stretch_10_perc": [7 , 10],
+    "85_stretch_20_perc": [10],
+    "headroom": [10]}
   # TODO: Put this information in a table
   offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
                 '14140': "£5 off when you spend £30 on M&S food in store",
@@ -343,30 +337,41 @@ allocation:
   exclude_high_spend: None
   min_num_basket: None
 test_cell_selection:
-  test_cells: ["one_article_unit_plus_headroom", "one_article_unit_plus_fixed_stretch", "headroom"]
+  test_cells: ["85_stretch_10_perc_7_perc_reward", "85_stretch_10_perc_10_perc_reward", "85_stretch_20_perc_10_perc_reward", "headroom_10_perc_reward"]
   selection_type: "volume" #can be percentage, volume or random
   treatment_ratio: 0.5
   random: None
-  percentage: {"85_stretch_0_perc": 0.1,
-               "85_stretch_10_perc": 0.1,
-               "85_stretch_20_perc": 0.1,
-               "85_stretch_30_perc": 0.1,
-               "headroom": 0.5}
-  volume: 
-    treatment: {"one_article_unit_plus_headroom": 50000,
-               "one_article_unit_plus_85_stretch_20_perc": 50000,
-               "headroom": 50000}
-    control: {"one_article_unit_plus_headroom": 50000,
-               "one_article_unit_plus_85_stretch_20_perc": 50000,
-               "headroom": 50000}
+  percentage: None
+  volume:
+      basket:
+        fd:
+          treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
+                     "85_stretch_10_perc_10_perc_reward": 325000,
+                     "85_stretch_20_perc_10_perc_reward": 325000,
+                     "headroom_10_perc_reward": 325000}
+          control: {"85_stretch_10_perc_7_perc_reward": 81250,
+                     "85_stretch_10_perc_10_perc_reward": 81250,
+                     "85_stretch_20_perc_10_perc_reward": 81250,
+                     "headroom_10_perc_reward": 81250}
+      lx_id:
+        fd:
+          treatment: { "one_article_unit_plus_headroom": 50000,
+                       "one_article_unit_plus_85_stretch_30_perc": 50000,
+                       "headroom": 50000 }
+          control: { "one_article_unit_plus_headroom": 50000,
+                     "one_article_unit_plus_85_stretch_30_perc": 50000,
+                     "headroom": 50000 }
+        gm:
+          treatment: { "one_article_unit_plus_headroom": 50000,
+                       "one_article_unit_plus_85_stretch_20_perc": 50000,
+                       "headroom": 50000 }
+          control: { "one_article_unit_plus_headroom": 50000,
+                     "one_article_unit_plus_85_stretch_20_perc": 50000,
+                     "headroom": 50000 }
 
-  # volume: 
-  #   treatment: {"one_article_unit_plus_headroom": 433333.3333333333,
-  #              "one_article_unit_plus_85_stretch_30_perc": 433333.3333333333,
-  #              "headroom": 433333.3333333333}
-  #   control: {"one_article_unit_plus_headroom": 108333.33333333333,
-  #              "one_article_unit_plus_85_stretch_30_perc": 108333.33333333333,
-  #              "headroom": 108333.33333333333}
+
+        # food full basket
+
 sections:
   ss:
     # TODO: Put this information in a table
@@ -448,3 +453,10 @@ sections:
     exclude_high_spend: 270
     min_num_basket: 3
     exclude_items: None
+
+qa:
+  num_cust_per_group: 2
+  threshold_for_stretch_perc: 100
+  threshold_for_estimated_spend: 100
+  min_offer_count: 1
+  max_offer_count: 1
