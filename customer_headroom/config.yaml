@@ -89,7 +89,6 @@ tables:
   mbr_allocation_export_tbl: &mbr_allocation_export_tbl
     prefix: loyalty_mbr_allocation_export
     partitionByList: ["campaign_id", "batch_id"]
-    partitionByList: ["target"]
   test_accounts_tbl: &test_accounts_tbl
     prefix: headroom_accumulator_test_accounts
     partitionByList: ["campaign"]
