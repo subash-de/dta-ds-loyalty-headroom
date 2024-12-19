@@ -40,14 +40,7 @@ def assignment(df: DataFrame,
             test_types_in_config = set(test_cell_split["treatment"].keys()).intersection(set(test_cell_split["control"].keys()))
         else:
             test_types_in_config = set(test_cell_split.keys())
-        if test_types_in_config != set(distinct_test_types):
-            raise ValueError(f"""Mismatch between test types in data and in configuration. 
-                             Test cells specified in the config are: {list(test_types_in_config)}, 
-                             while the data contains: {distinct_test_types}.""")
 
-    # Window spec to ensure one row per customer
-    window_spec = Window.partitionBy(user_id).orderBy(F.rand())
-    df = df.withColumn("row_number", F.row_number().over(window_spec))
     # Get distinct customers, shuffle for randomization
     distinct_cust = df.select(user_id).distinct().orderBy(F.rand())
     window_spec = Window.orderBy(F.lit(1))

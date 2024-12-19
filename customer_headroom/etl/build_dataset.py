@@ -139,7 +139,10 @@ class TransactionsManager(BaseManager):
         self.lx_ids = lx_ids
         self.user_key = user_key
         self.date_format = date_format
-        self.channels = channels
+        if l1_ids == "GM":
+            self.channels = ["POS", "ONLINE"]
+        else:
+            self.channels = channels
         self.exclude_items = exclude_items
         self.window_days = window_days
         self.christmas_remove_range = christmas_remove_range
@@ -160,7 +163,7 @@ class TransactionsManager(BaseManager):
             .filter(F.col("date") <= self.etl_date)
             .filter(F.col("date") >= self.lookback_date)
             .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
-            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(F.col("l1_id").isin([self.l1_ids]))
             .filter(self.get_common_filters())
         )
 
@@ -578,11 +581,11 @@ class TransactionsManager(BaseManager):
             .groupby(self.user_key, f"{self.lx}_id")
             .agg(*self.get_expr_agg("total_spend_time_window"))
             .select(
-                self.user_key, f"{self.lx}_id", "90percentile_total_spend_time_window"
+                self.user_key, f"{self.lx}_id", "85percentile_total_spend_time_window"
             )
             .withColumn(
                 f"{self.lx}_id_total_time_window_spend",
-                F.col("90percentile_total_spend_time_window"),
+                F.col("85percentile_total_spend_time_window"),
             )
         )
 
@@ -598,7 +601,7 @@ class TransactionsManager(BaseManager):
             # .agg(F.max("total_spend_basket").cast(T.DoubleType()).alias("time_window_max_spend_basket"))
             .groupby("cust_id")
             .agg(*self.get_expr_agg("total_spend_time_window"))
-            .select("cust_id", "90percentile_total_spend_time_window")
+            .select("cust_id", "85percentile_total_spend_time_window")
         )  # add to config ================
 
         # get the time window ind id that is closest to the 85th percentile
@@ -617,7 +620,7 @@ class TransactionsManager(BaseManager):
             .join(percentile_spend_time_window, how="left", on="cust_id")
             .where(
                 F.col("total_spend_time_window")
-                >= F.col("90percentile_total_spend_time_window")
+                >= F.col("85percentile_total_spend_time_window")
             )
             # .orderBy("time_window_max_spend_basket")
             .withColumn(
@@ -754,7 +757,7 @@ class TransactionsManagerFixedStretch(TransactionsManager):
             .filter(F.col("date") <= self.etl_date)
             .filter(F.col("date") >= self.lookback_date)
             .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
-            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(F.col("l1_id").isin([self.l1_ids]))
             .filter(self.get_common_filters())
         )
 
@@ -882,7 +885,7 @@ class TransactionsManagerOneUnitStretch(TransactionsManager):
             .filter(F.col("date") <= self.etl_date)
             .filter(F.col("date") >= self.lookback_date)
             .filter(F.col("PURCHASE_CHANNEL").isin(self.channels))
-            .filter(F.col("l1_id").isin(list(self.l1_ids)))
+            .filter(F.col("l1_id").isin([self.l1_ids]))
             .filter(self.get_common_filters())
         )
 

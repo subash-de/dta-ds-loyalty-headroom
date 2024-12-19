@@ -1,5 +1,5 @@
 # Databricks notebook source
-# MAGIC %run ../setup/bootstrap
+# MAGIC %run ../bootstrap
 
 # COMMAND ----------
 
@@ -119,6 +119,7 @@ list_pred_items
 
 # COMMAND ----------
 
+first_segment = True
 for seg in seg_list:
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
     ext_str = "_".join([str(seg[k]) for k in partitionByList])
@@ -176,10 +177,19 @@ for seg in seg_list:
     )
     logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
+    if first_segment:
+        # if this is the first segment, delete all partitions related to the current campaign
+        delete_where_statement = f"campaign={campaign}"
+        first_segment = False
+    else:
+        delete_where_statement = None
+
+    assert campaign in ["20250106", "20250116"], "Please change the code such that full basket and category runs can write to the same table"
+
     persist_utils.insert_df_into_table(
         target_tbl_name=prediction_tbl_name,
         insert_df=predictions,
-        delete_where=" and ".join(seg_ext),
+        delete_where=delete_where_statement,
     )
 
     predictions_read = persist_utils.read_table(

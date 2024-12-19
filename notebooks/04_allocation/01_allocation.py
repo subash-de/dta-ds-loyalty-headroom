@@ -1,16 +1,17 @@
 # Databricks notebook source
-# MAGIC %run ../setup/bootstrap
+# MAGIC %run ../bootstrap
 
 # COMMAND ----------
 
-import ast
 from datetime import datetime, timedelta
 
 import seaborn as sns
 from dtaml.logging import get_logger
 from pyspark.sql import Window as W
 from pyspark.sql import functions as F
+from functools import reduce
 import pandas as pd
+import re
 
 import customer_headroom.utils.persist_utils as persist_utils
 from customer_headroom.allocation.allocator import Allocator
@@ -44,25 +45,6 @@ def get_campaign(campaign, etl_date):
     return campaign
 
 
-def get_offer_mapping(offer_variants_tbl, pred_item):
-
-    offers = offer_variants_tbl.filter(
-        (offer_variants_tbl["l1_id"] == config["build_dataset"]["l1_ids"][0]) & 
-        (offer_variants_tbl["Target"] == pred_item)
-    )
-
-    id_to_limit_map = dict(
-        offers.select(
-            ["offer_id", "offer_limits"]
-        ).rdd.map(lambda row: (str(row[0]), ast.literal_eval(row[1]))).collect()
-    )
-    id_to_desc_map = dict(
-        offers.select(
-            ["offer_id", "offer_desc"]
-        ).rdd.map(lambda row: (str(row[0]), row[1])).collect()
-    )
-    return id_to_limit_map, id_to_desc_map
-
 
 # COMMAND ----------
 
@@ -94,35 +76,6 @@ last_registration_date: {last_registration_date}
 # COMMAND ----------
 
 
-pip install openpyxl
-
-# COMMAND ----------
-
-offer_variants_pandas = pd.read_excel("Food offer variants.xlsx", sheet_name='Sheet1')
-offer_variants = spark.createDataFrame(offer_variants_pandas)
-
-# COMMAND ----------
-
-offer_variants_tbl_name= persist_utils.create_beam_table(
-    table_prefix=config.tables.offer_variants_tbl.prefix,
-    lab_database=config.lab_database,
-    factory_database=config.factory_database,
-    sensitivity=config.sensitivity,
-    schema=offer_variants,
-    partition_by=config.tables.offer_variants_tbl.partitionByList,
-    overwrite_table=True,
-    assert_equality=False,
-    add_load_timestamp=True,
-)
-logger.info(f"""offer_variants_tbl_name: {offer_variants_tbl_name}""")
-
-persist_utils.insert_df_into_table(
-    target_tbl_name=offer_variants_tbl_name,
-    insert_df=offer_variants,
-    insert_append=True,
-    add_columns=True,
-)
-
 offer_variants_tbl_name = persist_utils.get_table_name(
    factory_database=config.factory_database,
     lab_database=config.lab_database,
@@ -132,14 +85,9 @@ offer_variants_tbl_name = persist_utils.get_table_name(
 
 logger.info(f"""offer_variants_tbl_name: {offer_variants_tbl_name}""")
 
-
 offer_variants_tbl = persist_utils.read_table(
     table_name=offer_variants_tbl_name
 )
-
-# COMMAND ----------
-
-offer_variants_tbl.display()
 
 # COMMAND ----------
 
@@ -149,9 +97,18 @@ campaign_df = None
 
 # COMMAND ----------
 
-
 logger.info("Begin Allocation")
 config_al = config["allocation"]
+config_sim = config["baseline_stretch_simulations"]
+
+# COMMAND ----------
+
+if config_al["multiple_reward_level_for_test_cell"] != "None":
+  test_cells_with_multiple_reward_levels = config_al["multiple_reward_level_for_test_cell"].keys()
+else:
+  test_cells_with_multiple_reward_levels = []
+
+# COMMAND ----------
 
 # Headroom allocation
 under_predict_adjustment_factor = config_al["headroom_factor"]
@@ -181,90 +138,156 @@ predictions = predictions.withColumn(
 predictions_cnt = predictions.count()
 logger.info(f"""predictions_cnt: {predictions_cnt}""")
 
-# spend and save feature column l2_id_total_spend_basket
+# COMMAND ----------
 
-# allocate for spend and save
-if config_al["tcol_allocate_separately"]:
-    # TCOL segment
-    segtco_history_df = persist_utils.read_table(
-        table_name = config.factory_tbl_segtco_history
-        )
-    segtco_history_ = tmo_utils.get_preceding_segtco_history(
-        segtco_history_df, campaign
-    )
+predictions.display()
 
-    predictions = predictions.join(
-        segtco_history_.select("cust_id", "cust_band_fd"), on="cust_id", how="left"
-    )
-    prediction_top = predictions.filter(F.col("cust_band_fd").contains("Top"))
-    prediction_not_top = predictions.filter(~F.col("cust_band_fd").contains("Top"))
-    assert (
-        prediction_top.count() > 0
-    ), f"No of rows for customer in top group, got {prediction_top.count()}"
+# COMMAND ----------
 
-    # top allocation
-    logger.info(
-        f"Allocation top customer, number of top customers {prediction_top.select('cust_id').distinct().count()}"
-    )
-    allocation_manager_top = Allocator(
-        feature_col=config_al["feature_col"],
-        offer_limits=config["offer_limits_top"],  # change this for new top offer
-        offer_desc=config["offers_desc_top"],  # change this for new top offer
-        user_key=config_al["user_key"],
-        lx_key=config_al["lx_key"],
-        email_eligibility=config["eligible_customers"],
-        outlier_min=config_al["outlier_min"],
-        outlier_max=config_al["outlier_max"],
-        max_increase=config_al["max_increase"],
-        min_increase=config_al["min_increase"],
-        headroom_factor=config_al["headroom_factor"],
-        fill_offer=config_al["fill_offer"],  # change this for top customer
-        prev_not_bought_factor=config_al["prev_not_bought_factor"],
-    )
-    headroom_export_top = allocation_manager_top.get(prediction_top, campaign_df=campaign_df).withColumn(
-        "campaign", F.lit(campaign)
-    )
-    logger.info("Allocation top customer - finished")
-
-    # non-top allocation
-    logger.info(
-        f"Allocation NOT top customer, number of none top customers {prediction_not_top.select('cust_id').distinct().count()}"
-    )
-    allocation_manager_not_top = Allocator(
-        feature_col=config_al["feature_col"],
-        offer_limits=config["offer_limits"],
-        offer_desc=config["offers_desc"],
-        user_key=config_al["user_key"],
-        email_eligibility=config["eligible_customers"],
-        outlier_min=config_al["outlier_min"],
-        outlier_max=config_al["outlier_max"],
-        max_increase=config_al["max_increase"],
-        min_increase=config_al["min_increase"],
-        headroom_factor=config_al["headroom_factor"],
-        fill_offer=config_al["fill_offer"],
-        prev_not_bought_factor=config_al["prev_not_bought_factor"],
-    )
-    headroom_export_not_top = allocation_manager_not_top.get(
-        prediction_not_top,
-        campaign_df=campaign_df,
-    ).withColumn("campaign", F.lit(campaign))
-    logger.info("Allocation NOT top customer - finished")
-
-    headroom_export = headroom_export_top.union(headroom_export_not_top)
-
+if "headroom" in test_cells_with_multiple_reward_levels:
+    reward_percs = config_al["multiple_reward_level_for_test_cell"]["headroom"]
 else:
-    logger.info("Allocating all customers")
-    if config["category_level"]:
-        headroom_export = None
-        # Allocate offers for each category
-        for pred_item in list(config["predict"]["pred_items"]):
-            id_to_limit_map, id_to_desc_map = get_offer_mapping(offer_variants_tbl, pred_item)
+    reward_percs = ["unique"]
+
+overwrite_table_indicator = True
+for reward in reward_percs:
+    # allocate for spend and save
+    if config_al["tcol_allocate_separately"]:
+        # TCOL segment
+        segtco_history_df = persist_utils.read_table(
+            table_name = config.factory_tbl_segtco_history
+            )
+        segtco_history_ = tmo_utils.get_preceding_segtco_history(
+            segtco_history_df, campaign
+        )
+        if config["build_dataset"]["l1_ids"] == "FD":
+            cust_seg_col = "cust_band_fd"
+        else:
+            cust_seg_col = "cust_band_ch"
+        predictions = predictions.join(
+            segtco_history_.select("cust_id", cust_seg_col), on="cust_id", how="left"
+        )
+        prediction_top = predictions.filter(F.col(cust_seg_col).contains("Top"))
+        prediction_not_top = predictions.filter(~F.col(cust_seg_col).contains("Top"))
+        assert (
+            prediction_top.count() > 0
+        ), f"No of rows for customer in top group, got {prediction_top.count()}"
+
+        # top allocation
+        logger.info(
+            f"Allocation top customer, number of top customers {prediction_top.select('cust_id').distinct().count()}"
+        )
+        allocation_manager_top = Allocator(
+            feature_col=config_al["feature_col"],
+            offer_limits=config["offer_limits_top"],  # change this for new top offer
+            offer_desc=config["offers_desc_top"],  # change this for new top offer
+            user_key=config_al["user_key"],
+            lx_key=config_al["lx_key"],
+            offer_variants=offer_variants_tbl,
+            aggregate_level=config_al["aggregate_level"],
+            email_eligibility=config["eligible_customers"],
+            outlier_min=config_al["outlier_min"],
+            outlier_max=config_al["outlier_max"],
+            max_increase=config_al["max_increase"],
+            min_increase=config_al["min_increase"],
+            headroom_factor=config_al["headroom_factor"],
+            fill_offer=config_al["fill_offer"],  # change this for top customer
+            prev_not_bought_factor=config_al["prev_not_bought_factor"],
+        )
+        headroom_export_top = allocation_manager_top.get(prediction_top, campaign_df=campaign_df).withColumn(
+            "campaign", F.lit(campaign)
+        )
+        logger.info("Allocation top customer - finished")
+
+        # non-top allocation
+        logger.info(
+            f"Allocation NOT top customer, number of none top customers {prediction_not_top.select('cust_id').distinct().count()}"
+        )
+        allocation_manager_not_top = Allocator(
+            feature_col=config_al["feature_col"],
+            offer_limits=config["offer_limits"],
+            offer_desc=config["offers_desc"],
+            user_key=config_al["user_key"],
+            lx_key=config_al["lx_key"],
+            aggregate_level=config_al["aggregate_level"],
+            offer_variants=offer_variants_tbl,
+            email_eligibility=config["eligible_customers"],
+            outlier_min=config_al["outlier_min"],
+            outlier_max=config_al["outlier_max"],
+            max_increase=config_al["max_increase"],
+            min_increase=config_al["min_increase"],
+            headroom_factor=config_al["headroom_factor"],
+            fill_offer=config_al["fill_offer"],
+            prev_not_bought_factor=config_al["prev_not_bought_factor"],
+        )
+        headroom_export_not_top = allocation_manager_not_top.get(
+            prediction_not_top,
+            campaign_df=campaign_df,
+        ).withColumn("campaign", F.lit(campaign))
+        logger.info("Allocation NOT top customer - finished")
+
+        headroom_export = headroom_export_top.union(headroom_export_not_top)
+
+    else:
+        logger.info("Allocating all customers")
+        if config["category_level"]:
+            headroom_export = None
+            # Allocate offers for each category
+            for pred_item in list(config["predict"]["pred_items"]):
+                id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(   
+                    offer_variants_tbl=offer_variants_tbl,
+                    department=config["build_dataset"]["l1_ids"],
+                    pred_item=pred_item, 
+                    reward_perc=reward)
+
+                allocation_manager = Allocator(
+                    feature_col=config_al["feature_col"],
+                    offer_limits=id_to_limit_map,
+                    offer_desc=id_to_desc_map,
+                    user_key=config_al["user_key"],
+                    lx_key=config_al["lx_key"],
+                    aggregate_level=config_al["aggregate_level"],
+                    offer_variants=offer_variants_tbl,
+                    outlier_min=config_al["outlier_min"],
+                    outlier_max=config_al["outlier_max"],
+                    max_increase=config_al["max_increase"],
+                    min_increase=config_al["min_increase"],
+                    headroom_factor=config_al["headroom_factor"],
+                    fill_offer=config_al["fill_offer"],
+                    prev_not_bought_factor=config_al["prev_not_bought_factor"],
+                    prev_not_bought_factor_lx_id_indpendent=config_al[
+                        "prev_not_bought_factor_lx_id_indpendent"
+                    ],
+                )
+
+                headroom_export_temp = allocation_manager.get(
+                    predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item), 
+                    campaign_df=campaign_df,
+                    grouping_columns=config_sim["grouping_columns"]
+                ).withColumn(
+                    "campaign", F.lit(campaign)
+                )
+
+                if headroom_export is None:
+                    headroom_export = headroom_export_temp
+                else:
+                    headroom_export = headroom_export.unionByName(headroom_export_temp, allowMissingColumns=True)
+        else:
+            # Get full basket offer
+            id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
+                offer_variants_tbl=offer_variants_tbl,
+                department=config["build_dataset"]["l1_ids"],
+                pred_item="full_basket",
+                reward_perc=reward)
+
             allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
                 offer_limits=id_to_limit_map,
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
                 lx_key=config_al["lx_key"],
+                offer_variants=offer_variants_tbl,
+                aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
                 max_increase=config_al["max_increase"],
@@ -275,127 +298,97 @@ else:
                 prev_not_bought_factor_lx_id_indpendent=config_al[
                     "prev_not_bought_factor_lx_id_indpendent"
                 ],
-                aggregate_level=config_al["aggregate_level"],
             )
 
-            headroom_export_temp = allocation_manager.get(predictions.filter(predictions[f'{config_al["lx_key"]}_id'] == pred_item), campaign_df=campaign_df).withColumn(
+            headroom_export = allocation_manager.get(predictions, campaign_df=campaign_df).withColumn(
                 "campaign", F.lit(campaign)
             )
-            if headroom_export is None:
-                headroom_export = headroom_export_temp
-            else:
-                headroom_export = headroom_export.unionByName(headroom_export_temp, allowMissingColumns=True)
-    else:
-        # Get full basket offer
-        id_to_limit_map, id_to_desc_map = get_offer_mapping(offer_variants_tbl, "full_basket")
+            
+    if reward != "unique":
+        headroom_export = headroom_export.withColumn("test_type", F.lit(f"headroom_{str(reward)}_perc_reward"))
 
-        allocation_manager = Allocator(
-            feature_col=config_al["feature_col"],
-            offer_limits=id_to_limit_map,
-            offer_desc=id_to_desc_map,
-            user_key=config_al["user_key"],
-            lx_key=config_al["lx_key"],
-            outlier_min=config_al["outlier_min"],
-            outlier_max=config_al["outlier_max"],
-            max_increase=config_al["max_increase"],
-            min_increase=config_al["min_increase"],
-            headroom_factor=config_al["headroom_factor"],
-            fill_offer=config_al["fill_offer"],
-            prev_not_bought_factor=config_al["prev_not_bought_factor"],
-            prev_not_bought_factor_lx_id_indpendent=config_al[
-                "prev_not_bought_factor_lx_id_indpendent"
-            ],
-            aggregate_level=config_al["aggregate_level"],
-        )
+    headroom_export_cnt = headroom_export.count()
+    logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
 
-        headroom_export = allocation_manager.get(predictions, campaign_df=campaign_df).withColumn(
-            "campaign", F.lit(campaign)
-        )
+    stg_headroom_tbl_name = persist_utils.create_beam_table(
+        table_prefix=config_al.headroom_export_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_stg_database,
+        sensitivity=config.sensitivity,
+        schema=headroom_export,
+        partition_by=config_al.headroom_export_tbl.partitionByList,
+        overwrite_table=True,
+        assert_equality=False,
+        add_load_timestamp=True,
+    )
+    logger.info(f"""stg_headroom_tbl_name: {stg_headroom_tbl_name}""")
 
-headroom_export_cnt = headroom_export.count()
-logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
+    persist_utils.insert_df_into_table(
+        target_tbl_name=stg_headroom_tbl_name,
+        insert_df=headroom_export,
+        delete_where=f"campaign={campaign}",
+        insert_append=True,
+        add_columns=True,
+    )
 
-stg_headroom_tbl_name = persist_utils.create_beam_table(
-    table_prefix=config_al.headroom_export_tbl.prefix,
-    lab_database=config.lab_database,
-    factory_database=config.factory_stg_database,
-    sensitivity=config.sensitivity,
-    schema=headroom_export,
-    partition_by=config_al.headroom_export_tbl.partitionByList,
-    overwrite_table=True,
-    assert_equality=False,
-    add_load_timestamp=True,
-)
-logger.info(f"""stg_headroom_tbl_name: {stg_headroom_tbl_name}""")
+    if config_al["aggregate_level"] == "basket":
+        if config["exclude_high_spend"] is not None:
+            logger.info(
+                f"Remove customer whos spend_plus_stretch > {config['exclude_high_spend']}"
+            )
+            headroom_export = headroom_export.filter(
+                F.col("spend_plus_stretch") <= config["exclude_high_spend"]
+            )
 
-persist_utils.insert_df_into_table(
-    target_tbl_name=stg_headroom_tbl_name,
-    insert_df=headroom_export,
-    delete_where=f"campaign={campaign}",
-    insert_append=True,
-    add_columns=True,
-)
-
-if config_al["aggregate_level"] == "basket":
-    if config["exclude_high_spend"] is not None:
+    if config["min_num_basket"] is not None:
         logger.info(
-            f"Remove customer whos spend_plus_stretch > {config['exclude_high_spend']}"
+            f"Remove customer who have less than {config['min_num_basket']} basket"
         )
-        headroom_export = headroom_export.filter(
-            F.col("spend_plus_stretch") <= config["exclude_high_spend"]
+        headroom_export = headroom_export.join(
+            predictions.filter(F.col("count_user_basket") >= config["min_num_basket"])
+            .select("cust_id")
+            .distinct(),
+            how="inner",
+            on="cust_id",
         )
 
-if config["min_num_basket"] is not None:
-    logger.info(
-        f"Remove customer who have less than {config['min_num_basket']} basket"
+    headroom_export_cnt = headroom_export.count()
+    logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
+
+    headroom_tbl_name = persist_utils.create_beam_table(
+        table_prefix=config_al.headroom_export_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=headroom_export,
+        partition_by=config_al.headroom_export_tbl.partitionByList,
+        overwrite_table=overwrite_table_indicator,
+        assert_equality=False,
+        add_load_timestamp=True,
     )
-    headroom_export = headroom_export.join(
-        predictions.filter(F.col("count_user_basket") >= config["min_num_basket"])
-        .select("cust_id")
-        .distinct(),
-        how="inner",
-        on="cust_id",
+    overwrite_table_indicator = False
+    logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
+
+    persist_utils.insert_df_into_table(
+        target_tbl_name=headroom_tbl_name,
+        insert_df=headroom_export,
+        delete_where=f"campaign={campaign}",
+        insert_append=True,
+        add_columns=True,
     )
 
 headroom_export_cnt = headroom_export.count()
 logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
 
-headroom_tbl_name = persist_utils.create_beam_table(
-    table_prefix=config_al.headroom_export_tbl.prefix,
-    lab_database=config.lab_database,
-    factory_database=config.factory_database,
-    sensitivity=config.sensitivity,
-    schema=headroom_export,
-    partition_by=config_al.headroom_export_tbl.partitionByList,
-    overwrite_table=True,
-    assert_equality=False,
-    add_load_timestamp=True,
-)
-logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
-
-persist_utils.insert_df_into_table(
-    target_tbl_name=headroom_tbl_name,
-    insert_df=headroom_export,
-    delete_where=f"campaign={campaign}",
-    insert_append=True,
-    add_columns=True,
-)
-
 # COMMAND ----------
 
-headroom_export.display()
-
-# COMMAND ----------
-
-if config["category_level"]:
-  headroom_export.select("l3_id").distinct().display()
+headroom_export.groupBy('cust_id').count().select('count').distinct().display()
 
 # COMMAND ----------
 
 # Fixed stretch allocation
 
 if config["fixed_stretch"]:
-    config_sim = config["baseline_stretch_simulations"]
     fixed_stretch_tbl_name = persist_utils.get_table_name(
         factory_database=config.factory_database,
         lab_database=config.lab_database,
@@ -408,70 +401,120 @@ if config["fixed_stretch"]:
     fixed_stretch_tbl = persist_utils.read_table(
         table_name=fixed_stretch_tbl_name
     )
-    if config["category_level"]:
-        fixed_stretch_export = None
-
-        for pred_item in list(config["predict"]["pred_items"]):
-            id_to_limit_map, id_to_desc_map = get_offer_mapping(offer_variants_tbl, pred_item)
-
-            fixed_stretch_allocation_manager = Allocator(
-                    feature_col=config_al["feature_col"],
-                    offer_limits=id_to_limit_map,
-                    offer_desc=id_to_desc_map,
-                    user_key=config_al["user_key"],
-                    outlier_min=config_al["outlier_min"],
-                    outlier_max=config_al["outlier_max"],
-                    max_increase=config_al["max_increase"],
-                    min_increase=config_al["min_increase"],
-                    headroom_factor=config_al["headroom_factor"],
-                    fill_offer=config_al["fill_offer"],
-                    prev_not_bought_factor=config_al["prev_not_bought_factor"],
-                )
-
-            fixed_stretch_export_temp = fixed_stretch_allocation_manager.get(
-                predictions=fixed_stretch_tbl.filter(F.col(f'{config_al["lx_key"]}_id') == pred_item), 
-                headroom = False, 
-                grouping_columns = config_sim["grouping_columns"],
-                campaign_df=campaign_df,
-            )
-            fixed_stretch_export_temp = fixed_stretch_export_temp.withColumn("campaign", F.lit(campaign))
-            if fixed_stretch_export is None:
-                fixed_stretch_export = fixed_stretch_export_temp
-            else:
-                fixed_stretch_export = fixed_stretch_export.unionByName(fixed_stretch_export_temp)
+    
+    fixed_stretch_pattern = r"^\d+_stretch_\d+_perc$"
+    test_cells = [col for col in fixed_stretch_tbl.columns if re.match(fixed_stretch_pattern, col)]
+    # For each test cell, we need to check if there are multiple reward levels. If so, we need to run the allocation for each reward level.
+    if set(test_cells).issubset(test_cells_with_multiple_reward_levels):
+        intersection_test_cell = test_cells
     else:
-        # Get full basket offer
-        id_to_limit_map, id_to_desc_map = get_offer_mapping(offer_variants_tbl, "full_basket")
+        # Add None as a placeholder for when not all test cells are specified with multiple reward levels
+        intersection_test_cell = [None]
 
-        fixed_stretch_allocation_manager = Allocator(
-                feature_col=config_al["feature_col"],
-                offer_limits=id_to_limit_map,
-                offer_desc=id_to_desc_map,
-                user_key=config_al["user_key"],
-                outlier_min=config_al["outlier_min"],
-                outlier_max=config_al["outlier_max"],
-                max_increase=config_al["max_increase"],
-                min_increase=config_al["min_increase"],
-                headroom_factor=config_al["headroom_factor"],
-                fill_offer=config_al["fill_offer"],
-                prev_not_bought_factor=config_al["prev_not_bought_factor"],
-            )
+    non_intersection_test_cell = [col for col in fixed_stretch_tbl.columns if col not in intersection_test_cell]
 
-        fixed_stretch_export = fixed_stretch_allocation_manager.get(
-            predictions=fixed_stretch_tbl, 
-            headroom = False, 
-            grouping_columns = config_sim["grouping_columns"],
-            campaign_df=campaign_df,
-        )
-        fixed_stretch_export = fixed_stretch_export.withColumn("campaign", F.lit(campaign))
+    fixed_stretch_export_final = []
+    # Iterating through test cells in intersection_test_cell
+    for test_cell in intersection_test_cell:
+        if test_cell is None: # test cell is None, meaning it has no multiple reward levels
+            reward_percs = ["unique"]
+            columns = non_intersection_test_cell
+        else: # else the test cell has multiple reward levels
+            reward_percs = config_al["multiple_reward_level_for_test_cell"][test_cell]
+            columns = non_intersection_test_cell + [test_cell]
+        
+        for reward in reward_percs:
+            # for reward in reward_percs
+            if config["category_level"]:
+                fixed_stretch_export = None
 
-    fixed_stretch_export.display()
+                for pred_item in list(config["predict"]["pred_items"]):
+                    id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
+                        offer_variants_tbl=offer_variants_tbl,
+                        department=config["build_dataset"]["l1_ids"],
+                        pred_item=pred_item,
+                        reward_perc=reward)
+
+                    fixed_stretch_allocation_manager = Allocator(
+                            feature_col=config_al["feature_col"],
+                            offer_limits=id_to_limit_map,
+                            offer_desc=id_to_desc_map,
+                            user_key=config_al["user_key"],
+                            lx_key=config_al["lx_key"],
+                            offer_variants=offer_variants_tbl,
+                            aggregate_level=config_al["aggregate_level"],
+                            outlier_min=config_al["outlier_min"],
+                            outlier_max=config_al["outlier_max"],
+                            max_increase=config_al["max_increase"],
+                            min_increase=config_al["min_increase"],
+                            headroom_factor=config_al["headroom_factor"],
+                            fill_offer=config_al["fill_offer"],
+                            prev_not_bought_factor=config_al["prev_not_bought_factor"],
+                        )
+
+                    fixed_stretch_export_temp = fixed_stretch_allocation_manager.get(
+                        predictions=fixed_stretch_tbl.filter(F.col(f'{config_al["lx_key"]}_id') == pred_item).select(columns), 
+                        headroom = False, 
+                        grouping_columns = config_sim["grouping_columns"],
+                        campaign_df=campaign_df,
+                    )
+                    fixed_stretch_export_temp = fixed_stretch_export_temp.withColumn("campaign", F.lit(campaign))
+                    if fixed_stretch_export is None:
+                        fixed_stretch_export = fixed_stretch_export_temp
+                    else:
+                        fixed_stretch_export = fixed_stretch_export.unionByName(fixed_stretch_export_temp)
+            else:
+                # Get full basket offer
+                id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
+                    offer_variants_tbl=offer_variants_tbl,
+                    department=config["build_dataset"]["l1_ids"],
+                    pred_item="full_basket", 
+                    reward_perc=reward)
+
+                fixed_stretch_allocation_manager = Allocator(
+                        feature_col=config_al["feature_col"],
+                        offer_limits=id_to_limit_map,
+                        offer_desc=id_to_desc_map,
+                        user_key=config_al["user_key"],
+                        offer_variants=offer_variants_tbl,
+                        lx_key=config_al["lx_key"],
+                        aggregate_level=config_al["aggregate_level"],
+                        outlier_min=config_al["outlier_min"],
+                        outlier_max=config_al["outlier_max"],
+                        max_increase=config_al["max_increase"],
+                        min_increase=config_al["min_increase"],
+                        headroom_factor=config_al["headroom_factor"],
+                        fill_offer=config_al["fill_offer"],
+                        prev_not_bought_factor=config_al["prev_not_bought_factor"],
+                    )
+
+                fixed_stretch_export = fixed_stretch_allocation_manager.get(
+                    predictions=fixed_stretch_tbl.select(columns), 
+                    headroom = False, 
+                    grouping_columns = config_sim["grouping_columns"],
+                    campaign_df=campaign_df,
+                )
+                fixed_stretch_export = fixed_stretch_export.withColumn("campaign", F.lit(campaign))
+                if reward != "unique":
+                    fixed_stretch_export = fixed_stretch_export.withColumn("test_type", F.lit(str(test_cell)+"_"+ str(reward)+"_perc_reward"))
+        
+            fixed_stretch_export_final.append(fixed_stretch_export)
+
+fixed_stretch_export_final = reduce(lambda df1, df2: df1.unionByName(df2), fixed_stretch_export_final)
+fixed_stretch_export_final.display()
+
+# COMMAND ----------
+
+fixed_stretch_export_final.groupBy("test_type").count().display()
+
+# COMMAND ----------
+
+fixed_stretch_export_final.groupBy("cust_id").count().select("count").distinct().display()
 
 # COMMAND ----------
 
 # one article unit + headroom stretch allocation
 if config["one_article_unit_stretch"]:
-    config_sim = config['baseline_stretch_simulations']
     one_article_unit_stretch_tbl_name = persist_utils.get_table_name(
         factory_database=config.factory_database,
         lab_database=config.lab_database,
@@ -508,13 +551,20 @@ if config["one_article_unit_stretch"]:
     
     one_article_plus_headroom_stretch_export = None
     for pred_item in list(config["predict"]["pred_items"]):
-        id_to_limit_map, id_to_desc_map = get_offer_mapping(offer_variants_tbl, pred_item)
+        id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
+            offer_variants_tbl=offer_variants_tbl,
+            department=config["build_dataset"]["l1_ids"],
+            pred_item=pred_item, 
+            reward_perc="unique")
 
         one_article_plus_headroom_stretch_allocation_manager = Allocator(
                 feature_col=config_al["feature_col"],
                 offer_limits=id_to_limit_map,
                 offer_desc=id_to_desc_map,
                 user_key=config_al["user_key"],
+                lx_key=config_al["lx_key"],
+                offer_variants=offer_variants_tbl,
+                aggregate_level=config_al["aggregate_level"],
                 outlier_min=config_al["outlier_min"],
                 outlier_max=config_al["outlier_max"],
                 max_increase=config_al["max_increase"],
@@ -549,7 +599,7 @@ if config["one_article_unit_stretch"]:
 # one article unit + fixed percentage stretch allocation
 if config["one_article_unit_stretch"] & config["fixed_stretch"]:
   one_article_unit_plus_fixed_stretch_tbl = one_article_unit_stretch_tbl.join(
-    fixed_stretch_export.select(["cust_id", f'{config_al["lx_key"]}_id', "spend_plus_stretch", "test_type"]),
+    fixed_stretch_export_final.select(["cust_id", f'{config_al["lx_key"]}_id', "spend_plus_stretch", "test_type"]).distinct(),
     on=["cust_id", f'{config_al["lx_key"]}_id'],
     how="right"
   )
@@ -570,13 +620,20 @@ if config["one_article_unit_stretch"] & config["fixed_stretch"]:
 
   one_article_plus_fixed_stretch_export = None
   for pred_item in list(config["predict"]["pred_items"]):
-      id_to_limit_map, id_to_desc_map = get_offer_mapping(offer_variants_tbl, pred_item)
+      id_to_limit_map, id_to_desc_map = Allocator.get_offer_mapping(
+          offer_variants_tbl=offer_variants_tbl,
+          department=config["build_dataset"]["l1_ids"],
+          pred_item=pred_item, 
+          reward_perc="unique")
 
       one_article_plus_fixed_stretch_allocation_manager = Allocator(
               feature_col=config_al["feature_col"],
               offer_limits=id_to_limit_map,
               offer_desc=id_to_desc_map,
               user_key=config_al["user_key"],
+              lx_key=config_al["lx_key"],
+              offer_variants=offer_variants_tbl,
+              aggregate_level=config_al["aggregate_level"],   
               outlier_min=config_al["outlier_min"],
               outlier_max=config_al["outlier_max"],
               max_increase=config_al["max_increase"],
@@ -616,7 +673,7 @@ else:
   exports_merged = headroom_export
 
 if config["fixed_stretch"]:
-  exports_merged = exports_merged.select(fixed_stretch_export.columns).unionByName(fixed_stretch_export).orderBy("cust_id")
+  exports_merged = exports_merged.select(fixed_stretch_export_final.columns).unionByName(fixed_stretch_export_final).orderBy("cust_id")
 
   if config["one_article_unit_stretch"]:
     exports_merged = exports_merged.unionByName(one_article_plus_fixed_stretch_export).orderBy("cust_id")
@@ -624,9 +681,53 @@ if config["fixed_stretch"]:
 
 # COMMAND ----------
 
-# Removing customers with no headroom output
-headroom_customers = exports_merged.filter(exports_merged["test_type"] == "headroom").select("cust_id").distinct()
-all_export = exports_merged.join(headroom_customers, on="cust_id", how="inner")
+# Standardize the allocation output table format
+if config["category_level"] == True:
+  all_export = exports_merged.withColumnRenamed(f'{config_al["lx_key"]}_id', "scope")
+  all_export = all_export.withColumn("scope", 
+                                     F.concat(F.col("scope"), 
+                                              F.lit("_" + config["segmentation"]["l1_id"].lower())
+                                            ))
+else:
+  all_export = exports_merged.withColumn("scope", F.lit("full_basket_" + config["segmentation"]["l1_id"].lower()))
+
+all_export = all_export.withColumn("mechanic", F.lit(config["mechanic"]))
+all_export = all_export.withColumn("test_accounts", F.lit(False))
+
+# COMMAND ----------
+
+# Removing customers that don't have all test cells
+occurance_count = all_export.groupby(["cust_id", "scope"]).agg(F.count("*").alias("count"))
+max_count = occurance_count.agg(F.max("count").alias("max_count")).collect()[0][0]
+cust_scope_with_max_count = occurance_count.filter(F.col("count") == max_count)
+all_export = all_export.join(cust_scope_with_max_count.select("cust_id", "scope"), on=["cust_id", "scope"], how="inner")
+
+# COMMAND ----------
+
+# Add account_id and uk_digital_id to the allocation output table
+cust_id_link_tbl_name = persist_utils.get_table_name(
+  factory_database=config.factory_database,
+  lab_database=config.lab_database,
+  table_prefix=config["build_dataset"].headroom_cust_id_link_tbl.prefix,
+  sensitivity=config.sensitivity
+)
+
+logger.info(f"""cust_id_link_tbl_name: {cust_id_link_tbl_name}""")
+
+cust_id_link_tbl = persist_utils.read_table(
+    table_name=cust_id_link_tbl_name,
+    where=f"campaign = {campaign}"
+)
+
+all_export = all_export.join(
+  cust_id_link_tbl.filter(F.col("account_id").isNotNull()).select(["cust_id", "account_id", "uk_digital_id"]), 
+  on="cust_id", 
+  how="inner"
+)
+
+assert all_export.filter(F.col("account_id").isNull()).count() == 0, "Not all customers have an account ID"
+assert all_export.groupBy(all_export.columns).count().filter(F.col("count") > 1).count() == 0, "The table contains duplicate rows"
+
 
 # COMMAND ----------
 
@@ -637,20 +738,21 @@ test_cells_tbl_name = persist_utils.create_beam_table(
     sensitivity=config.sensitivity,
     schema=all_export,
     partition_by=config_al.full_export_tbl.partitionByList,
-    overwrite_table=True,
+    overwrite_table=False,
     assert_equality=False,
     add_load_timestamp=True,
 )
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
+scope_list = ','.join(map(repr, all_export.select("scope").distinct().toPandas()["scope"]))
+
 persist_utils.insert_df_into_table(
-target_tbl_name=test_cells_tbl_name,
-insert_df=all_export,
-insert_append=True,
-add_columns=True,
+    target_tbl_name=test_cells_tbl_name,
+    insert_df=all_export,
+    insert_append=True,
+    add_columns=True,
+    delete_where=f"campaign='{campaign}' AND scope IN ({scope_list}) AND mechanic='{config['mechanic']}'"
 )
-
-
 
 # COMMAND ----------
 
@@ -664,12 +766,9 @@ test_cells_tbl_name = persist_utils.get_table_name(
 logger.info(f"""test_cells_tbl_name: {test_cells_tbl_name}""")
 
 test_cells_tbl = persist_utils.read_table(
-    table_name=test_cells_tbl_name
+    table_name=test_cells_tbl_name,
+    where=f"campaign='{campaign}' AND scope IN ({scope_list}) AND mechanic='{config['mechanic']}'"
 )
-
-# COMMAND ----------
-
-test_cells_tbl.display()
 
 # COMMAND ----------
 
@@ -677,18 +776,17 @@ test_cells_tbl.groupby("cust_id").count().select('count').distinct().display()
 
 # COMMAND ----------
 
-if config["category_level"]:
-  test_cells_tbl.groupby(["cust_id", f'{config_al["lx_key"]}_id']).count().select('count').distinct().display()
+test_cells_tbl.groupby(["cust_id", "scope"]).count().select('count').distinct().display()
 
 # COMMAND ----------
 
-print(headroom_export.select('cust_id').join(fixed_stretch_export.select('cust_id'), on='cust_id', how='left_anti').select('cust_id').distinct().count())
-print(fixed_stretch_export.select('cust_id').join(headroom_export.select('cust_id'), on='cust_id', how='left_anti').select('cust_id').distinct().count())
+print(headroom_export.select('cust_id').join(fixed_stretch_export_final.select('cust_id'), on='cust_id', how='left_anti').select('cust_id').distinct().count())
+print(fixed_stretch_export_final.select('cust_id').join(headroom_export.select('cust_id'), on='cust_id', how='left_anti').select('cust_id').distinct().count())
 
 # COMMAND ----------
 
-print(fixed_stretch_export.select('cust_id').join(headroom_export.select('cust_id'), on='cust_id', how='inner').select('cust_id').distinct().count())
-print(fixed_stretch_export.select('cust_id').distinct().count())
+print(fixed_stretch_export_final.select('cust_id').join(headroom_export.select('cust_id'), on='cust_id', how='inner').select('cust_id').distinct().count())
+print(fixed_stretch_export_final.select('cust_id').distinct().count())
 
 
 # COMMAND ----------
