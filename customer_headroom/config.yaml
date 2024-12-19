@@ -14,7 +14,7 @@ category_level: True
 eligible_customers: False
 
 mechanic_type_dict: '{"accumulator": 1, "task": 2, "combo": 3, "streak": 4}'
-ch_fd_dict: '{"ch":1, "fd":2}'
+ch_fd_dict: '{"gm":1, "fd":2}'
 scope_type_dict: '{"full_basket": 1, "category": 2, "sub_category": 3}'
 
 # ========================================================================================================
