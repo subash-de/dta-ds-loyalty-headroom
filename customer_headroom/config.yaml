@@ -74,7 +74,7 @@ tables:
     partitionByList: ["campaign"]
   offer_variants_tbl: &offer_variants_tbl
     prefix: headroom_accumulator_offer_variants
-    partitionByList: ["Target"]
+    partitionByList: ["target"]
   mbr_mission_dtls_tbl: &mbr_mission_dtls_tbl
     prefix: loyalty_mbr_mission_details
     sensitivity: ns
