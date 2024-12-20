@@ -13,6 +13,10 @@ one_article_unit_stretch: True
 category_level: False
 eligible_customers: False
 
+mechanic_type_dict: '{"accumulator": 1, "task": 2, "combo": 3, "streak": 4}'
+ch_fd_dict: '{"gm":1, "fd":2}'
+scope_type_dict: '{"full_basket": 1, "category": 2, "sub_category": 3}'
+=======
 mechanic: accumulator
 
 # ========================================================================================================
@@ -22,6 +26,8 @@ factory_tbl_all_transaction_line: "analytics_trans_prod.all_transaction_line"
 factory_tbl_sparks_account: "analytics_trans_prod.sparks_account"
 factory_tbl_lu_article: "analytics_trans_prod.lu_article"
 factory_tbl_segtco_history: "customer_azbase_prod.segtco_history"
+factory_tbl_omp: "omp_analyse_prod.offer_nsaz_tbl"
+factory_tbl_beanstore: "beanstore_ingest_prod.pos_promotion_set_ns_tbl"
 
 
 debug:
@@ -69,6 +75,20 @@ tables:
   offer_variants_tbl: &offer_variants_tbl
     prefix: headroom_accumulator_offer_variants
     partitionByList: ["target"]
+  mbr_mission_dtls_tbl: &mbr_mission_dtls_tbl
+    prefix: loyalty_mbr_mission_details
+    sensitivity: ns
+    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+  mbr_mission_product_mapping_tbl: &mbr_mission_product_mapping_tbl   
+    prefix: loyalty_mbr_mission_product
+    sensitivity: ns
+    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+  mbr_allocation_post_test_cell_tbl: &mbr_allocation_post_test_cell_tbl
+    prefix: loyalty_mbr_allocation_post_test_cell
+    partitionByList: ["campaign", "mechanic_type_id", "ch_fd_id", "scope_type_id"]
+  mbr_allocation_export_tbl: &mbr_allocation_export_tbl
+    prefix: loyalty_mbr_allocation_export
+    partitionByList: ["campaign_id", "batch_id"]
   test_accounts_tbl: &test_accounts_tbl
     prefix: headroom_accumulator_test_accounts
     partitionByList: ["campaign"]
