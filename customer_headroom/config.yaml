@@ -213,6 +213,8 @@ fit_rec:
   param_name: &param_name "data_params"
   rec_name: &rec_name "recommender"
   model_prefix: &model_prefix "_full_basket"
+  main_expt_path: "/Shared/mlflow_experiments" # Workspace path
+  main_expt_name: "headroom_ray_experiment"
 predict:
   model_prefix: *model_prefix
   # input
