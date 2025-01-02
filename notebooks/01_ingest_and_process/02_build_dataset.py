@@ -31,10 +31,6 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
-config.dates.etl_date
-
-# COMMAND ----------
-
 debug = False
 if debug:
     config.dates.etl_date = config.debug.tables.etl_date
@@ -67,18 +63,31 @@ last_registration_date: {last_registration_date}
 #       - segmentation id (of each experian_hh_composition)
 
 config_use = config["use_segments"]
+config_sg = config["segmentation"]
 segmentations_tbl_name = factory_table(
     table_prefix=config_use.segmentations_tbl.prefix, sensitivity=config.sensitivity
 )
 segmentations_tbl = persist_utils.read_table(
-    table_name=segmentations_tbl_name, where=f"campaign={campaign}"
+    table_name=segmentations_tbl_name, where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}"
 )
 if config_use["all"]:
     logger.info("Use all Segmentations")
     seg_list = find_all_segments(segmentations_tbl, config_use["partitionByList"])
 else:
     seg_list = config_use["seg_list"]
+
+# converting category_level from boolean to string
+seg_list = [{**d, 'category_level': str(d['category_level'])} if 'category_level' in d else d for d in seg_list]
 logger.info(f"Segmentations: {seg_list}")
+
+# COMMAND ----------
+
+config_use = config["use_segments"]
+config_sg = config["segmentation"]
+
+# COMMAND ----------
+
+segmentations_tbl.display()
 
 # COMMAND ----------
 
@@ -171,10 +180,6 @@ if build_dataset == "True":
 
     logger.info(f"""segmentations_tbl_name: {segmentations_tbl_name}""")
 
-    segmentations_tbl = persist_utils.read_table(
-        table_name=segmentations_tbl_name, where=f"campaign= {campaign}"
-    ).select([config_bd["user_id"]] + partitionByList)
-
     # build training data
     trx_manager = TransactionsManager(
         etl_date=get_date(config.dates.etl_date),
@@ -192,7 +197,9 @@ if build_dataset == "True":
     )
 
     all_data = trx_manager.get(trx_line_df, articles_df, cust_seg=segmentations_tbl)
-
+    all_data = all_data.withColumn('l1_id', F.lit(config_sg['l1_id']))
+    all_data = all_data.withColumn('category_level', F.lit(config['category_level']))
+   
     etl_data_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_bd.etl_data_tbl.prefix,
         lab_database=config.lab_database,
@@ -211,14 +218,16 @@ if build_dataset == "True":
         insert_df=all_data,
         add_columns=True,
         insert_append=True,
-        delete_where=f"campaign={campaign}",
+        delete_where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}",
     )
 
     # TODO: Save cust_id to account_id Mapping as done in the customer_purchase work.
     # TODO: delete all mentions of validationmanager
 
     etl_data_tbl = persist_utils.read_table(
-        table_name=etl_data_tbl_name, where=f"campaign={campaign}"
+        # table_name=etl_data_tbl_name, where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}"
+        table_name=etl_data_tbl_name,
+        where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}"
     )
     sparks = persist_utils.read_table(
         table_name = config.factory_tbl_sparks_account
@@ -231,6 +240,8 @@ if build_dataset == "True":
         .distinct()
         .join(sparks, how = 'left', on = 'cust_id')
         .withColumn('campaign', F.lit(campaign))
+        .withColumn('l1_id', F.lit(config_sg['l1_id']))
+        .withColumn('category_level', F.lit(config['category_level']))
     )
     cust_id_link_tbl_name = persist_utils.create_beam_table(
         table_prefix=config_bd.headroom_cust_id_link_tbl.prefix,
@@ -250,7 +261,7 @@ if build_dataset == "True":
         insert_df=cust_id_link,
         add_columns=True,
         insert_append=True,
-        delete_where=f"campaign={campaign}",
+        delete_where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}",
     )
 
 
@@ -277,6 +288,10 @@ if build_dataset == "True":
 # COMMAND ----------
 
 etl_data_tbl.select(f'{config_bd["lx"]}_id').distinct().display()
+
+# COMMAND ----------
+
+etl_data_tbl.select('campaign','l1_id','category_level').distinct().display()
 
 # COMMAND ----------
 
@@ -313,6 +328,13 @@ trx_manager_fixed_stretch = TransactionsManagerFixedStretch(
 )
 
 weekly_data = trx_manager_fixed_stretch.get(trx_line_df, articles_df)
+weekly_data = weekly_data.withColumn('campaign', F.lit(campaign))
+weekly_data = weekly_data.withColumn("l1_id", F.lit(config_sg['l1_id']))
+weekly_data = weekly_data.withColumn("category_level", F.lit(config['category_level']))
+
+# COMMAND ----------
+
+weekly_data.display()
 
 # COMMAND ----------
 
@@ -329,7 +351,7 @@ fixed_stretch_etl_data_tbl_name= persist_utils.create_beam_table(
     sensitivity=config.sensitivity,
     schema=weekly_data,
     partition_by=config_bd.fixed_stretch_etl_data_tbl.partitionByList,
-    overwrite_table=True,
+    overwrite_table=False,
     assert_equality=False,
     add_load_timestamp=True,
 )
@@ -340,6 +362,7 @@ persist_utils.insert_df_into_table(
     insert_df=weekly_data,
     insert_append=True,
     add_columns=True,
+    delete_where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}",
 )
 
 # COMMAND ----------
@@ -354,12 +377,9 @@ fixed_stretch_etl_data_tbl_name = persist_utils.get_table_name(
 logger.info(f"""fixed_stretch_etl_data_tbl_name: {fixed_stretch_etl_data_tbl_name}""")
 
 fixed_stretch_etl_data_tbl = persist_utils.read_table(
-    table_name=fixed_stretch_etl_data_tbl_name
+    table_name=fixed_stretch_etl_data_tbl_name,
+    where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}"
 )
-
-# COMMAND ----------
-
-fixed_stretch_etl_data_tbl.display()
 
 # COMMAND ----------
 
@@ -384,6 +404,9 @@ customer_one_additional_unit_price_stretch = trx_manager_one_unit_stretch.get(tr
                                                config_sim["percentile_for_one_additional_unit_price"], 
                                                config_sim["percentile_for_customer_one_additional_unit_price"],
                                                config_sim["article_threshold_for_fallback"])
+customer_one_additional_unit_price_stretch = customer_one_additional_unit_price_stretch.withColumn("campaign", F.lit(campaign))
+customer_one_additional_unit_price_stretch = customer_one_additional_unit_price_stretch.withColumn("l1_id", F.lit(config_sg['l1_id']))
+customer_one_additional_unit_price_stretch = customer_one_additional_unit_price_stretch.withColumn("category_level", F.lit(config['category_level']))
 
 # COMMAND ----------
 
@@ -402,7 +425,7 @@ one_article_unit_stretch_etl_data_tbl_name= persist_utils.create_beam_table(
     sensitivity=config.sensitivity,
     schema=customer_one_additional_unit_price_stretch,
     partition_by=config_bd.one_article_unit_stretch_etl_data_tbl.partitionByList,
-    overwrite_table=True,
+    overwrite_table=False,
     assert_equality=False,
     add_load_timestamp=True,
 )
@@ -413,7 +436,8 @@ persist_utils.insert_df_into_table(
     insert_df=customer_one_additional_unit_price_stretch,
     insert_append=True,
     add_columns=True,
-)
+    delete_where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}"
+    )
 
 # COMMAND ----------
 
@@ -427,8 +451,9 @@ one_article_unit_stretch_etl_data_tbl_name = persist_utils.get_table_name(
 logger.info(f"""one_article_unit_stretch_etl_data_tbl_name: {one_article_unit_stretch_etl_data_tbl_name}""")
 
 one_article_unit_stretch_etl_data_tbl = persist_utils.read_table(
-    table_name=one_article_unit_stretch_etl_data_tbl_name
-)
+  table_name=one_article_unit_stretch_etl_data_tbl_name,
+  where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}"
+  )
 
 # COMMAND ----------
 

@@ -100,6 +100,7 @@ campaign_df = None
 logger.info("Begin Allocation")
 config_al = config["allocation"]
 config_sim = config["baseline_stretch_simulations"]
+config_sg = config["segmentation"]
 
 # COMMAND ----------
 
@@ -107,6 +108,21 @@ if config_al["multiple_reward_level_for_test_cell"] != "None":
   test_cells_with_multiple_reward_levels = config_al["multiple_reward_level_for_test_cell"].keys()
 else:
   test_cells_with_multiple_reward_levels = []
+
+# COMMAND ----------
+
+prediction_tbl_name = persist_utils.get_table_name(
+    factory_database=config.factory_database,
+    lab_database=config.lab_database,
+    table_prefix=config_al.prediction_tbl.prefix,
+    sensitivity=config.sensitivity,
+)
+logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
+
+predictions = persist_utils.read_table(
+    table_name=prediction_tbl_name, 
+    where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
+)
 
 # COMMAND ----------
 
@@ -122,7 +138,7 @@ prediction_tbl_name = persist_utils.get_table_name(
 logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
 predictions = persist_utils.read_table(
-    table_name=prediction_tbl_name, where=f"campaign={campaign}"
+    table_name=prediction_tbl_name, where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
 )
 
 # if its under predicting, then would force the stretch to be 20%
@@ -140,16 +156,11 @@ logger.info(f"""predictions_cnt: {predictions_cnt}""")
 
 # COMMAND ----------
 
-predictions.display()
-
-# COMMAND ----------
-
 if "headroom" in test_cells_with_multiple_reward_levels:
     reward_percs = config_al["multiple_reward_level_for_test_cell"]["headroom"]
 else:
     reward_percs = ["unique"]
 
-overwrite_table_indicator = True
 for reward in reward_percs:
     # allocate for spend and save
     if config_al["tcol_allocate_separately"]:
@@ -307,6 +318,9 @@ for reward in reward_percs:
     if reward != "unique":
         headroom_export = headroom_export.withColumn("test_type", F.lit(f"headroom_{str(reward)}_perc_reward"))
 
+    print("headroom export columns:", headroom_export)
+    headroom_export = headroom_export.withColumn("l1_id", F.lit(config_sg['l1_id']))
+    headroom_export = headroom_export.withColumn("category_level", F.lit(config['category_level']))
     headroom_export_cnt = headroom_export.count()
     logger.info(f"""headroom_export_cnt: {predictions_cnt}""")
 
@@ -317,7 +331,7 @@ for reward in reward_percs:
         sensitivity=config.sensitivity,
         schema=headroom_export,
         partition_by=config_al.headroom_export_tbl.partitionByList,
-        overwrite_table=True,
+        overwrite_table=False,
         assert_equality=False,
         add_load_timestamp=True,
     )
@@ -326,9 +340,9 @@ for reward in reward_percs:
     persist_utils.insert_df_into_table(
         target_tbl_name=stg_headroom_tbl_name,
         insert_df=headroom_export,
-        delete_where=f"campaign={campaign}",
         insert_append=True,
         add_columns=True,
+        delete_where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}",
     )
 
     if config_al["aggregate_level"] == "basket":
@@ -362,17 +376,17 @@ for reward in reward_percs:
         sensitivity=config.sensitivity,
         schema=headroom_export,
         partition_by=config_al.headroom_export_tbl.partitionByList,
-        overwrite_table=overwrite_table_indicator,
+        overwrite_table=False,
         assert_equality=False,
         add_load_timestamp=True,
     )
-    overwrite_table_indicator = False
+    
     logger.info(f"""headroom_tbl_name: {headroom_tbl_name}""")
 
     persist_utils.insert_df_into_table(
         target_tbl_name=headroom_tbl_name,
         insert_df=headroom_export,
-        delete_where=f"campaign={campaign}",
+        delete_where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}",
         insert_append=True,
         add_columns=True,
     )
@@ -399,7 +413,8 @@ if config["fixed_stretch"]:
     logger.info(f"""fixed_stretch_tbl_name: {fixed_stretch_tbl_name}""")
 
     fixed_stretch_tbl = persist_utils.read_table(
-        table_name=fixed_stretch_tbl_name
+        table_name=fixed_stretch_tbl_name,
+        where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}",   
     )
     
     fixed_stretch_pattern = r"^\d+_stretch_\d+_perc$"
@@ -526,7 +541,9 @@ if config["one_article_unit_stretch"]:
     logger.info(f"""one_article_unit_stretch_tbl_name: {one_article_unit_stretch_tbl_name}""")
 
     one_article_unit_stretch_tbl = persist_utils.read_table(
-        table_name=one_article_unit_stretch_tbl_name
+        table_name=one_article_unit_stretch_tbl_name,
+        where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}",   
+        
     )
 
     one_article_unit_plus_headroom_stretch_tbl = one_article_unit_stretch_tbl.join(
@@ -716,7 +733,7 @@ logger.info(f"""cust_id_link_tbl_name: {cust_id_link_tbl_name}""")
 
 cust_id_link_tbl = persist_utils.read_table(
     table_name=cust_id_link_tbl_name,
-    where=f"campaign = {campaign}"
+    where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}",   
 )
 
 all_export = all_export.join(

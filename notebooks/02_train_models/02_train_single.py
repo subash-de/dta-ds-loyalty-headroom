@@ -92,6 +92,7 @@ def run_fit_rec(seg, config):
     config_fr = config["fit_rec"]
     partitionByList = config_fr["partitionByList"]
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
+    seg_ext = ["(category_level=True)" if "(category_level='True')" in item else "(category_level=False)" if "(category_level='False')" in item else item for item in seg_ext]
     ext_str = "_".join([str(seg[k]) for k in partitionByList])
 
     model_tags = {**config.get("model_tags", {}), **{"campaign": campaign}}

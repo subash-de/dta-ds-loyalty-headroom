@@ -29,7 +29,6 @@ else:
 
 # COMMAND ----------
 
-
 def find_all_segments(data, partitionByList):
     segs = (
         data.select(partitionByList)
@@ -84,6 +83,7 @@ last_registration_date: {last_registration_date}
 
 logger.info("Begin Predictions")
 config_pd = config["predict"]
+config_sg = config['segmentation']
 partitionByList = config_pd["partitionByList"]
 
 # get list of pred items depending on lx id and whether the prediction is on category level or not
@@ -156,6 +156,8 @@ for seg in seg_list:
     # new rows are added in the predict step for l2 ids not in etl
     predictions = (
         predictions.withColumn("campaign", F.lit(campaign))
+        .withColumn("l1_id", F.lit(config_sg['l1_id']))
+        .withColumn("category_level", F.lit(config['category_level']))
         .drop("load_timestamp")
         .withColumn("experian_hh_composition", F.lit(seg["experian_hh_composition"]))
         .withColumn("segmentation", F.lit(seg["segmentation"]))
@@ -177,14 +179,13 @@ for seg in seg_list:
     )
     logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
+    # TODOL change this part to writing to a staging table first
     if first_segment:
         # if this is the first segment, delete all partitions related to the current campaign
-        delete_where_statement = f"campaign={campaign}"
+        delete_where_statement = f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
         first_segment = False
     else:
         delete_where_statement = None
-
-    assert campaign in ["20250106", "20250116"], "Please change the code such that full basket and category runs can write to the same table"
 
     persist_utils.insert_df_into_table(
         target_tbl_name=prediction_tbl_name,
@@ -212,7 +213,7 @@ prediction_tbl_name = persist_utils.get_table_name(
 logger.info(f"""prediction_tbl_name: {prediction_tbl_name}""")
 
 prediction_tbl = persist_utils.read_table(
-    table_name=prediction_tbl_name, where=f"campaign={campaign}"
+    table_name=prediction_tbl_name, where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
 )
 
 # COMMAND ----------
@@ -233,7 +234,8 @@ if config["fixed_stretch"]:
     logger.info(f"""fixed_stretch_etl_data_tbl_name: {fixed_stretch_etl_data_tbl_name}""")
 
     fixed_stretch_etl_tbl = persist_utils.read_table(
-        table_name=fixed_stretch_etl_data_tbl_name
+        table_name=fixed_stretch_etl_data_tbl_name,
+        where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
     )
 
 
@@ -247,6 +249,10 @@ if config["fixed_stretch"]:
         stretch_amounts = config_sim['stretch_amounts'],                               
     )
     baseline_per_customer = fixed_stretch_predicition_manager.get(fixed_stretch_etl_tbl)
+    baseline_per_customer.display()
+    baseline_per_customer = baseline_per_customer.withColumn('campaign', F.lit(campaign))
+    baseline_per_customer = baseline_per_customer.withColumn('l1_id', F.lit(config_sg['l1_id']))
+    baseline_per_customer = baseline_per_customer.withColumn('category_level', F.lit(config['category_level']))
 
     fixed_stretch_tbl_name= persist_utils.create_beam_table(
         table_prefix=config_sim.fixed_stretch_tbl.prefix,
@@ -255,7 +261,7 @@ if config["fixed_stretch"]:
         sensitivity=config.sensitivity,
         schema=baseline_per_customer,
         partition_by=config_sim.fixed_stretch_tbl.partitionByList,
-        overwrite_table=True,
+        overwrite_table=False,
         assert_equality=False,
         add_load_timestamp=True,
     )
@@ -266,6 +272,7 @@ if config["fixed_stretch"]:
         insert_df=baseline_per_customer,
         insert_append=True,
         add_columns=True,
+        delete_where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
     )
 
     fixed_stretch_tbl_name = persist_utils.get_table_name(
@@ -280,6 +287,7 @@ if config["fixed_stretch"]:
 
     fixed_stretch_tbl = persist_utils.read_table(
         table_name=fixed_stretch_tbl_name,
+        where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
     )
 
 # COMMAND ----------
@@ -296,7 +304,8 @@ if config["one_article_unit_stretch"]:
 
     logger.info(f"""one_article_unit_stretch_etl_data_tbl_name: {one_article_unit_stretch_etl_data_tbl_name}""")
     one_article_unit_stretch_etl_data_tbl = persist_utils.read_table(
-        table_name=one_article_unit_stretch_etl_data_tbl_name
+        table_name=one_article_unit_stretch_etl_data_tbl_name,
+        where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
     )
     # Get one additional unit price for each category
     one_additional_unit_price_per_id = (one_article_unit_stretch_etl_data_tbl
@@ -344,6 +353,10 @@ if config["one_article_unit_stretch"]:
     # Fill in the avg_weekly_article_count if null
     one_article_unit_stretch_tbl = one_article_unit_stretch_tbl.fillna(0, subset=["avg_weekly_article_count"])
 
+    one_article_unit_stretch_tbl = one_article_unit_stretch_tbl.withColumn('campaign', F.lit(campaign))
+    one_article_unit_stretch_tbl = one_article_unit_stretch_tbl.withColumn('l1_id', F.lit(config_sg['l1_id']))
+    one_article_unit_stretch_tbl = one_article_unit_stretch_tbl.withColumn('category_level', F.lit(config['category_level']))
+
     one_article_unit_stretch_tbl_name= persist_utils.create_beam_table(
         table_prefix=config_sim.one_article_unit_stretch_tbl.prefix,
         lab_database=config.lab_database,
@@ -351,7 +364,7 @@ if config["one_article_unit_stretch"]:
         sensitivity=config.sensitivity,
         schema=one_article_unit_stretch_tbl,
         partition_by=config_sim.one_article_unit_stretch_tbl.partitionByList,
-        overwrite_table=True,
+        overwrite_table=False,
         assert_equality=False,
         add_load_timestamp=True,
     )
@@ -362,6 +375,7 @@ if config["one_article_unit_stretch"]:
         insert_df=one_article_unit_stretch_tbl,
         insert_append=True,
         add_columns=True,
+        delete_where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
     )
 
     one_article_unit_stretch_tbl_name = persist_utils.get_table_name(
@@ -374,7 +388,8 @@ if config["one_article_unit_stretch"]:
     logger.info(f"""one_article_unit_stretch_tbl_name: {one_article_unit_stretch_tbl_name}""")
 
     one_article_unit_stretch_tbl = persist_utils.read_table(
-        table_name=one_article_unit_stretch_tbl_name
+        table_name=one_article_unit_stretch_tbl_name,
+        where=f"campaign={campaign} and l1_id = '{config_sg['l1_id']}' and category_level={config['category_level']}"
     )
 
 # COMMAND ----------

@@ -9,14 +9,14 @@ lab_database: loyalty_azlab_prod
 sensitivity: p
 
 fixed_stretch: True
-one_article_unit_stretch: True
+one_article_unit_stretch: False
 category_level: False
 eligible_customers: False
 
 mechanic_type_dict: '{"accumulator": 1, "task": 2, "combo": 3, "streak": 4}'
 ch_fd_dict: '{"gm":1, "fd":2}'
 scope_type_dict: '{"full_basket": 1, "category": 2, "sub_category": 3}'
-=======
+
 mechanic: accumulator
 
 # ========================================================================================================
@@ -37,32 +37,32 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data_fd_full_basket
-    partitionByList: [ "campaign" ]
+    prefix: headroom_segmentation_data
+    partitionByList: [ "campaign" ,"l1_id", "category_level"]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations_fd_full_basket
-    partitionByList: &segPartition [ "campaign", "experian_hh_composition", "segmentation" ]
+    prefix: headroom_segmentations
+    partitionByList: &segPartition [ "campaign", "l1_id", "category_level","experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data_fd_full_basket
+    prefix: headroom_etl_data
     partitionByList: *segPartition
   fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
-    prefix: headroom_fixed_stretch_etl_data_fd_full_basket
-    partitionByList: *segPartition
+    prefix: headroom_fixed_stretch_etl_data
+    partitionByList: ["campaign", "l1_id", "category_level"]
   one_article_unit_stretch_etl_data_tbl: &one_article_unit_stretch_etl_data_tbl
-    prefix: headroom_one_article_unit_stretch_etl_data_fd_full_basket
-    partitionByList: *segPartition
+    prefix: headroom_one_article_unit_stretch_etl_data
+    partitionByList: ["campaign", "l1_id", "category_level"]
   prediction_tbl: &prediction_tbl
-    prefix: headroom_predictions_fd_full_basket
+    prefix: headroom_predictions
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
-    prefix: headroom_fixed_stretch_fd_full_basket
-    partitionByList: *segPartition
+    prefix: headroom_fixed_stretch
+    partitionByList: ["campaign", "l1_id", "category_level"]
   one_article_unit_stretch_tbl: &one_article_unit_stretch_tbl
-    prefix: headroom_one_article_unit_stretch_fd_full_basket
-    partitionByList: *segPartition
+    prefix: headroom_one_article_unit_stretch
+    partitionByList: ["campaign", "l1_id", "category_level"]
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation_fd_full_basket
-    partitionByList: ["campaign", "offer_id"]
+    prefix: headroom_allocation
+    partitionByList: ["campaign", "l1_id", "category_level", "offer_id"]
   full_export_tbl: &full_export_tbl
     prefix: headroom_test_cells_allocation
     partitionByList: ["campaign", "scope", "mechanic"]
@@ -71,7 +71,7 @@ tables:
     partitionByList: ["campaign", "scope", "mechanic", "test_accounts"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
     prefix: headroom_cust_id_link
-    partitionByList: ["campaign"]
+    partitionByList: ["campaign", "l1_id", "category_level"]
   offer_variants_tbl: &offer_variants_tbl
     prefix: headroom_accumulator_offer_variants
     partitionByList: ["target"]
@@ -107,9 +107,9 @@ Email:
   from_email: 'dta.admin@mnscorp.net'
   to_email: ['dapeng.wang@mnscorp.net','parthav.x.maheshwari@mnscorp.net']
   to_email_failed: ['dapeng.wang@mnscorp.net']
-
 write_mode: "overwrite" # "errorifexists"
 write_table: True
+
 
 directory: &directory dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/v0.7/
 prod_input: &prod_input "dbfs:/mnt/centralds/offerallocation/headroom/prod_reoccurring_run/prod_input/"
@@ -129,13 +129,11 @@ dates:
   etl_date: "today" # 20241006 # "today"  # changed
   # Amount of days to look back
   lookback_days: 363 # 28*13-1
-  # Rolling sum end date
-  rolling_sum_etl_date: "2024-11-09" #"2024-09-09"
   # TODO: what is this used for?
   lookback_days_registration: 363 # 28*13-1
   # Date format
   date_format: '%Y%m%d'
-  date_format_transactions: '%Y-%m-%d'
+  date_format_transactions: '%Y-%m-%d' 
 # filters:
 columns:
   user_id: &user_id "cust_id"
@@ -288,7 +286,7 @@ allocation:
   prediction_tbl: *prediction_tbl
   fixed_stretch_tbl: *fixed_stretch_tbl
   feature_col: *feature_col
-  multiple_reward_level_for_test_cell:
+  multiple_reward_level_for_test_cell: 
     {"85_stretch_10_perc": [7 , 10],
     "85_stretch_20_perc": [10],
     "headroom": [10]}
@@ -363,31 +361,29 @@ test_cell_selection:
   random: None
   percentage: None
   volume:
-      basket:
-        fd:
-          treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
-                     "85_stretch_10_perc_10_perc_reward": 325000,
-                     "85_stretch_20_perc_10_perc_reward": 325000,
-                     "headroom_10_perc_reward": 325000}
-          control: {"85_stretch_10_perc_7_perc_reward": 81250,
-                     "85_stretch_10_perc_10_perc_reward": 81250,
-                     "85_stretch_20_perc_10_perc_reward": 81250,
-                     "headroom_10_perc_reward": 81250}
-      lx_id:
-        fd:
-          treatment: { "one_article_unit_plus_headroom": 50000,
-                       "one_article_unit_plus_85_stretch_30_perc": 50000,
-                       "headroom": 50000 }
-          control: { "one_article_unit_plus_headroom": 50000,
-                     "one_article_unit_plus_85_stretch_30_perc": 50000,
-                     "headroom": 50000 }
-        gm:
-          treatment: { "one_article_unit_plus_headroom": 50000,
-                       "one_article_unit_plus_85_stretch_20_perc": 50000,
-                       "headroom": 50000 }
-          control: { "one_article_unit_plus_headroom": 50000,
-                     "one_article_unit_plus_85_stretch_20_perc": 50000,
-                     "headroom": 50000 }
+    basket:
+      fd:
+      treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
+      "85_stretch_10_perc_10_perc_reward": 325000,
+      "85_stretch_20_perc_10_perc_reward": 325000,
+      "headroom_10_perc_reward": 325000}
+      control: {"85_stretch_10_perc_7_perc_reward": 81250,
+      "85_stretch_10_perc_10_perc_reward": 81250,
+      "85_stretch_20_perc_10_perc_reward": 81250,
+      "headroom_10_perc_reward": 81250}
+    lx_id:
+      fd:
+      treatment: { "one_article_unit_plus_headroom": 50000,
+      "one_article_unit_plus_85_stretch_30_perc": 50000,
+      "headroom": 50000 }
+      control: { "one_article_unit_plus_headroom": 50000,
+      "one_article_unit_plus_85_stretch_30_perc": 50000,
+      "headroom": 50000 }
+      gm:
+      treatment: {"85_stretch_20_perc": 163000,
+      "headroom": 163000 }
+      control: {"85_stretch_20_perc": 163000,
+      "headroom": 163000 }
 
 
         # food full basket
@@ -473,7 +469,6 @@ sections:
     exclude_high_spend: 270
     min_num_basket: 3
     exclude_items: None
-
 qa:
   num_cust_per_group: 2
   threshold_for_stretch_perc: 100

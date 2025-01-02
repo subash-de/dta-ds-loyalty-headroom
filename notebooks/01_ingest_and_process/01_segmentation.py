@@ -3,10 +3,6 @@
 
 # COMMAND ----------
 
-spark.version
-
-# COMMAND ----------
-
 from datetime import datetime, timedelta
 
 import seaborn as sns
@@ -101,50 +97,64 @@ seg_data_manager = SegmentationDataManager(
 
 # COMMAND ----------
 
-trx_line_df
-
-# COMMAND ----------
-
-sparks_account_df
-
-# COMMAND ----------
-
-cust_master_df
-
-# COMMAND ----------
-
-
 # Step 1: build the data for segmentation
 seg_data = seg_data_manager.get(
     trx_line_df, sparks_account_df, cust_master_df, customer_input=sparks_account_df
 )
 # adding campaign column
 seg_data = seg_data.withColumn("campaign", F.lit(campaign))
+seg_data = seg_data.withColumn("l1_id", F.lit(config_sg['l1_id']))
+seg_data = seg_data.withColumn("category_level", F.lit(config['category_level']))
 
 
 # COMMAND ----------
 
-seg_data
+seg_data.display()
 
 # COMMAND ----------
 
-seg_data_table_name = write_beam_table(
-    seg_data,
-    config,
-    "seg_data_tbl",
+seg_data.count()
+
+# COMMAND ----------
+
+seg_data.select('campaign','l1_id', 'category_level').distinct().display()
+
+# COMMAND ----------
+
+seg_data_table_name = persist_utils.create_beam_table(
+        table_prefix=config_sg.seg_data_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=seg_data,
+        partition_by=config_sg.seg_data_tbl.partitionByList,
+        overwrite_table=False,
+        assert_equality=False,
+        add_load_timestamp=True,
+    )
+
+logger.info(f"""seg_data_table_name: {seg_data_table_name}""")
+
+persist_utils.insert_df_into_table(
+    target_tbl_name=seg_data_table_name,
+    insert_df=seg_data,
+    add_columns=True,
+    insert_append=True,
+    delete_where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}",
 )
 
-# COMMAND ----------
-
-seg_data_table_name
 
 # COMMAND ----------
-
 
 logger.info("Begin Segmentation of Dataset")
 seg_data_read = persist_utils.read_table(
-    table_name=seg_data_table_name, where=f"campaign={campaign}"
+    table_name=seg_data_table_name, 
+    where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}",
 )
+
+# COMMAND ----------
+
+seg_data_read.select('campaign', 'l1_id','category_level').distinct().display()
 
 # COMMAND ----------
 
@@ -169,11 +179,33 @@ seg_manager = SegmentationManager(
 segmentations = seg_manager.get(data=seg_data_read).withColumn(
     "campaign", F.lit(campaign)
 )
+segmentations = segmentations.withColumn("l1_id", F.lit(config_sg['l1_id']))
+segmentations = segmentations.withColumn("category_level", F.lit(config['category_level']))
 
 # COMMAND ----------
 
-write_beam_table(
-    segmentations,
-    config,
-    "segmentations_tbl",
+segmentations_tbl_name = persist_utils.create_beam_table(
+        table_prefix=config_sg.segmentations_tbl.prefix,
+        lab_database=config.lab_database,
+        factory_database=config.factory_database,
+        sensitivity=config.sensitivity,
+        schema=segmentations,
+        partition_by=config_sg.segmentations_tbl.partitionByList,
+        overwrite_table=False,
+        assert_equality=False,
+        add_load_timestamp=True,
+    )
+
+logger.info(f"segmentations_tbl_name: {segmentations_tbl_name}""")
+
+persist_utils.insert_df_into_table(
+    target_tbl_name=segmentations_tbl_name,
+    insert_df=segmentations,
+    add_columns=True,
+    insert_append=False,
+    delete_where=f"campaign={campaign} and l1_id ='{config_sg['l1_id']}' and category_level={config['category_level']}",
 )
+
+# COMMAND ----------
+
+
