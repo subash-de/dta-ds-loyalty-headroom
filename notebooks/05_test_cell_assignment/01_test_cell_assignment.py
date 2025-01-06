@@ -151,7 +151,15 @@ for offer in sequence_of_assignment:
                               (test_cells_tbl["estimated_spend"] > 0)
                         ).select("cust_id").distinct().orderBy(F.rand())
 
-  assert available_customers.count() >= number_of_customers_per_offer, f"There are not enough customers for {offer}"
+  test_cell_split = (
+    config_tcs[config_tcs["selection_type"]]['basket'][config_bd['l1_ids'].lower()]
+    if offer.startswith('full_basket')
+    else config_tcs[config_tcs["selection_type"]]['lx_id'][config_bd['l1_ids'].lower()]
+  )
+  if config_tcs["selection_type"] == "volume":
+    assert available_customers.count() >= sum(list(test_cell_split["treatment"].values())) + sum(list(test_cell_split["control"].values())), f"There are not enough customers for {offer}"
+  else:
+    assert available_customers.count() >= number_of_customers_per_offer, f"There are not enough customers for {offer}"
 
   logger.info(f"Number of total customers that could be allocated for {offer}: {available_customers.count()}")
   # Remove customers that have already been assigned to a category
@@ -168,12 +176,6 @@ for offer in sequence_of_assignment:
   test_cells_tbl_offer = (test_cells_tbl
                           .filter(test_cells_tbl["scope"] == offer)
                           .join(available_customers, on="cust_id", how="inner")
-  )
-  
-  test_cell_split = (
-    config_tcs[config_tcs["selection_type"]]['basket'][config_bd['l1_ids'].lower()]
-    if offer.startswith('full_basket')
-    else config_tcs[config_tcs["selection_type"]]['lx_id'][config_bd['l1_ids'].lower()]
   )
 
   test_cells_tbl_offer = test_cells_tbl_offer.filter(F.col('test_type').isin(list(test_cell_split['treatment'].keys())))
@@ -213,7 +215,8 @@ for offer in sequence_of_assignment:
         insert_df=full_export_selected_offer,
         insert_append=True,
         add_columns=True,
-        delete_where=f"campaign = '{campaign}' and scope = '{offer}' and mechanic = '{config['mechanic']}'"
+        delete_where=f"""campaign = "{campaign}" and scope = "{offer}" and mechanic = "{config['mechanic']}"
+        """
     )
     logger.info(f"Number of customers allocated for {offer}: {full_export_selected_offer.select(config_al['user_key']).distinct().count()}")
   else:
