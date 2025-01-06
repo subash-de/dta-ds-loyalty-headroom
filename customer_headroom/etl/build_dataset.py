@@ -116,6 +116,7 @@ class TransactionsManager(BaseManager):
         user_key: str = "cust_id",
         aggregation_level: str = "basket",
         date_format: Optional[str] = "%Y%m%d",
+        date_format_for_sparks: Optional[str] = "yyyyMMdd",
         # In store purchases only
         channels: List[str] = ["POS"],
         # No BWS, {"lx_id": [list, of, products, at lx, level]}
@@ -139,6 +140,7 @@ class TransactionsManager(BaseManager):
         self.lx_ids = lx_ids
         self.user_key = user_key
         self.date_format = date_format
+        self.date_format_for_sparks = date_format_for_sparks
         if l1_ids == "GM":
             self.channels = ["POS", "ONLINE"]
         else:
@@ -269,14 +271,6 @@ class TransactionsManager(BaseManager):
         return customer_lx_transactions
 
     def add_timespan_spend(self, cust_lx_trx: DataFrame) -> DataFrame:
-        @F.udf(T.IntegerType())
-        def days_back(date):
-            days_diff = (
-                datetime.strptime(str(self.lookback_date), self.date_format)
-                - datetime.strptime(str(date), self.date_format)
-            ).days
-            return days_diff
-
         WinSpan = (
             W.partitionBy(F.col("cust_id"))
             .orderBy(F.col("day_diff").cast("long"))
@@ -284,7 +278,8 @@ class TransactionsManager(BaseManager):
         )
 
         trx_timespan = (
-            cust_lx_trx.withColumn("day_diff", days_back("date"))
+            cust_lx_trx
+            .withColumn("day_diff", F.datediff(F.to_date(F.lit(self.lookback_date), self.date_format_for_sparks), F.to_date(F.col("date").cast("string"), self.date_format_for_sparks)))
             .withColumn("spend_timespan", F.sum("sales_amt").over(WinSpan))
             .groupby("cust_id")
             .agg(*self.get_expr_agg("spend_timespan"))
@@ -315,18 +310,10 @@ class TransactionsManager(BaseManager):
     #     return trx_time_window
 
     def add_time_window_ind(self, cust_lx_trx) -> DataFrame:
-        @F.udf(T.IntegerType())
-        def time_window_back(date):
-            days_diff = (
-                datetime.strptime(str(self.etl_date), self.date_format)
-                - datetime.strptime(str(date), self.date_format)
-            ).days // self.time_window_length
-            return days_diff
-
         trx_time_window = (
             cust_lx_trx.select("date")
             .distinct()
-            .withColumn("time_window_ind", time_window_back("date"))
+            .withColumn("time_window_ind", F.floor(F.datediff(F.to_date(F.lit(self.etl_date), self.date_format_for_sparks), F.to_date(F.col("date").cast("string"), self.date_format_for_sparks))/ self.time_window_length))
         )
         return trx_time_window
 
