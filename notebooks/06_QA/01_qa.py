@@ -484,13 +484,13 @@ else:
   logger.error(f'{cust_offer_allocation_distinct_count_check.count()} customers have less than {config_qa["min_offer_count"]} or more than {config_qa["max_offer_count"]} distinct offers.')
   if config["write_table"]:
     cust_have_offer_count_outside_range = (
-      (cust_offer_allocation_distinct_count_check.select([config_bd["user_id"], "scope"]))
-      .unionByName(cust_offer_allocation_count_check.select([config_bd["user_id"], "scope"]))
+      (cust_offer_allocation_distinct_count_check.select(config_bd["user_id"]))
+      .unionByName(cust_offer_allocation_count_check.select(config_bd["user_id"]))
       .dropDuplicates()
     )
     cust_have_offer_count_outside_range = (test_cells_selected_tbl.join(
       cust_have_offer_count_outside_range,
-      on=[config_bd["user_id"], "scope"],
+      on=config_bd["user_id"],
       how="inner"
     ))
 
