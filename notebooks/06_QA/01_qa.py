@@ -165,7 +165,7 @@ test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl.join(
 
 test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl_with_cust_seg.withColumn(
   "spending_threshold",
-  F.regexp_extract("desc", r"(\d+)", 1)
+  F.regexp_extract("desc", r"(?:.*?£\d+.*?£)(\d+(\.\d+)?)", 1)
 )
 
 test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl_with_cust_seg.withColumn(
@@ -636,8 +636,8 @@ for distinct_scope in test_cells_selected_tbl.select("scope").distinct().toPanda
                                 .toPandas()
     )
     allocation_per_test_cell["cust_perc"] = round((allocation_per_test_cell["distinct_cust_count"] / allocation_per_test_cell["distinct_cust_count"].sum()) * 100, 1)
-    allocation_per_test_cell["spending_threshold"] = allocation_per_test_cell["desc"].str.extract(r'(\d+)').astype(float)
-    allocation_per_test_cell["reward"] = allocation_per_test_cell["desc"].str.extract(r'(?:\D*\d+\D+)?(\d+)').astype(float)
+    allocation_per_test_cell["reward"] = allocation_per_test_cell["desc"].str.extract(r'£(\d+(\.\d+)?)')[0].astype(float)
+    allocation_per_test_cell["spending_threshold"] = allocation_per_test_cell["desc"].str.extract(r'(?:.*?£\d+.*?£)(\d+(\.\d+)?)')[0].astype(float)
     allocation_per_test_cell_pivot = pd.pivot(
       allocation_per_test_cell,
       index="spending_threshold",
