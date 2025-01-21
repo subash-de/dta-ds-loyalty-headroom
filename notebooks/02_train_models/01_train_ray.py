@@ -13,9 +13,9 @@ import ray
 from ray.util.spark import setup_ray_cluster, shutdown_ray_cluster
 
 import mlflow
-from pyspark.sql.types import StructType, StructField, StringType, MapType, LongType
+from pyspark.sql.types import StructType, StructField, StringType, MapType, LongType,IntegerType
 from pyspark.sql.functions import col, size
-
+import json
 from datetime import datetime, timedelta
 import customer_headroom.utils.persist_utils as persist_utils
 from customer_headroom.modelling.data_process import DataProcessor
@@ -112,6 +112,7 @@ memory_usage_list = []
 
 for seg in segs:
     seg_ext = [f"({k}='{seg[k]}')" for k in partitionByList]
+    seg_ext = ["(category_level=True)" if "(category_level='True')" in item else "(category_level=False)" if "(category_level='False')" in item else item for item in seg_ext]
     ext_str = "_".join([str(seg[k]) for k in partitionByList])
 
     feature_col = config_fr["feature_col"]
@@ -126,16 +127,19 @@ for seg in segs:
     seg_data_dict[ext_str] = seg_data_pandas
 
     memory_usage = seg_data_pandas.memory_usage(deep=True).sum()
-    memory_usage_list.append((ext_str, memory_usage))
+    rows, columns = seg_data_pandas.shape
+    memory_usage_list.append((ext_str, memory_usage,rows, columns))
 
 memory_usage_schema = StructType(
     [
         StructField("Segment", StringType(), True),
         StructField("Memory Usage (bytes)", LongType(), True),
+        StructField("Rows", IntegerType(), True),
+        StructField("Columns", IntegerType(), True),
     ]
 )
 
-memory_usage_list = [(seg, int(mem_usage)) for seg, mem_usage in memory_usage_list]
+memory_usage_list = [(seg, int(mem_usage),rows,columns) for seg, mem_usage,rows,columns in memory_usage_list]
 
 memory_usage_df = spark.createDataFrame(memory_usage_list, schema=memory_usage_schema)
 display(memory_usage_df)
@@ -156,13 +160,22 @@ runtime_env = {
     }
 }
 
+compute_dict=dbutils.widgets.get("ray_computes")
+compute_dict=json.loads(compute_dict)
+print(compute_dict,type(compute_dict))
+print("max_worker_node ",ray.util.spark.MAX_NUM_WORKER_NODES)
+print({"max_worker_nodes":ray.util.spark.MAX_NUM_WORKER_NODES if ray.util.spark.MAX_NUM_WORKER_NODES != -1 else int(compute_dict["num_workers"]),
+       "num_cpus_worker_node":int(compute_dict['num_cpus_worker_node']*0.80),
+       "num_cpus_head_node":int(compute_dict['num_cpus_head_node']*0.80)
+       })
 setup_ray_cluster(
     max_worker_nodes=ray.util.spark.MAX_NUM_WORKER_NODES,
-    num_cpus_worker_node=6,
-    num_cpus_head_node=0,
+    num_cpus_worker_node=int(compute_dict['num_cpus_worker_node']*0.80),
+    num_cpus_head_node=int(compute_dict['num_cpus_head_node']*0.80),
     num_gpus_worker_node=0,
-    num_gpus_head_node=0,
+    num_gpus_head_node=0
 )
+
 
 # COMMAND ----------
 

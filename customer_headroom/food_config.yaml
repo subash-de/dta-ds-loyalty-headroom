@@ -9,8 +9,8 @@ lab_database: loyalty_azlab_prod
 sensitivity: p
 
 fixed_stretch: True
-one_article_unit_stretch: False
-category_level: False
+one_article_unit_stretch: True
+category_level: True
 eligible_customers: False
 
 mechanic_type_dict: '{"accumulator": 1, "task": 2, "combo": 3, "streak": 4}'
@@ -41,40 +41,40 @@ debug:
 
 tables:
   seg_data_tbl: &seg_data_tbl
-    prefix: headroom_segmentation_data
+    prefix: airflow_final_headroom_segmentation_data
     partitionByList: [ "campaign" ,"l1_id", "category_level"]
   segmentations_tbl: &segmentations_tbl
-    prefix: headroom_segmentations
+    prefix: airflow_final_headroom_segmentations
     partitionByList: &segPartition [ "campaign", "l1_id", "category_level","experian_hh_composition", "segmentation" ]
   etl_data_tbl: &etl_data_tbl
-    prefix: headroom_etl_data
+    prefix: airflow_final_headroom_etl_data
     partitionByList: *segPartition
   fixed_stretch_etl_data_tbl: &fixed_stretch_etl_data_tbl
-    prefix: headroom_fixed_stretch_etl_data
+    prefix: airflow_final_headroom_fixed_stretch_etl_data
     partitionByList: ["campaign", "l1_id", "category_level"]
   one_article_unit_stretch_etl_data_tbl: &one_article_unit_stretch_etl_data_tbl
-    prefix: headroom_one_article_unit_stretch_etl_data
+    prefix: airflow_final_headroom_one_article_unit_stretch_etl_data
     partitionByList: ["campaign", "l1_id", "category_level"]
   prediction_tbl: &prediction_tbl
-    prefix: headroom_predictions
+    prefix: airflow_final_headroom_predictions
     partitionByList: *segPartition
   fixed_stretch_tbl: &fixed_stretch_tbl
-    prefix: headroom_fixed_stretch
+    prefix: airflow_final_headroom_fixed_stretch
     partitionByList: ["campaign", "l1_id", "category_level"]
   one_article_unit_stretch_tbl: &one_article_unit_stretch_tbl
-    prefix: headroom_one_article_unit_stretch
+    prefix: airflow_final_headroom_one_article_unit_stretch
     partitionByList: ["campaign", "l1_id", "category_level"]
   headroom_export_tbl: &headroom_export_tbl
-    prefix: headroom_allocation
+    prefix: airflow_final_headroom_allocation
     partitionByList: ["campaign", "l1_id", "category_level", "offer_id"]
   full_export_tbl: &full_export_tbl
-    prefix: headroom_test_cells_allocation
+    prefix: airflow_final_headroom_test_cells_allocation
     partitionByList: ["campaign", "scope", "mechanic"]
   full_export_selected_tbl: &full_export_selected_tbl
-    prefix: headroom_test_cells_selected_allocation
+    prefix: airflow_final_headroom_test_cells_selected_allocation
     partitionByList: ["campaign", "scope", "mechanic", "test_accounts"]
   headroom_cust_id_link_tbl: &headroom_cust_id_link_tbl
-    prefix: headroom_cust_id_link
+    prefix: airflow_final_headroom_cust_id_link
     partitionByList: ["campaign", "l1_id", "category_level"]
   offer_variants_tbl: &offer_variants_tbl
     prefix: headroom_accumulator_offer_variants
@@ -128,7 +128,7 @@ dates:
   # Campaign ID (Internal to Offers)
   #   - Mapping to bullseye ID in headroom_id_mapping_tbl
   # //TODO #24 should upcoming campaign be a job parameter?
-  upcoming_campaign: "20250106" #"20241006"
+  upcoming_campaign: "20250203" #"20241006"
   # End date of timeframe
   etl_date: "today" # 20241006 # "today"  # changed
   # Amount of days to look back
@@ -141,13 +141,13 @@ dates:
 # filters:
 columns:
   user_id: &user_id "cust_id"
-  item_id: &item_id "l2_id" #change to different lx id and need to the same as lx entry
+  item_id: &item_id "l3_id" #change to different lx id and need to the same as lx entry
   l1_ids: &l1_ids "FD"
   # ["FD"]
   # ["GM"]
-  lx: &lx "l2" #change to different lx id
+  lx: &lx "l3" #change to different lx id
   # lx: &lx "l2"
-  feature_col: &feature_col "l2_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
+  feature_col: &feature_col "l3_id_total_time_window_spend" # spend and save "l2_id_total_spend_basket" # change for accumulator #weekly_max_basket_percentile' #"85percentile_time_window_max_spend_basket"
   # "mean_spend_timespan"
   # "average_basket_value" "mean_total_spend_basket"
   #"total_spend" #"number_of_transactions"
@@ -187,12 +187,8 @@ build_dataset:
   lx: *lx
   l2_ids: &l2_ids ["EX01", "EX02", "EX03", "EX04", "EX05", "EX07", "EX09"]
   lx_ids: &lx_ids {
-    'prep_meal': {"l4_id": ["F03C", "F63C", "F64C"]},
     'meat_fish_poultry': {"l4_id": ["F01C", "F38C", "F62C"]},
     'fruit_veg_salads': {"l3_id": ["MM07"]},
-    'bakery': {"l3_id": ["MM18"]},
-    'ambient_food': {"l5_id": ["F19762"],
-                     "l6_id": ["F191907", "F19623", "F191528", "F1990", "F198981", "F19312"]},
   }
   window_days: 30
   time_window_days : 28 # spend and save 7, accumulator 4 weeks, so 28 days
@@ -203,7 +199,7 @@ build_dataset:
   one_article_unit_stretch_etl_data_tbl: *one_article_unit_stretch_etl_data_tbl
   partitionByList: *segPartition
   # aggregation_level: &aggregation_level "lx id" #change to basket or lx id
-  aggregation_level: &aggregation_level "basket"
+  aggregation_level: &aggregation_level "lx_id"
   headroom_cust_id_link_tbl: *headroom_cust_id_link_tbl
 fit_rec:
   # input
@@ -234,7 +230,7 @@ fit_rec:
   data_processor_name: &data_processor_name "data_processor"
   param_name: &param_name "data_params"
   rec_name: &rec_name "recommender"
-  model_prefix: &model_prefix "_full_basket"
+  model_prefix: &model_prefix "airflow_cat_food"
   main_expt_path: "/Shared/mlflow_experiments" # Workspace path
   main_expt_name: "headroom_ray_experiment"
 predict:
@@ -275,9 +271,9 @@ baseline_stretch_simulations:
   rolling_window: 4
   date_col: "date"
   col_to_sum: "sales_amt"
-  grouping_columns: ["cust_id"]
+  grouping_columns: ["cust_id", "l3_id"]
   baseline_percentiles: 85
-  stretch_amounts: [10, 20] # food full basket
+  stretch_amounts: [30] # food category
   percentile_for_one_additional_unit_price: 0.75
   percentile_for_customer_one_additional_unit_price: 0.85
   article_threshold_for_fallback: 10
@@ -290,10 +286,7 @@ allocation:
   prediction_tbl: *prediction_tbl
   fixed_stretch_tbl: *fixed_stretch_tbl
   feature_col: *feature_col
-  multiple_reward_level_for_test_cell:
-    {"85_stretch_10_perc": [7 , 10],
-     "85_stretch_20_perc": [10],
-     "headroom": [10]}
+  multiple_reward_level_for_test_cell: None
   # TODO: Put this information in a table
   offers_desc: {'16388': "£3 off when you spend £20 on M&S food in store",
                 '14140': "£5 off when you spend £30 on M&S food in store",
@@ -359,7 +352,7 @@ allocation:
   exclude_high_spend: None
   min_num_basket: None
 test_cell_selection:
-  test_cells: ["85_stretch_10_perc_7_perc_reward", "85_stretch_10_perc_10_perc_reward", "85_stretch_20_perc_10_perc_reward", "headroom_10_perc_reward"]
+  test_cells: ["one_article_unit_plus_headroom", "one_article_unit_plus_85_stretch_30_perc", "headroom"]
   selection_type: "volume" #can be percentage, volume or random
   treatment_ratio: 0.5
   random: None
@@ -367,30 +360,30 @@ test_cell_selection:
   volume:
     basket:
       fd:
-      treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
-                  "85_stretch_10_perc_10_perc_reward": 325000,
-                  "85_stretch_20_perc_10_perc_reward": 325000,
-                  "headroom_10_perc_reward": 325000}
-      control: {"85_stretch_10_perc_7_perc_reward": 81250,
-                "85_stretch_10_perc_10_perc_reward": 81250,
-                "85_stretch_20_perc_10_perc_reward": 81250,
-                "headroom_10_perc_reward": 81250}
+        treatment: {"85_stretch_10_perc_7_perc_reward": 325000,
+                    "85_stretch_10_perc_10_perc_reward": 325000,
+                    "85_stretch_20_perc_10_perc_reward": 325000,
+                    "headroom_10_perc_reward": 325000}
+        control: {"85_stretch_10_perc_7_perc_reward": 81250,
+                  "85_stretch_10_perc_10_perc_reward": 81250,
+                  "85_stretch_20_perc_10_perc_reward": 81250,
+                  "headroom_10_perc_reward": 81250}
     lx_id:
       fd:
-      treatment: { "one_article_unit_plus_headroom": 50000,
-                   "one_article_unit_plus_85_stretch_30_perc": 50000,
-                   "headroom": 50000 }
-      control: { "one_article_unit_plus_headroom": 50000,
-                 "one_article_unit_plus_85_stretch_30_perc": 50000,
-                 "headroom": 50000 }
+        treatment: { "one_article_unit_plus_headroom": 125000,
+                     "one_article_unit_plus_85_stretch_30_perc": 125000,
+                     "headroom": 125000 }
+        control: { "one_article_unit_plus_headroom": 125000,
+                   "one_article_unit_plus_85_stretch_30_perc": 125000,
+                   "headroom": 125000 }
       gm:
-      treatment: {"85_stretch_20_perc": 163000,
+        treatment: {"85_stretch_20_perc": 163000,
+                    "headroom": 163000 }
+        control: {"85_stretch_20_perc": 163000,
                   "headroom": 163000 }
-      control: {"85_stretch_20_perc": 163000,
-                "headroom": 163000 }
 
 
-      # food full basket
+        # food full basket
 
 sections:
   ss:

@@ -58,8 +58,8 @@ campaign = get_campaign(config.dates.upcoming_campaign, config.dates.etl_date)
 
 last_registration_date = int(
     (
-        datetime.strptime(str(campaign), config.dates.date_format)
-        - timedelta(days=config.dates.lookback_days_registration)
+            datetime.strptime(str(campaign), config.dates.date_format)
+            - timedelta(days=config.dates.lookback_days_registration)
     ).strftime(config.dates.date_format)
 )
 
@@ -75,17 +75,17 @@ last_registration_date: {last_registration_date}
 # COMMAND ----------
 
 test_cells_selected_tbl_name = persist_utils.get_table_name(
-  factory_database=config.factory_database,
-  lab_database=config.lab_database,
-  table_prefix=config_al.full_export_selected_tbl.prefix,
-  sensitivity=config.sensitivity
+    factory_database=config.factory_database,
+    lab_database=config.lab_database,
+    table_prefix=config_al.full_export_selected_tbl.prefix,
+    sensitivity=config.sensitivity
 )
 
 logger.info(f"""test_cells_selected_tbl_name: {test_cells_selected_tbl_name}""")
 
 test_cells_selected_tbl = persist_utils.read_table(
-  table_name=test_cells_selected_tbl_name,
-  where=f"""
+    table_name=test_cells_selected_tbl_name,
+    where=f"""
     campaign={campaign} and 
     scope LIKE "%_{config_bd['l1_ids'].lower()}" and 
     mechanic="{config['mechanic']}" and
@@ -94,9 +94,12 @@ test_cells_selected_tbl = persist_utils.read_table(
 )
 
 # COMMAND ----------
-
 qa_outpath = f'offerallocation/{config["mechanic"].upper()}/qa_outputs/{config["dates"]["upcoming_campaign"]}/{config["columns"]["l1_ids"]}'
+
+if(len(config['output_qa_prefix'].strip())!=0):
+    qa_outpath = f"""{qa_outpath}/{config["output_qa_prefix"]}"""
 out_path = persist_utils.get_absolute_blob_path(qa_outpath, config.mail_containers)
+print("output path generated ",out_path)
 dbutils.fs.mkdirs(out_path)
 out_path = f"/dbfs{out_path}"
 logger.info(f"QA checks tables output: {out_path}")
@@ -115,10 +118,12 @@ if config["write_table"]:
 # COMMAND ----------
 
 scope_overview = (test_cells_selected_tbl
-                       .groupby(["scope"])
-                       .agg(F.countDistinct(config_bd["user_id"]).alias("distinct_cust_count"))
-                       .orderBy(["scope"])
-)
+                  .groupby(["scope"])
+                  .agg(F.countDistinct(config_bd["user_id"]).alias("distinct_cust_count"))
+                  .orderBy(["scope"])
+                  )
+#todo remove persist if it didnt really improve
+scope_overview.persist()
 scope_overview.display()
 
 # COMMAND ----------
@@ -127,15 +132,17 @@ test_group_overview = (test_cells_selected_tbl
                        .groupby(["scope", "test_group"])
                        .agg(F.countDistinct(config_bd["user_id"]).alias("distinct_cust_count"))
                        .orderBy(["scope", "test_group"])
-)
+                       )
+test_group_overview.persist()
 test_group_overview.display()
 
 # COMMAND ----------
 
 if config["write_table"]:
-  scope_overview.toPandas().to_csv(os.path.join(out_path, "scope_overview.csv"), index=False, header=True, mode=wmode)
-  test_group_overview.toPandas().to_csv(os.path.join(out_path, "test_group_overview.csv"), index=False, header=True, mode=wmode)
-
+    scope_overview.toPandas().to_csv(os.path.join(out_path, "scope_overview.csv"), index=False, header=True, mode=wmode)
+    test_group_overview.toPandas().to_csv(os.path.join(out_path, "test_group_overview.csv"), index=False, header=True, mode=wmode)
+scope_overview.persist()
+test_group_overview.unpersist()
 # COMMAND ----------
 
 # MAGIC %md
@@ -144,38 +151,38 @@ if config["write_table"]:
 # COMMAND ----------
 
 segtco_history_tbl = persist_utils.read_table(
-  table_name = config.factory_tbl_segtco_history
+    table_name = config.factory_tbl_segtco_history
 )
-segtco_history = get_preceding_segtco_history(segtco_history=segtco_history_tbl, 
+segtco_history = get_preceding_segtco_history(segtco_history=segtco_history_tbl,
                                               max_date=campaign)
 
 # COMMAND ----------
 
 if config_bd["l1_ids"] == "FD":
-  cust_seg_col = "cust_band_fd"
+    cust_seg_col = "cust_band_fd"
 else:
-  cust_seg_col = "cust_band_ch"
+    cust_seg_col = "cust_band_ch"
 test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl.join(
-  segtco_history.select([config_bd["user_id"], cust_seg_col]).distinct(), 
-  on=config_bd["user_id"], 
-  how="left",
+    segtco_history.select([config_bd["user_id"], cust_seg_col]).distinct(),
+    on=config_bd["user_id"],
+    how="left",
 )
 
 # COMMAND ----------
 
 test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl_with_cust_seg.withColumn(
-  "spending_threshold",
-  F.regexp_extract("desc", r"(?:.*?£\d+.*?£)(\d+(\.\d+)?)", 1)
+    "spending_threshold",
+    F.regexp_extract("desc", r"(?:.*?£\d+.*?£)(\d+(\.\d+)?)", 1)
 )
 
 test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl_with_cust_seg.withColumn(
-  "stretch_perc", 
-  F.col("estimated_stretch")/F.col("estimated_spend") * 100
+    "stretch_perc",
+    F.col("estimated_stretch")/F.col("estimated_spend") * 100
 )
 
 test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl_with_cust_seg.withColumn(
-  "spending_threshold_stretch_perc", 
-  (F.col("spending_threshold") - F.col("estimated_spend"))/F.col("estimated_spend") * 100
+    "spending_threshold_stretch_perc",
+    (F.col("spending_threshold") - F.col("estimated_spend"))/F.col("estimated_spend") * 100
 )
 
 # COMMAND ----------
@@ -183,26 +190,26 @@ test_cells_selected_tbl_with_cust_seg = test_cells_selected_tbl_with_cust_seg.wi
 groupby_cols = ["scope", "test_type", "test_group"]
 
 # COMMAND ----------
-
+test_cells_selected_tbl_with_cust_seg.persist()
 test_cell_breakdown = (test_cells_selected_tbl_with_cust_seg
-                  .groupby(groupby_cols)
-                  .agg(F.countDistinct(config_bd["user_id"]).alias("distinct_cust_count"))
-)
+                       .groupby(groupby_cols)
+                       .agg(F.countDistinct(config_bd["user_id"]).alias("distinct_cust_count"))
+                       )
 
 # COMMAND ----------
 
 test_cell_breakdown_cust_seg = (test_cells_selected_tbl_with_cust_seg
-                      .groupby(groupby_cols)
-                      .pivot(cust_seg_col)
-                      .agg(F.countDistinct(config_bd["user_id"]))
-)
+                                .groupby(groupby_cols)
+                                .pivot(cust_seg_col)
+                                .agg(F.countDistinct(config_bd["user_id"]))
+                                )
 new_column_names = [f"{col.lower()}_seg_cust_count" if col not in groupby_cols else col for col in test_cell_breakdown_cust_seg.columns]
 test_cell_breakdown_cust_seg = test_cell_breakdown_cust_seg.toDF(*new_column_names)
 
 test_cell_breakdown = test_cell_breakdown.join(
-  test_cell_breakdown_cust_seg, 
-  on=groupby_cols, 
-  how="left"
+    test_cell_breakdown_cust_seg,
+    on=groupby_cols,
+    how="left"
 )
 
 # COMMAND ----------
@@ -219,8 +226,8 @@ agg_exprs = [
 test_cell_breakdown_baseline = test_cells_selected_tbl_with_cust_seg.groupBy(groupby_cols).agg(*agg_exprs)
 
 test_cell_breakdown = test_cell_breakdown.join(
-    test_cell_breakdown_baseline, 
-    on=groupby_cols, 
+    test_cell_breakdown_baseline,
+    on=groupby_cols,
     how="left"
 )
 
@@ -229,14 +236,14 @@ test_cell_breakdown = test_cell_breakdown.join(
 test_cell_breakdown = test_cell_breakdown.orderBy(groupby_cols)
 
 # COMMAND ----------
-
+test_cell_breakdown.persist()
 test_cell_breakdown.display()
 
 # COMMAND ----------
 
 if config["write_table"]:
     test_cell_breakdown.toPandas().to_csv(os.path.join(out_path, "test_cell_breakdown.csv"), index=False, header=True, mode=wmode)
-
+test_cell_breakdown.unpersist()
 # COMMAND ----------
 
 # MAGIC %md
@@ -245,15 +252,15 @@ if config["write_table"]:
 # COMMAND ----------
 
 test_cells_selected_tbl_with_cust_seg.filter(
-  (F.col("stretch_perc") > config_qa["threshold_for_stretch_perc"]) &
-  (F.col("estimated_spend") > config_qa["threshold_for_estimated_spend"])
+    (F.col("stretch_perc") > config_qa["threshold_for_stretch_perc"]) &
+    (F.col("estimated_spend") > config_qa["threshold_for_estimated_spend"])
 ).count()
 
 # COMMAND ----------
 
 test_cells_selected_tbl_with_cust_seg.filter(
-  (F.col("stretch_perc") > config_qa["threshold_for_stretch_perc"]) &
-  (F.col("estimated_spend") > config_qa["threshold_for_estimated_spend"])
+    (F.col("stretch_perc") > config_qa["threshold_for_stretch_perc"]) &
+    (F.col("estimated_spend") > config_qa["threshold_for_estimated_spend"])
 ).display()
 
 # COMMAND ----------
@@ -268,14 +275,14 @@ test_cells_selected_random_picks_scope, test_cells_selected_random_picks = qa.ra
     cust_seg_col,
     rows_per_group=config_qa["num_cust_per_group"],
 )
-
+test_cells_selected_tbl_with_cust_seg.unpersist()
 # COMMAND ----------
 
 trx_line_df = persist_utils.read_table(
-  table_name = config.factory_tbl_all_transaction_line
+    table_name = config.factory_tbl_all_transaction_line
 )
 articles_df = persist_utils.read_table(
-  table_name = config.factory_tbl_lu_article
+    table_name = config.factory_tbl_lu_article
 )
 config_sim = config["baseline_stretch_simulations"]
 
@@ -301,27 +308,27 @@ trx_manager_fixed_stretch = TransactionsManagerFixedStretch(
 )
 
 percentile_df = trx_manager_fixed_stretch.get(
-  trx_line_df.join(test_cells_selected_random_picks.select(config_bd["user_id"]).distinct(), 
-                   on=config_bd["user_id"], 
-                   how="inner"),
-  articles_df
+    trx_line_df.join(test_cells_selected_random_picks.select(config_bd["user_id"]).distinct(),
+                     on=config_bd["user_id"],
+                     how="inner"),
+    articles_df
 )
 
 history_spending = percentile_df.join(
-  test_cells_selected_random_picks, 
-  (test_cells_selected_random_picks[config_bd["user_id"]] == percentile_df[config_bd["user_id"]]) &
-  (test_cells_selected_random_picks["cleaned_scope"] == percentile_df["l3_id"]), 
-  how="inner")
+    test_cells_selected_random_picks,
+    (test_cells_selected_random_picks[config_bd["user_id"]] == percentile_df[config_bd["user_id"]]) &
+    (test_cells_selected_random_picks["cleaned_scope"] == percentile_df["l3_id"]),
+    how="inner")
 
 # COMMAND ----------
-
+history_spending.persist()
 history_spending.display()
 
 # COMMAND ----------
 
 if config["write_table"]:
-  history_spending.toPandas().to_csv(os.path.join(out_path, "history_spending_for_random_cust_check.csv"), index=False, header=True, mode=wmode)
-
+    history_spending.toPandas().to_csv(os.path.join(out_path, "history_spending_for_random_cust_check.csv"), index=False, header=True, mode=wmode)
+history_spending.unpersist()
 # COMMAND ----------
 
 # MAGIC %md
@@ -334,7 +341,7 @@ offer_allocation_check = {}
 # COMMAND ----------
 
 offer_variants_tbl_name = persist_utils.get_table_name(
-   factory_database=config.factory_database,
+    factory_database=config.factory_database,
     lab_database=config.lab_database,
     table_prefix=config.tables.offer_variants_tbl.prefix,
     sensitivity=config.sensitivity
@@ -364,22 +371,24 @@ distinct_scope = list(test_cells_selected_tbl.select("cleaned_scope").distinct()
 
 # Left anti join allocated offers onto available offers on matching offer_id and scope name
 available_offers_not_all_allocated = (offer_variants_tbl
-                                      .filter(F.col("target").isin(distinct_scope))
-                                      .join(
-                                        test_cells_selected_tbl,
-                                        (offer_variants_tbl["offer_id"] == test_cells_selected_tbl["offer_id"]) &
-                                        (offer_variants_tbl["target"] == test_cells_selected_tbl["cleaned_scope"]),
-                                        how="left_anti"
-                                      )
+.filter(F.col("target").isin(distinct_scope))
+.join(
+    test_cells_selected_tbl,
+    (offer_variants_tbl["offer_id"] == test_cells_selected_tbl["offer_id"]) &
+    (offer_variants_tbl["target"] == test_cells_selected_tbl["cleaned_scope"]),
+    how="left_anti"
 )
+)
+available_offers_not_all_allocated.persist()
 if available_offers_not_all_allocated.count() == 0:
-  all_available_offers_are_allocated = True
-  logger.info("All available offers are allocated.")
+    all_available_offers_are_allocated = True
+    logger.info("All available offers are allocated.")
 else:
-  all_available_offers_are_allocated = False
-  logger.error(f"Not all available offers for {list(available_offers_not_all_allocated.select('target').distinct().toPandas()['target'])} are allocated.")
-  if config["write_table"]:
-    available_offers_not_all_allocated.toPandas().to_csv(os.path.join(out_path, "available_offers_not_all_allocated.csv"), index=False, header=True, mode=wmode)
+    all_available_offers_are_allocated = False
+    logger.error(f"Not all available offers for {list(available_offers_not_all_allocated.select('target').distinct().toPandas()['target'])} are allocated.")
+    if config["write_table"]:
+        available_offers_not_all_allocated.toPandas().to_csv(os.path.join(out_path, "available_offers_not_all_allocated.csv"), index=False, header=True, mode=wmode)
+available_offers_not_all_allocated.unpersist()
 
 # COMMAND ----------
 
@@ -396,22 +405,23 @@ offer_allocation_check["all_available_offers_are_allocated"] = all_available_off
 offer_variants_tbl_in_scope = offer_variants_tbl.filter(F.col("target").isin(distinct_scope))
 # Left anti join avialable offers onto allocated offers on matching offer_id and scope name
 allocated_offers_not_all_available = (test_cells_selected_tbl
-                                      .join(
-                                        offer_variants_tbl_in_scope,
-                                        (test_cells_selected_tbl["offer_id"] == offer_variants_tbl_in_scope["offer_id"]) &
-                                        (test_cells_selected_tbl["cleaned_scope"] == offer_variants_tbl_in_scope["target"]),
-                                        how="left_anti"
-                                      )
+.join(
+    offer_variants_tbl_in_scope,
+    (test_cells_selected_tbl["offer_id"] == offer_variants_tbl_in_scope["offer_id"]) &
+    (test_cells_selected_tbl["cleaned_scope"] == offer_variants_tbl_in_scope["target"]),
+    how="left_anti"
 )
+)
+allocated_offers_not_all_available.persist()
 if allocated_offers_not_all_available.count() == 0:
-  all_allocated_offers_are_available = True
-  logger.info("All allocated offers are available.")
+    all_allocated_offers_are_available = True
+    logger.info("All allocated offers are available.")
 else:
-  all_allocated_offers_are_available = False
-  logger.error(f"Not all allocated offers for {list(allocated_offers_not_all_available.select('cleaned_scope').distinct().toPandas()['cleaned_scope'])} are available.")
-  if config["write_table"]:
-    allocated_offers_not_all_available.toPandas().to_csv(os.path.join(out_path, "allocated_offers_not_all_available.csv"), index=False, header=True, mode=wmode)
-
+    all_allocated_offers_are_available = False
+    logger.error(f"Not all allocated offers for {list(allocated_offers_not_all_available.select('cleaned_scope').distinct().toPandas()['cleaned_scope'])} are available.")
+    if config["write_table"]:
+        allocated_offers_not_all_available.toPandas().to_csv(os.path.join(out_path, "allocated_offers_not_all_available.csv"), index=False, header=True, mode=wmode)
+allocated_offers_not_all_available.unpersist()
 # COMMAND ----------
 
 offer_allocation_check["all_allocated_offers_are_available"] = all_allocated_offers_are_available
@@ -425,28 +435,29 @@ offer_allocation_check["all_allocated_offers_are_available"] = all_allocated_off
 
 # Plain count and distinct count offer ids for each cust_id - scope pair
 cust_offer_allocation_count = test_cells_selected_tbl.groupby([config_bd["user_id"], "scope"]).agg(
-  F.countDistinct("offer_id").alias("distinct_count_offer_ids"),
-  F.count("offer_id").alias("count_offer_ids"),
+    F.countDistinct("offer_id").alias("distinct_count_offer_ids"),
+    F.count("offer_id").alias("count_offer_ids"),
 )
 
 # COMMAND ----------
 
 # Check if the plain count and distinct count are the same
 cust_offer_allocation_non_distinct = cust_offer_allocation_count.filter(F.col("distinct_count_offer_ids") != F.col("count_offer_ids"))
+cust_offer_allocation_non_distinct.persist()
 if cust_offer_allocation_non_distinct.count() == 0:
-  all_cust_have_distinct_offers = True
-  logger.info("All customers have distinct offers.")
+    all_cust_have_distinct_offers = True
+    logger.info("All customers have distinct offers.")
 else:
-  all_cust_have_distinct_offers = False
-  logger.error(f"{cust_offer_allocation_non_distinct.count()} customers don't have distinct offers.")
-  if config["write_table"]:
-    cust_have_non_distinct_offers = test_cells_selected_tbl.join(
-      cust_offer_allocation_non_distinct.select([config_bd["user_id"], "scope"]),
-      on=[config_bd["user_id"], "scope"],
-      how="inner"
-    )
-    cust_have_non_distinct_offers.toPandas().to_csv(os.path.join(out_path, "cust_have_non_distinct_offers.csv"), index=False, header=True, mode=wmode)
-
+    all_cust_have_distinct_offers = False
+    logger.error(f"{cust_offer_allocation_non_distinct.count()} customers don't have distinct offers.")
+    if config["write_table"]:
+        cust_have_non_distinct_offers = test_cells_selected_tbl.join(
+            cust_offer_allocation_non_distinct.select([config_bd["user_id"], "scope"]),
+            on=[config_bd["user_id"], "scope"],
+            how="inner"
+        )
+        cust_have_non_distinct_offers.toPandas().to_csv(os.path.join(out_path, "cust_have_non_distinct_offers.csv"), index=False, header=True, mode=wmode)
+cust_offer_allocation_non_distinct.unpersist()
 # COMMAND ----------
 
 offer_allocation_check["all_cust_have_distinct_offers"] = all_cust_have_distinct_offers
@@ -454,47 +465,47 @@ offer_allocation_check["all_cust_have_distinct_offers"] = all_cust_have_distinct
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Check whether each customer receive the number of offers within a predefined range (eg. [1, 1]) 
+# MAGIC ### Check whether each customer receive the number of offers within a predefined range (eg. [1, 1])
 
 # COMMAND ----------
 
 cust_offer_allocation_count = test_cells_selected_tbl.groupby(config_bd["user_id"]).agg(
-  F.countDistinct("offer_id").alias("distinct_count_offer_ids"),
-  F.count("offer_id").alias("count_offer_ids"),
+    F.countDistinct("offer_id").alias("distinct_count_offer_ids"),
+    F.count("offer_id").alias("count_offer_ids"),
 )
 
 # COMMAND ----------
 
 # Check if both the plain count and the distinct count are within the predefined range
 cust_offer_allocation_distinct_count_check = cust_offer_allocation_count.filter(
-  (F.col("distinct_count_offer_ids") < config_qa["min_offer_count"]) |
-  (F.col("distinct_count_offer_ids") > config_qa["max_offer_count"])
+    (F.col("distinct_count_offer_ids") < config_qa["min_offer_count"]) |
+    (F.col("distinct_count_offer_ids") > config_qa["max_offer_count"])
 )
 
 cust_offer_allocation_count_check = cust_offer_allocation_count.filter(
-  (F.col("count_offer_ids") < config_qa["min_offer_count"]) |
-  (F.col("count_offer_ids") > config_qa["max_offer_count"])
+    (F.col("count_offer_ids") < config_qa["min_offer_count"]) |
+    (F.col("count_offer_ids") > config_qa["max_offer_count"])
 )
 
 if cust_offer_allocation_distinct_count_check.count() == 0 & cust_offer_allocation_count_check.count() == 0:
-  all_cust_have_offer_count_within_range = True
-  logger.info(f'All customers have offers within [{config_qa["min_offer_count"]}, {config_qa["max_offer_count"]}].')
+    all_cust_have_offer_count_within_range = True
+    logger.info(f'All customers have offers within [{config_qa["min_offer_count"]}, {config_qa["max_offer_count"]}].')
 else:
-  all_cust_have_offer_count_within_range = False
-  logger.error(f'{cust_offer_allocation_distinct_count_check.count()} customers have less than {config_qa["min_offer_count"]} or more than {config_qa["max_offer_count"]} distinct offers.')
-  if config["write_table"]:
-    cust_have_offer_count_outside_range = (
-      (cust_offer_allocation_distinct_count_check.select(config_bd["user_id"]))
-      .unionByName(cust_offer_allocation_count_check.select(config_bd["user_id"]))
-      .dropDuplicates()
-    )
-    cust_have_offer_count_outside_range = (test_cells_selected_tbl.join(
-      cust_have_offer_count_outside_range,
-      on=config_bd["user_id"],
-      how="inner"
-    ))
+    all_cust_have_offer_count_within_range = False
+    logger.error(f'{cust_offer_allocation_distinct_count_check.count()} customers have less than {config_qa["min_offer_count"]} or more than {config_qa["max_offer_count"]} distinct offers.')
+    if config["write_table"]:
+        cust_have_offer_count_outside_range = (
+            (cust_offer_allocation_distinct_count_check.select(config_bd["user_id"]))
+            .unionByName(cust_offer_allocation_count_check.select(config_bd["user_id"]))
+            .dropDuplicates()
+        )
+        cust_have_offer_count_outside_range = (test_cells_selected_tbl.join(
+            cust_have_offer_count_outside_range,
+            on=config_bd["user_id"],
+            how="inner"
+        ))
 
-    cust_have_offer_count_outside_range.toPandas().to_csv(os.path.join(out_path, "cust_have_offer_count_outside_range.csv"), index=False, header=True, mode=wmode)
+        cust_have_offer_count_outside_range.toPandas().to_csv(os.path.join(out_path, "cust_have_offer_count_outside_range.csv"), index=False, header=True, mode=wmode)
 
 # COMMAND ----------
 
@@ -509,17 +520,17 @@ offer_allocation_check["all_cust_have_offer_count_within_range"] = all_cust_have
 
 treatment_cust = test_cells_selected_tbl.filter(F.col("test_group") == "treatment")
 control_cust = test_cells_selected_tbl.filter(F.col("test_group") == "control").drop("cleaned_scope")
-  
+
 treatment_control_overlapping_cust = treatment_cust.join(control_cust, on=config_bd["user_id"], how="inner")
 
 if treatment_control_overlapping_cust.count() == 0:
-  treatment_and_control_exclusive = True
-  logger.info("All customers in treatment and control groups are exclusive.")
+    treatment_and_control_exclusive = True
+    logger.info("All customers in treatment and control groups are exclusive.")
 else:
-  treatment_and_control_exclusive = False
-  logger.error(f"Customers in treatment and control groups for {list(treatment_control_overlapping_cust.select('cleaned_scope').distinct().toPandas()['cleaned_scope'])} are not exclusive.")
-  if config["write_table"]:
-    treatment_control_overlapping_cust.toPandas().to_csv(os.path.join(out_path, "treatment_control_overlapping_cust.csv"), index=False, header=True, mode=wmode)
+    treatment_and_control_exclusive = False
+    logger.error(f"Customers in treatment and control groups for {list(treatment_control_overlapping_cust.select('cleaned_scope').distinct().toPandas()['cleaned_scope'])} are not exclusive.")
+    if config["write_table"]:
+        treatment_control_overlapping_cust.toPandas().to_csv(os.path.join(out_path, "treatment_control_overlapping_cust.csv"), index=False, header=True, mode=wmode)
 
 
 # COMMAND ----------
@@ -539,20 +550,20 @@ max_count = cust_appearance_count.select(F.max("count")).collect()[0][0]
 min_count = cust_appearance_count.select(F.min("count")).collect()[0][0]
 
 test_cell_overlapping_cust = cust_appearance_count.filter(F.col("count") != 1)
-  
+
 if max_count == 1 & min_count == 1:
-  test_cell_group_exclusive = True
-  logger.info("All customers in test cells are exclusive.")
+    test_cell_group_exclusive = True
+    logger.info("All customers in test cells are exclusive.")
 else:
-  test_cell_group_exclusive = False
-  logger.error(f"Customers in test cells for {list(test_cell_overlapping_cust.select('scope').distinct().toPandas()['scope'])} are not exclusive.")
-  if config["write_table"]:
-    test_cell_overlapping_cust = (test_cells_selected_tbl.join(
-      test_cell_overlapping_cust,
-      on=[config_bd["user_id"], "scope"],
-      how="inner"
-    ))
-    test_cell_overlapping_cust.toPandas().to_csv(os.path.join(out_path, "test_cell_overlapping_cust.csv"), index=False, header=True, mode=wmode)
+    test_cell_group_exclusive = False
+    logger.error(f"Customers in test cells for {list(test_cell_overlapping_cust.select('scope').distinct().toPandas()['scope'])} are not exclusive.")
+    if config["write_table"]:
+        test_cell_overlapping_cust = (test_cells_selected_tbl.join(
+            test_cell_overlapping_cust,
+            on=[config_bd["user_id"], "scope"],
+            how="inner"
+        ))
+        test_cell_overlapping_cust.toPandas().to_csv(os.path.join(out_path, "test_cell_overlapping_cust.csv"), index=False, header=True, mode=wmode)
 
 
 # COMMAND ----------
@@ -567,9 +578,9 @@ offer_allocation_check["test_cell_group_exclusive"] = test_cell_group_exclusive
 # COMMAND ----------
 
 if (len(offer_allocation_check) == sum(offer_allocation_check.values())):
-  logger.info("All checks passed.")
+    logger.info("All checks passed.")
 else:
-  logger.error("Some checks failed, please check.")
+    logger.error("Some checks failed, please check.")
 
 # COMMAND ----------
 
@@ -597,17 +608,17 @@ groupby_cols = ["offer_id", "desc", "scope"]
 offer_volume = test_cells_selected_tbl.groupby(groupby_cols).agg(F.countDistinct(config_bd["user_id"]).alias("count"))
 
 offer_volume_breakdown = (test_cells_selected_tbl
-                      .groupby(groupby_cols)
-                      .pivot("test_group")
-                      .agg(F.countDistinct(config_bd["user_id"]))
-)
+                          .groupby(groupby_cols)
+                          .pivot("test_group")
+                          .agg(F.countDistinct(config_bd["user_id"]))
+                          )
 new_column_names = [f"count_{col}" if col not in groupby_cols else col for col in offer_volume_breakdown.columns]
 offer_volume_breakdown = offer_volume_breakdown.toDF(*new_column_names)
 
 offer_volume = offer_volume.join(
-  offer_volume_breakdown, 
-  on=groupby_cols, 
-  how="left"
+    offer_volume_breakdown,
+    on=groupby_cols,
+    how="left"
 ).orderBy("offer_id")
 
 offer_volume = offer_volume.withColumn("percentage_control", F.col("count_control")/F.col("count"))
@@ -615,7 +626,7 @@ offer_volume = offer_volume.withColumn("percentage_control", F.col("count_contro
 # COMMAND ----------
 
 if config["write_table"]:
-  offer_volume.toPandas().to_csv(os.path.join(out_path, "offer_volume.csv"), index=False, header=True, mode=wmode)
+    offer_volume.toPandas().to_csv(os.path.join(out_path, "offer_volume.csv"), index=False, header=True, mode=wmode)
 
 # COMMAND ----------
 
@@ -625,30 +636,29 @@ if config["write_table"]:
 # COMMAND ----------
 
 for distinct_scope in test_cells_selected_tbl.select("scope").distinct().toPandas()["scope"]:
-  for distinct_test_type in test_cells_selected_tbl.filter(F.col("scope") == distinct_scope).select("test_type").distinct().toPandas()["test_type"]:
-    allocation_per_test_cell = (test_cells_selected_tbl
-                                .filter(
-                                  (F.col("scope") == distinct_scope) &
-                                  (F.col("test_type") == distinct_test_type)
-                                )
-                                .groupBy(["scope", "desc"])
-                                .agg(F.countDistinct(config_bd["user_id"]).alias("distinct_cust_count"))
-                                .toPandas()
-    )
-    allocation_per_test_cell["cust_perc"] = round((allocation_per_test_cell["distinct_cust_count"] / allocation_per_test_cell["distinct_cust_count"].sum()) * 100, 1)
-    allocation_per_test_cell["reward"] = allocation_per_test_cell["desc"].str.extract(r'£(\d+(\.\d+)?)')[0].astype(float)
-    allocation_per_test_cell["spending_threshold"] = allocation_per_test_cell["desc"].str.extract(r'(?:.*?£\d+.*?£)(\d+(\.\d+)?)')[0].astype(float)
-    allocation_per_test_cell_pivot = pd.pivot(
-      allocation_per_test_cell,
-      index="spending_threshold",
-      columns="reward",
-      values="cust_perc"
-    )
-    plt.figure(figsize=(8, 6))  # Set figure size
-    sns.heatmap(allocation_per_test_cell_pivot, annot=True, cmap="coolwarm", annot_kws={"size": 8})
-    plt.title(f"Heatmap of offer allocation for {distinct_scope} {distinct_test_type}")
-    plt.show()
+    for distinct_test_type in test_cells_selected_tbl.filter(F.col("scope") == distinct_scope).select("test_type").distinct().toPandas()["test_type"]:
+        allocation_per_test_cell = (test_cells_selected_tbl
+                                    .filter(
+            (F.col("scope") == distinct_scope) &
+            (F.col("test_type") == distinct_test_type)
+        )
+                                    .groupBy(["scope", "desc"])
+                                    .agg(F.countDistinct(config_bd["user_id"]).alias("distinct_cust_count"))
+                                    .toPandas()
+                                    )
+        allocation_per_test_cell["cust_perc"] = round((allocation_per_test_cell["distinct_cust_count"] / allocation_per_test_cell["distinct_cust_count"].sum()) * 100, 1)
+        allocation_per_test_cell["reward"] = allocation_per_test_cell["desc"].str.extract(r'£(\d+(\.\d+)?)')[0].astype(float)
+        allocation_per_test_cell["spending_threshold"] = allocation_per_test_cell["desc"].str.extract(r'(?:.*?£\d+.*?£)(\d+(\.\d+)?)')[0].astype(float)
+        allocation_per_test_cell_pivot = pd.pivot(
+            allocation_per_test_cell,
+            index="spending_threshold",
+            columns="reward",
+            values="cust_perc"
+        )
+        plt.figure(figsize=(8, 6))  # Set figure size
+        sns.heatmap(allocation_per_test_cell_pivot, annot=True, cmap="coolwarm", annot_kws={"size": 8})
+        plt.title(f"Heatmap of offer allocation for {distinct_scope} {distinct_test_type}")
+        plt.show()
 
-# COMMAND ----------
-
+# COMMAND -----------
 

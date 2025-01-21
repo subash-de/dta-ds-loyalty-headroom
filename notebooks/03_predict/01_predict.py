@@ -3,7 +3,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("seg_list", "[]", "")
+# dbutils.widgets.text("seg_list", "[]", "")
 
 # COMMAND ----------
 
@@ -21,7 +21,18 @@ logger = get_logger("customer-headroom")
 
 # COMMAND ----------
 
-seg_list = eval(dbutils.widgets.get("seg_list"))
+try :
+    seg_list = dbutils.jobs.taskValues.get(
+        taskKey=dbutils.widgets.get("task_key_data"),
+        key="seg_list",       # The key to retrieve
+        default=[]     # Fallback value if the key doesn't exist
+    )
+    print("read from task values")
+    print(seg_list)
+except:
+    print("read from hardcoded  values and its empty")
+    seg_list=[]
+
 if seg_list == []:
     dbutils.notebook.exit(True)
 else:

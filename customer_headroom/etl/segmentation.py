@@ -554,6 +554,9 @@ class SegmentationManager(BaseManager):
             demog_groups_str = str(demog_groups)
             demog_cat_filters = self._get_category_filters(demog_groups)
             data_ = data.filter(demog_cat_filters)
+
+            #Persist data to avoid re-computation post filtering
+            data_.persist()
             data_count = data_.count()
             self.log(f"{demog_groups_str}: Count: {data_count}")
 
@@ -651,6 +654,8 @@ class SegmentationManager(BaseManager):
                 output_dict[demog_groups_str] = data_output.withColumn(
                     "segmentation", F.lit(0)
                 )
+            #unpersist to avoid memory issues
+            data_.unpersist()
 
         return output_dict, all_silhouette_score_max
 

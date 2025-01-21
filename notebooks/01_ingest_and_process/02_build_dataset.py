@@ -25,6 +25,8 @@ from customer_headroom.etl.etl_utils import (
 
 from pyspark.sql import functions as F, DataFrame, Column, Window as W, types as T
 
+#enabling dynamic allocation of partitions to optimize performance
+spark.conf.set("spark.sql.shuffle.partitions","auto")
 
 sns.set(style="whitegrid")
 logger = get_logger("customer-headroom")
@@ -334,7 +336,7 @@ weekly_data = weekly_data.withColumn("category_level", F.lit(config['category_le
 
 # COMMAND ----------
 
-weekly_data.display()
+# weekly_data.display()
 
 # COMMAND ----------
 
@@ -460,5 +462,5 @@ one_article_unit_stretch_etl_data_tbl = persist_utils.read_table(
 one_article_unit_stretch_etl_data_tbl.display()
 
 # COMMAND ----------
-
+dbutils.jobs.taskValues.set(key = "seg_list", value = seg_list)
 dbutils.notebook.exit(str({"seg_list": seg_list}))
